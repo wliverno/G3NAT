@@ -1,4 +1,4 @@
-# DNA Transport GNN
+# Graph Neural Network Nucleic Acid Transport
 
 A Graph Neural Network (GNN) implementation for predicting DNA transport properties, including Density of States (DOS) and transmission coefficients.
 
@@ -41,7 +41,8 @@ python main.py
 ### Custom Training
 
 ```python
-from dna_transport_gnn import DNATransportGNN, DNATransportDataset, train_model
+from models import DNATransportGNN, train_model
+from dataset import DNATransportDataset
 from data_generator import create_sample_data
 
 # Generate data

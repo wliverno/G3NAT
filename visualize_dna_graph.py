@@ -1,0 +1,269 @@
+#!/usr/bin/env python3
+"""
+Visualization module for DNA transport graphs using NetworkX.
+"""
+
+import networkx as nx
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.lines import Line2D
+from torch_geometric.utils import to_networkx
+from dna_graph import sequence_to_graph
+import numpy as np
+
+def visualize_dna_graph(graph, primary_sequence=None, complementary_sequence=None, 
+                       figsize=(12, 8), node_size=1000, font_size=10):
+    """
+    Visualize a DNA graph with proper labeling and styling.
+    
+    Args:
+        graph: PyTorch Geometric Data object
+        primary_sequence: Primary DNA sequence for labeling
+        complementary_sequence: Complementary DNA sequence for labeling
+        figsize: Figure size (width, height)
+        node_size: Size of nodes
+        font_size: Font size for labels
+    """
+    # Convert to NetworkX graph
+    nx_graph = to_networkx(graph, to_undirected=True)
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=figsize)
+    
+    # Determine node types and positions
+    node_labels = {}
+    node_colors = []
+    node_positions = {}
+    
+    # Get edge attributes
+    edge_weights = {}
+    edge_styles = {}
+    edge_colors = []
+    
+    # Process nodes
+    for node in nx_graph.nodes():
+        if node == 0:  # Left contact
+            node_labels[node] = 'L'
+            node_colors.append('red')
+            node_positions[node] = (-2, 0)
+        elif node == graph.x.shape[0] - 1:  # Right contact
+            node_labels[node] = 'R'
+            node_colors.append('red')
+            node_positions[node] = (len(primary_sequence) + 1 if primary_sequence else 10, 0)
+        else:
+            # For base nodes, determine the base type from node features
+            node_features = graph.x[node].numpy()
+            
+            # Check if this is a contact node (last feature is 1)
+            if node_features[-1] == 1:
+                # This shouldn't happen for non-contact nodes, but just in case
+                continue
+            
+            # Determine base type from one-hot encoding
+            base_features = node_features[:4]
+            if base_features[0] == 1:  # A
+                base = 'A'
+            elif base_features[1] == 1:  # T
+                base = 'T'
+            elif base_features[2] == 1:  # G
+                base = 'G'
+            elif base_features[3] == 1:  # C
+                base = 'C'
+            else:
+                base = '?'  # Unknown base
+            
+            # Simple positioning based on node index
+            # Primary strand nodes come first, then complementary strand nodes
+            primary_count = sum(1 for i, base in enumerate(primary_sequence) if base != '_') if primary_sequence else 0
+            
+            if node <= primary_count:
+                # Primary strand
+                strand = 'primary'
+                pos = node - 1
+                y_pos = 0.5
+                node_colors.append('lightblue')
+            else:
+                # Complementary strand - align with corresponding primary positions for vertical hydrogen bonds
+                strand = 'complementary'
+                # Find the corresponding position in the complementary sequence
+                comp_node_idx = node - primary_count - 1
+                comp_positions = [i for i, base in enumerate(complementary_sequence) if base != '_'] if complementary_sequence else []
+                if comp_node_idx < len(comp_positions):
+                    pos = comp_positions[comp_node_idx]  # Use actual sequence position
+                else:
+                    pos = comp_node_idx  # Fallback
+                y_pos = -0.5
+                node_colors.append('lightgreen')
+            
+            node_labels[node] = base
+            node_positions[node] = (pos, y_pos)
+    
+    # Process edges
+    for edge in nx_graph.edges():
+        src, dst = edge
+        
+        # Find the edge in the original graph to get attributes
+        edge_found = False
+        for i in range(graph.edge_index.shape[1]):
+            if (graph.edge_index[0, i].item() == src and graph.edge_index[1, i].item() == dst) or \
+               (graph.edge_index[0, i].item() == dst and graph.edge_index[1, i].item() == src):
+                coupling = graph.edge_attr[i, 0].item()
+                edge_type = graph.edge_attr[i, 1].item()
+                edge_found = True
+                break
+        
+        if edge_found:
+            # Check if this is a hydrogen bond using the h_bond_flag
+            h_bond_flag = graph.edge_attr[i, 2].item()
+            
+            if h_bond_flag == 1:  # Hydrogen bond
+                edge_weights[edge] = ""  # No label for hydrogen bonds
+                edge_styles[edge] = 'dotted'
+                edge_colors.append('blue')
+            elif edge_type == 0:  # Contact connection
+                edge_weights[edge] = f"{coupling:.2f}"  # Only show coupling for contacts
+                edge_styles[edge] = 'solid'
+                edge_colors.append('red')
+            elif edge_type == 1:  # Backbone connection
+                edge_weights[edge] = ""  # No label for backbone connections
+                edge_styles[edge] = 'solid'
+                edge_colors.append('black')
+    
+    # Draw the graph
+    nx.draw(nx_graph, pos=node_positions, 
+            node_color=node_colors,
+            node_size=node_size,
+            font_size=font_size,
+            font_weight='bold',
+            labels=node_labels,
+            edge_color=edge_colors,
+            style=[edge_styles.get(edge, 'solid') for edge in nx_graph.edges()],
+            width=2,
+            ax=ax,
+            bbox=dict(boxstyle="round,pad=0.3", facecolor='white', edgecolor='gray', alpha=0.8))
+    
+    # Draw edge labels (coupling strengths)
+    edge_labels = nx.draw_networkx_edge_labels(nx_graph, pos=node_positions, 
+                                              edge_labels=edge_weights,
+                                              font_size=8)
+    
+    # Add legend
+    legend_elements = [
+        mpatches.Patch(color='red', label='Contacts'),
+        mpatches.Patch(color='lightblue', label='Primary Strand'),
+        mpatches.Patch(color='lightgreen', label='Complementary Strand'),
+        Line2D([0], [0], color='red', linestyle='-', linewidth=2, label='Contact Connections'),
+        Line2D([0], [0], color='black', linestyle='-', linewidth=2, label='Backbone Connections'),
+        Line2D([0], [0], color='blue', linestyle=':', linewidth=2, label='Hydrogen Bonds')
+    ]
+    
+    ax.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1.15, 1))
+    
+    # Set title and labels
+    if primary_sequence:
+        title = f"DNA Graph: {primary_sequence}"
+        if complementary_sequence:
+            title += f" / {complementary_sequence}"
+        ax.set_title(title, fontsize=14, fontweight='bold')
+    
+    ax.set_xlabel('Position', fontsize=12)
+    ax.set_ylabel('Strand', fontsize=12)
+    
+    # Set axis limits
+    if primary_sequence:
+        ax.set_xlim(-3, len(primary_sequence) + 2)
+    else:
+        ax.set_xlim(-3, 12)
+    ax.set_ylim(-1.5, 1.5)
+    
+    # Add grid
+    ax.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    return fig, ax
+
+def create_sample_visualization():
+    """Create a sample visualization to demonstrate the functionality."""
+    
+    # Create a sample graph
+    converter = DNASequenceToGraph()
+    primary = "ACGCTT"
+    complementary = "AAGCGT"
+    
+    graph = converter.sequence_to_graph(
+        primary_sequence=primary,
+        complementary_sequence=complementary,
+        left_contact_positions=('primary', [0, 1]),
+        right_contact_positions=('complementary', [4, 5]),
+        left_contact_coupling=0.1,
+        right_contact_coupling=0.1
+    )
+    
+    # Visualize
+    fig, ax = visualize_dna_graph(graph, primary, complementary)
+    plt.show()
+    
+    return fig, ax
+
+def visualize_multiple_examples():
+    """Create multiple visualization examples."""
+    
+    converter = DNASequenceToGraph()
+    
+    # Example 1: Single-stranded with multiple contacts
+    print("Creating visualization for single-stranded DNA...")
+    graph1 = converter.sequence_to_graph(
+        primary_sequence="ACGTACGT",
+        left_contact_positions=[0, 2],
+        right_contact_positions=[5, 7],
+        left_contact_coupling=[0.1, 0.15],
+        right_contact_coupling=[0.2, 0.25]
+    )
+    
+    fig1, ax1 = visualize_dna_graph(graph1, "ACGTACGT")
+    plt.savefig('single_stranded_example.png', dpi=300, bbox_inches='tight')
+    plt.show()
+    
+    # Example 2: Double-stranded with mixed contacts
+    print("Creating visualization for double-stranded DNA...")
+    graph2 = converter.sequence_to_graph(
+        primary_sequence="ACGTACGT",
+        complementary_sequence="TGCATGCA",
+        left_contact_positions=0,
+        right_contact_positions=('complementary', 7),
+        left_contact_coupling=0.1,
+        right_contact_coupling=0.2
+    )
+    
+    fig2, ax2 = visualize_dna_graph(graph2, "ACGTACGT", "TGCATGCA")
+    plt.savefig('double_stranded_example.png', dpi=300, bbox_inches='tight')
+    plt.show()
+    
+    # Example 3: Both contacts on complementary strand
+    print("Creating visualization for complementary strand contacts...")
+    graph3 = converter.sequence_to_graph(
+        primary_sequence="ACGTACGT",
+        complementary_sequence="TGCATGCA",
+        left_contact_positions=('complementary', [0, 2]),
+        right_contact_positions=('complementary', [5, 7]),
+        left_contact_coupling=[0.1, 0.15],
+        right_contact_coupling=[0.2, 0.25]
+    )
+    
+    fig3, ax3 = visualize_dna_graph(graph3, "ACGTACGT", "TGCATGCA")
+    plt.savefig('complementary_contacts_example.png', dpi=300, bbox_inches='tight')
+    plt.show()
+
+if __name__ == "__main__":
+    print("DNA Graph Visualization Examples")
+    print("=" * 40)
+    
+    # Create the sample visualization from your test
+    print("Creating sample visualization...")
+    create_sample_visualization()
+    
+    # Create multiple examples
+    print("\nCreating multiple examples...")
+    visualize_multiple_examples()
+    
+    print("\nAll visualizations completed!") 

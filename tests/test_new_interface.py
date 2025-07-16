@@ -5,11 +5,14 @@ Test script demonstrating the new simplified interface for double-stranded DNA:
 - Hydrogen bond strengths as trainable parameters
 """
 
-from dna_transport_gnn import DNASequenceToGraph
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from dna_graph import sequence_to_graph
 
 def test_examples():
     """Test various examples with the new interface."""
-    converter = DNASequenceToGraph()
     
     print("=== Testing New Double-Stranded DNA Interface ===\n")
     
@@ -19,10 +22,11 @@ def test_examples():
     print("Complementary: TGCAT")
     print("Contacts: [0, 4] (first and last of primary strand)")
     
-    graph1 = converter.sequence_to_graph(
+    graph1 = sequence_to_graph(
         primary_sequence="ACGTA",
         complementary_sequence="TGCAT",
-        contact_positions=[0, 4]
+        left_contact_positions=0,
+        right_contact_positions=4
     )
     
     print(f"Nodes: {graph1.x.shape[0]}, Edges: {graph1.edge_index.shape[1]}\n")
@@ -33,10 +37,11 @@ def test_examples():
     print("Complementary: TGC__ (only 3 bases, rest missing)")
     print("Contacts: [0, 4] (first and last of primary strand)")
     
-    graph2 = converter.sequence_to_graph(
+    graph2 = sequence_to_graph(
         primary_sequence="ACGTA",
         complementary_sequence="TGC__",
-        contact_positions=[0, 4]
+        left_contact_positions=0,
+        right_contact_positions=4
     )
     
     print(f"Nodes: {graph2.x.shape[0]}, Edges: {graph2.edge_index.shape[1]}\n")

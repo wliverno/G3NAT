@@ -12,9 +12,11 @@ import sys
 import os
 
 # Add parent directory to path for imports
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dna_transport_gnn import DNASequenceToGraph, DNATransportGNN, DNATransportDataset
+from dna_graph import sequence_to_graph
+from models import DNATransportGNN
+from dataset import DNATransportDataset
 from data_generator import create_sample_data
 
 
@@ -22,11 +24,13 @@ def test_sequence_to_graph():
     """Test DNA sequence to graph conversion."""
     print("Testing sequence to graph conversion...")
     
-    converter = DNASequenceToGraph()
-    
     # Test with a simple sequence
     sequence = "ATGC"
-    graph = converter.sequence_to_graph(sequence)
+    graph = sequence_to_graph(primary_sequence=sequence)
+    
+    # Check that graph was created successfully
+    if graph is None:
+        raise AssertionError("Graph should not be None")
     
     # Check graph properties
     assert graph.x.shape[0] == len(sequence) + 2, f"Expected {len(sequence) + 2} nodes, got {graph.x.shape[0]}"
@@ -51,8 +55,7 @@ def test_model_initialization():
     )
     
     # Test forward pass with dummy data
-    converter = DNASequenceToGraph()
-    graph = converter.sequence_to_graph("ATGC")
+    graph = sequence_to_graph(primary_sequence="ATGC")
     
     # Add batch dimension
     graph.batch = torch.zeros(graph.x.shape[0], dtype=torch.long)

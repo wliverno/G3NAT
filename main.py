@@ -13,9 +13,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import argparse
-from typing import Tuple
+from typing import Tuple, List
 
-from dna_transport_gnn import DNATransportGNN, DNATransportDataset, train_model
+from models import DNATransportGNN, train_model
+from dataset import DNATransportDataset
 from data_generator import create_sample_data, generate_realistic_dna_sequences
 from utils import setup_logging, save_training_results, plot_training_curves
 
@@ -76,9 +77,9 @@ def setup_device(device_arg: str) -> torch.device:
     return device
 
 
-def create_data_loaders(sequences: list, dos_data: np.ndarray, 
+def create_data_loaders(sequences: List[str], dos_data: np.ndarray, 
                        transmission_data: np.ndarray, energy_grid: np.ndarray,
-                       batch_size: int = 32, train_split: float = 0.8) -> Tuple[DataLoader, DataLoader]:
+                       batch_size: int = 32, train_split: float = 0.8):
     """Create training and validation data loaders."""
     
     # Create dataset
@@ -168,7 +169,7 @@ def main():
         model, train_loader, val_loader,
         num_epochs=args.num_epochs,
         learning_rate=args.learning_rate,
-        device=device
+        device=str(device)
     )
     
     # Save model and results

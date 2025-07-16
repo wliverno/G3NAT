@@ -2,13 +2,15 @@
 Simple test to demonstrate the current functionality.
 """
 
-from dna_transport_gnn import DNASequenceToGraph
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from dna_graph import sequence_to_graph
 
 def simple_test():
     """Run a simple test of the double-stranded DNA functionality."""
-    converter = DNASequenceToGraph()
-    
-    print("=== Simple Double-Stranded DNA Test ===\n")
+        print("=== Simple Double-Stranded DNA Test ===\n")
     
     # Your specific scenario
     print("Your Scenario:")
@@ -16,10 +18,10 @@ def simple_test():
     print("Complementary: TGCAT")
     print("Left contact on first A, Right contact on T (complementary to last A)")
     
-    graph = converter.sequence_to_graph(
+    graph = sequence_to_graph(
         primary_sequence="ACGTA",
         complementary_sequence="TGCAT",
-        contact_positions=[(0, 0), (1, 0)]  # First A of primary, first T of complementary
+        left_contact_positions=(0, 0), (1, 0)[0], right_contact_positions=(0, 0), (1, 0)[-1]  # First A of primary, first T of complementary
     )
     
     print(f"✓ Successfully created graph!")
@@ -40,10 +42,10 @@ def simple_test():
     print("Primary: ACGTA")
     print("Complementary: TGC__ (missing last two bases)")
     
-    graph2 = converter.sequence_to_graph(
+    graph2 = sequence_to_graph(
         primary_sequence="ACGTA",
         complementary_sequence="TGC__",
-        contact_positions=[0, 4]  # Contacts on primary strand
+        left_contact_positions=0, 4[0], right_contact_positions=0, 4[-1]  # Contacts on primary strand
     )
     
     print(f"✓ Successfully created graph with missing bases!")
