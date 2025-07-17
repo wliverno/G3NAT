@@ -9,7 +9,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dna_graph import sequence_to_graph
+from dataset import sequence_to_graph
 
 def test_examples():
     """Test various examples with the new interface."""

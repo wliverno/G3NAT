@@ -4,7 +4,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dna_graph import sequence_to_graph
+from dataset import sequence_to_graph
 from torch_geometric.data import Data
 import torch
 
@@ -65,8 +65,8 @@ def test_graph_construction():
     visualize_graph(graph2, "Double-stranded DNA: ACGTA-TGCAT")
     
     # Test 3: Double-stranded DNA with partial complement
-    print("\nTest 3: Double-stranded DNA 'ACGTA' with partial complement 'TG___'")
-    graph3 = sequence_to_graph("ACGTA", "TG___")
+    print("\nTest 3: Double-stranded DNA 'ACGTA' with partial complement 'TA___'")
+    graph3 = sequence_to_graph("ACGTA", "TA___")
     assert graph3 is not None, "Graph 3 should not be None"
     print(f"Nodes: {graph3.x.shape[0]}, Edges: {graph3.edge_index.shape[1]}")
     visualize_graph(graph3, "Partial Double-stranded: ACGTA-TG___")

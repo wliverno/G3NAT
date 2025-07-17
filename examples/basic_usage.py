@@ -7,11 +7,16 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dna_graph import sequence_to_graph
-from models import DNATransportGNN
-from torch_geometric.data import Data
+from dataset import sequence_to_graph
+from models import DNATransportGNN, train_model, train_model_with_custom_batching
+from data_generator import create_sample_data
+from torch_geometric.data import Data, Batch
+from torch_geometric.loader import DataLoader
 import torch
 import numpy as np
+import matplotlib.pyplot as plt
+
+
 
 def example_single_contact():
     """Example with single contact on each side."""
@@ -180,14 +185,16 @@ def example_model_usage():
         right_contact_coupling=0.2
     )
     
+    if graph is None:
+        raise RuntimeError("Failed to create graph")
+    
     # Create a batch (single graph)
-    from torch_geometric.loader import DataLoader
     loader = DataLoader([graph], batch_size=1)
     
     # Initialize model
     model = DNATransportGNN(
         node_features=8,  # Base features + contact features
-        edge_features=3,  # Edge attributes
+        edge_features=4,  # Edge attributes
         hidden_dim=64,
         num_layers=2,
         output_dim=50
@@ -202,6 +209,118 @@ def example_model_usage():
             print(f"Transmission prediction shape: {transmission_pred.shape}")
             print(f"DOS range: [{dos_pred.min().item():.3f}, {dos_pred.max().item():.3f}]")
             print(f"Transmission range: [{transmission_pred.min().item():.3f}, {transmission_pred.max().item():.3f}]")
+            print("Note: These are random predictions from untrained model!")
+
+def example_training():
+    """Example of training the model with synthetic data."""
+    print("\n=== Training Example ===")
+    
+    # Generate synthetic training data
+    print("Generating synthetic training data...")
+    sequences, dos_data, transmission_data, energy_grid = create_sample_data(
+        num_samples=500, 
+        seq_length=8, 
+        num_energy_points=50
+    )
+    
+    print(f"Generated {len(sequences)} sequences")
+    print(f"Energy grid: {len(energy_grid)} points from {energy_grid[0]:.2f} to {energy_grid[-1]:.2f} eV")
+    
+    # Convert sequences to graphs
+    print("Converting sequences to graphs...")
+    graphs = []
+    for i, seq in enumerate(sequences):
+        # Create graph with contacts at ends
+        graph = sequence_to_graph(
+            primary_sequence=seq,
+            left_contact_positions=0,
+            right_contact_positions=len(seq)-1,
+            left_contact_coupling=0.1,
+            right_contact_coupling=0.2
+        )
+        
+        if graph is not None:
+            # Add target data to graph
+            graph.dos = torch.tensor(dos_data[i], dtype=torch.float32)
+            graph.transmission = torch.tensor(transmission_data[i], dtype=torch.float32)
+            graphs.append(graph)
+    
+    print(f"Successfully created {len(graphs)} graphs")
+    
+    # Split into train/validation sets
+    train_size = int(0.8 * len(graphs))
+    train_graphs = graphs[:train_size]
+    val_graphs = graphs[train_size:]
+    
+    print(f"Training set: {len(train_graphs)} graphs")
+    print(f"Validation set: {len(val_graphs)} graphs")
+    
+    # Initialize model
+    model = DNATransportGNN(
+        node_features=8,
+        edge_features=4,
+        hidden_dim=64,
+        num_layers=3,
+        output_dim=50,
+        dropout=0.1
+    )
+    
+    print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
+    
+    # Train the model with custom batching
+    print("\nStarting training...")
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f"Using device: {device}")
+    
+    train_losses, val_losses = train_model_with_custom_batching(
+        model=model,
+        train_graphs=train_graphs,
+        val_graphs=val_graphs,
+        num_epochs=50,
+        learning_rate=1e-3,
+        device=device
+    )
+    
+    # Plot training curves
+    plt.figure(figsize=(10, 6))
+    plt.plot(train_losses, label='Training Loss', color='blue')
+    plt.plot(val_losses, label='Validation Loss', color='red')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Training and Validation Loss')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig('training_curves.png', dpi=150, bbox_inches='tight')
+    print("Training curves saved to 'training_curves.png'")
+    
+    # Test the trained model
+    print("\nTesting trained model...")
+    model.eval()
+    with torch.no_grad():
+        # Test on a few examples
+        for i in range(min(5, len(val_graphs))):
+            # Create single graph batch
+            batch_data = Batch.from_data_list([val_graphs[i]])
+            dos_target = torch.stack([val_graphs[i].dos])
+            transmission_target = torch.stack([val_graphs[i].transmission])
+            
+            batch_data = batch_data.to(device)
+            dos_target = dos_target.to(device)
+            transmission_target = transmission_target.to(device)
+            
+            dos_pred, transmission_pred = model(batch_data)
+            
+            # Calculate MSE
+            dos_mse = torch.nn.functional.mse_loss(dos_pred, dos_target).item()
+            transmission_mse = torch.nn.functional.mse_loss(transmission_pred, transmission_target).item()
+            
+            print(f"Sample {i+1}:")
+            print(f"  DOS MSE: {dos_mse:.4f}")
+            print(f"  Transmission MSE: {transmission_mse:.4f}")
+    
+    print("\nTraining completed!")
+    print("The model now has learned weights and can make meaningful predictions.")
 
 if __name__ == "__main__":
     print("DNA Transport GNN - Left/Right Contact Interface Examples")
@@ -211,6 +330,7 @@ if __name__ == "__main__":
     example_multiple_contacts()
     example_double_stranded()
     example_model_usage()
+    example_training()
     
     print("\n" + "=" * 60)
     print("All examples completed successfully!") 

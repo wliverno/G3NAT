@@ -14,7 +14,7 @@ import os
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dna_graph import sequence_to_graph
+from dataset import sequence_to_graph
 from models import DNATransportGNN
 from dataset import DNATransportDataset
 from data_generator import create_sample_data
@@ -33,9 +33,9 @@ def test_sequence_to_graph():
         raise AssertionError("Graph should not be None")
     
     # Check graph properties
-    assert graph.x.shape[0] == len(sequence) + 2, f"Expected {len(sequence) + 2} nodes, got {graph.x.shape[0]}"
-    assert graph.x.shape[1] == 8, f"Expected 8 node features, got {graph.x.shape[1]}"
-    assert graph.edge_attr.shape[1] == 3, f"Expected 3 edge features, got {graph.edge_attr.shape[1]}"
+    assert graph.x is not None and graph.x.shape[0] == len(sequence) + 2, f"Expected {len(sequence) + 2} nodes, got {graph.x.shape[0] if graph.x is not None else 'None'}"
+    assert graph.x is not None and graph.x.shape[1] == 8, f"Expected 8 node features, got {graph.x.shape[1] if graph.x is not None else 'None'}"
+    assert graph.edge_attr is not None and graph.edge_attr.shape[1] == 4, f"Expected 4 edge features, got {graph.edge_attr.shape[1] if graph.edge_attr is not None else 'None'}"
     
     print("✓ Sequence to graph conversion works correctly")
 
@@ -46,7 +46,7 @@ def test_model_initialization():
     
     model = DNATransportGNN(
         node_features=8,
-        edge_features=3,
+        edge_features=4,
         hidden_dim=64,
         num_layers=2,
         num_heads=2,
@@ -58,7 +58,10 @@ def test_model_initialization():
     graph = sequence_to_graph(primary_sequence="ATGC")
     
     # Add batch dimension
-    graph.batch = torch.zeros(graph.x.shape[0], dtype=torch.long)
+    if graph.x is not None:
+        graph.batch = torch.zeros(graph.x.shape[0], dtype=torch.long)
+    else:
+        raise AssertionError("Graph should have valid node features")
     
     model.eval()
     with torch.no_grad():

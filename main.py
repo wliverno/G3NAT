@@ -8,17 +8,15 @@ DNA transport properties using Graph Neural Networks.
 
 import torch
 import torch.nn as nn
-from torch_geometric.data import DataLoader
 import matplotlib.pyplot as plt
 import numpy as np
 import os
 import argparse
 from typing import Tuple, List
 
-from models import DNATransportGNN, train_model
-from dataset import DNATransportDataset
-from data_generator import create_sample_data, generate_realistic_dna_sequences
-from utils import setup_logging, save_training_results, plot_training_curves
+from models import DNATransportGNN, train_model_with_custom_batching
+from data_generator import create_sample_data
+from dataset import sequence_to_graph
 
 
 def parse_args():
@@ -77,28 +75,47 @@ def setup_device(device_arg: str) -> torch.device:
     return device
 
 
-def create_data_loaders(sequences: List[str], dos_data: np.ndarray, 
-                       transmission_data: np.ndarray, energy_grid: np.ndarray,
-                       batch_size: int = 32, train_split: float = 0.8):
-    """Create training and validation data loaders."""
+def create_graphs_from_sequences(sequences: List[str], dos_data: np.ndarray, 
+                                transmission_data: np.ndarray) -> List:
+    """Convert DNA sequences to graph representations."""
+    print("Converting sequences to graphs...")
+    graphs = []
+    failed_conversions = 0
     
-    # Create dataset
-    dataset = DNATransportDataset(sequences, dos_data, transmission_data, energy_grid)
+    for i, seq in enumerate(sequences):
+        # Create graph with contacts at ends
+        graph = sequence_to_graph(
+            primary_sequence=seq,
+            left_contact_positions=0,
+            right_contact_positions=len(seq)-1,
+            left_contact_coupling=0.1,
+            right_contact_coupling=0.2
+        )
+        
+        if graph is not None:
+            # Add target data to graph
+            graph.dos = torch.tensor(dos_data[i], dtype=torch.float32)
+            graph.transmission = torch.tensor(transmission_data[i], dtype=torch.float32)
+            graphs.append(graph)
+        else:
+            failed_conversions += 1
     
-    # Train/validation split
-    train_size = int(train_split * len(dataset))
-    val_size = len(dataset) - train_size
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+    print(f"Successfully created {len(graphs)} graphs")
+    print(f"Failed conversions: {failed_conversions}")
     
-    # Create data loaders
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    return graphs
+
+
+def split_graphs(graphs: List, train_split: float = 0.8):
+    """Split graphs into training and validation sets."""
+    train_size = int(train_split * len(graphs))
+    train_graphs = graphs[:train_size]
+    val_graphs = graphs[train_size:]
     
-    print(f"Dataset size: {len(dataset)}")
-    print(f"Training samples: {len(train_dataset)}")
-    print(f"Validation samples: {len(val_dataset)}")
+    print(f"Training set: {len(train_graphs)} graphs")
+    print(f"Validation set: {len(val_graphs)} graphs")
     
-    return train_loader, val_loader
+    return train_graphs, val_graphs
 
 
 def initialize_model(args) -> DNATransportGNN:
@@ -106,7 +123,7 @@ def initialize_model(args) -> DNATransportGNN:
     
     model = DNATransportGNN(
         node_features=8,
-        edge_features=3,
+        edge_features=4,
         hidden_dim=args.hidden_dim,
         num_layers=args.num_layers,
         num_heads=args.num_heads,
@@ -128,52 +145,79 @@ def initialize_model(args) -> DNATransportGNN:
     return model
 
 
+def save_training_results(train_losses, val_losses, energy_grid, output_dir):
+    """Save training results to files."""
+    # Save loss curves
+    np.savez(os.path.join(output_dir, 'training_results.npz'),
+             train_losses=train_losses,
+             val_losses=val_losses,
+             energy_grid=energy_grid)
+    
+    # Plot training curves
+    plt.figure(figsize=(10, 6))
+    plt.plot(train_losses, label='Training Loss', color='blue')
+    plt.plot(val_losses, label='Validation Loss', color='red')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Training and Validation Loss')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'training_curves.png'), dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    print(f"Training results saved to {output_dir}")
+
+
 def main():
     """Main training pipeline."""
     
     # Parse arguments
     args = parse_args()
     
-    # Setup logging and output directory
+    # Setup output directory
     os.makedirs(args.output_dir, exist_ok=True)
-    logger = setup_logging(args.output_dir)
     
-    logger.info("Starting DNA Transport GNN training")
-    logger.info(f"Arguments: {vars(args)}")
+    print("Starting DNA Transport GNN training")
+    print(f"Arguments: {vars(args)}")
     
     # Setup device
     device = setup_device(args.device)
     
     # Generate sample data
-    logger.info("Generating sample data...")
+    print("Generating sample data...")
     sequences, dos_data, transmission_data, energy_grid = create_sample_data(
         num_samples=args.num_samples,
         seq_length=args.seq_length,
         num_energy_points=args.num_energy_points
     )
     
-    # Create data loaders
-    logger.info("Creating data loaders...")
-    train_loader, val_loader = create_data_loaders(
-        sequences, dos_data, transmission_data, energy_grid,
-        batch_size=args.batch_size
-    )
+    print(f"Generated {len(sequences)} sequences")
+    print(f"Energy grid: {len(energy_grid)} points from {energy_grid[0]:.2f} to {energy_grid[-1]:.2f} eV")
+    
+    # Convert sequences to graphs
+    graphs = create_graphs_from_sequences(sequences, dos_data, transmission_data)
+    
+    # Split into train/validation sets
+    train_graphs, val_graphs = split_graphs(graphs)
     
     # Initialize model
-    logger.info("Initializing model...")
+    print("Initializing model...")
     model = initialize_model(args)
     
     # Train model
-    logger.info("Starting training...")
-    train_losses, val_losses = train_model(
-        model, train_loader, val_loader,
+    print("Starting training...")
+    train_losses, val_losses = train_model_with_custom_batching(
+        model=model,
+        train_graphs=train_graphs,
+        val_graphs=val_graphs,
         num_epochs=args.num_epochs,
         learning_rate=args.learning_rate,
         device=str(device)
     )
     
     # Save model and results
-    logger.info("Saving results...")
+    print("Saving results...")
     model_path = os.path.join(args.output_dir, f"{args.model_name}.pth")
     torch.save({
         'model_state_dict': model.state_dict(),
@@ -184,52 +228,63 @@ def main():
     }, model_path)
     
     # Save training results
-    save_training_results(
-        train_losses, val_losses, energy_grid,
-        os.path.join(args.output_dir, 'training_results.npz')
-    )
-    
-    # Plot training curves
-    plot_path = os.path.join(args.output_dir, 'training_curves.png')
-    plot_training_curves(train_losses, val_losses, plot_path)
+    save_training_results(train_losses, val_losses, energy_grid, args.output_dir)
     
     # Test prediction on a sample
-    logger.info("Generating sample predictions...")
+    print("Generating sample predictions...")
     model.eval()
     with torch.no_grad():
-        sample_batch = next(iter(val_loader))
-        sample_batch = sample_batch.to(device)
-        dos_pred, trans_pred = model(sample_batch)
-        
-        # Plot first sample
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
-        
-        # DOS plot
-        idx = 0
-        ax1.plot(energy_grid, sample_batch.dos[idx].cpu().numpy(), 'r-', label='True DOS', linewidth=2)
-        ax1.plot(energy_grid, dos_pred[idx].cpu().numpy(), 'b--', label='Predicted DOS', linewidth=2)
-        ax1.set_xlabel('Energy (eV)')
-        ax1.set_ylabel('DOS')
-        ax1.legend()
-        ax1.set_title('Density of States Prediction')
-        ax1.grid(True, alpha=0.3)
-        
-        # Transmission plot
-        ax2.plot(energy_grid, sample_batch.transmission[idx].cpu().numpy(), 'r-', label='True Transmission', linewidth=2)
-        ax2.plot(energy_grid, trans_pred[idx].cpu().numpy(), 'b--', label='Predicted Transmission', linewidth=2)
-        ax2.set_xlabel('Energy (eV)')
-        ax2.set_ylabel('Transmission')
-        ax2.legend()
-        ax2.set_title('Transmission Coefficient Prediction')
-        ax2.grid(True, alpha=0.3)
-        
-        plt.tight_layout()
-        plt.savefig(os.path.join(args.output_dir, 'sample_predictions.png'), dpi=300, bbox_inches='tight')
-        plt.close()
+        # Test on first validation sample
+        if len(val_graphs) > 0:
+            from torch_geometric.data import Batch
+            
+            # Create single graph batch
+            batch_data = Batch.from_data_list([val_graphs[0]])
+            dos_target = torch.stack([val_graphs[0].dos])
+            transmission_target = torch.stack([val_graphs[0].transmission])
+            
+            batch_data = batch_data.to(device)
+            dos_target = dos_target.to(device)
+            transmission_target = transmission_target.to(device)
+            
+            dos_pred, trans_pred = model(batch_data)
+            
+            # Plot first sample
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+            
+            # DOS plot
+            ax1.plot(energy_grid, dos_target[0].cpu().numpy(), 'r-', label='True DOS', linewidth=2)
+            ax1.plot(energy_grid, dos_pred[0].cpu().numpy(), 'b--', label='Predicted DOS', linewidth=2)
+            ax1.set_xlabel('Energy (eV)')
+            ax1.set_ylabel('DOS')
+            ax1.legend()
+            ax1.set_title('Density of States Prediction')
+            ax1.grid(True, alpha=0.3)
+            
+            # Transmission plot
+            ax2.plot(energy_grid, transmission_target[0].cpu().numpy(), 'r-', label='True Transmission', linewidth=2)
+            ax2.plot(energy_grid, trans_pred[0].cpu().numpy(), 'b--', label='Predicted Transmission', linewidth=2)
+            ax2.set_xlabel('Energy (eV)')
+            ax2.set_ylabel('Transmission')
+            ax2.legend()
+            ax2.set_title('Transmission Coefficient Prediction')
+            ax2.grid(True, alpha=0.3)
+            
+            plt.tight_layout()
+            plt.savefig(os.path.join(args.output_dir, 'sample_predictions.png'), dpi=300, bbox_inches='tight')
+            plt.close()
+            
+            # Calculate MSE
+            dos_mse = torch.nn.functional.mse_loss(dos_pred, dos_target).item()
+            transmission_mse = torch.nn.functional.mse_loss(trans_pred, transmission_target).item()
+            
+            print(f"Sample prediction MSE:")
+            print(f"  DOS: {dos_mse:.4f}")
+            print(f"  Transmission: {transmission_mse:.4f}")
     
-    logger.info(f"Training completed successfully!")
-    logger.info(f"Model saved to: {model_path}")
-    logger.info(f"Results saved to: {args.output_dir}")
+    print(f"Training completed successfully!")
+    print(f"Model saved to: {model_path}")
+    print(f"Results saved to: {args.output_dir}")
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dna_graph import sequence_to_graph
+from dataset import sequence_to_graph
 from torch_geometric.data import Data
 import torch
 

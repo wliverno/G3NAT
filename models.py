@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GATConv, global_mean_pool, global_add_pool
-from torch_geometric.data import Data
+from torch_geometric.data import Data, Batch
 from torch_geometric.loader import DataLoader
 import numpy as np
 from typing import List, Tuple, Dict, Optional, Union
@@ -93,7 +93,7 @@ class DNATransportGNN(nn.Module):
         
         # Output projections
         dos_pred = self.dos_proj(x)
-        transmission_pred = torch.sigmoid(self.transmission_proj(x))  # Ensure transmission is between 0 and 1
+        transmission_pred = self.transmission_proj(x)
         
         return dos_pred, transmission_pred
 
@@ -159,6 +159,94 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
                 val_loss += total_loss.item()
         
         val_loss /= len(val_loader)
+        val_losses.append(val_loss)
+        
+        # Print progress
+        if (epoch + 1) % 10 == 0:
+            print(f'Epoch [{epoch+1}/{num_epochs}], Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}')
+    
+    return train_losses, val_losses
+
+
+def train_model_with_custom_batching(model, train_graphs, val_graphs, num_epochs=50, learning_rate=1e-3, device='cpu'):
+    """Train model with manual batching to handle target data properly."""
+    model = model.to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    criterion = torch.nn.MSELoss()
+    
+    train_losses = []
+    val_losses = []
+    batch_size = 32
+    
+    for epoch in range(num_epochs):
+        # Training phase
+        model.train()
+        train_loss = 0.0
+        num_batches = 0
+        
+        # Manual batching for training
+        for i in range(0, len(train_graphs), batch_size):
+            batch_graphs = train_graphs[i:i+batch_size]
+            
+            # Create batch manually
+            batch_data = Batch.from_data_list(batch_graphs)
+            
+            # Stack targets manually
+            dos_targets = torch.stack([g.dos for g in batch_graphs])
+            transmission_targets = torch.stack([g.transmission for g in batch_graphs])
+            
+            batch_data = batch_data.to(device)
+            dos_targets = dos_targets.to(device)
+            transmission_targets = transmission_targets.to(device)
+            
+            optimizer.zero_grad()
+            
+            dos_pred, transmission_pred = model(batch_data)
+            
+            # Combined loss for DOS and transmission
+            dos_loss = criterion(dos_pred, dos_targets)
+            transmission_loss = criterion(transmission_pred, transmission_targets)
+            total_loss = dos_loss + transmission_loss
+            
+            total_loss.backward()
+            optimizer.step()
+            
+            train_loss += total_loss.item()
+            num_batches += 1
+        
+        train_loss /= num_batches
+        train_losses.append(train_loss)
+        
+        # Validation phase
+        model.eval()
+        val_loss = 0.0
+        num_val_batches = 0
+        
+        with torch.no_grad():
+            for i in range(0, len(val_graphs), batch_size):
+                batch_graphs = val_graphs[i:i+batch_size]
+                
+                # Create batch manually
+                batch_data = Batch.from_data_list(batch_graphs)
+                
+                # Stack targets manually
+                dos_targets = torch.stack([g.dos for g in batch_graphs])
+                transmission_targets = torch.stack([g.transmission for g in batch_graphs])
+                
+                batch_data = batch_data.to(device)
+                dos_targets = dos_targets.to(device)
+                transmission_targets = transmission_targets.to(device)
+                
+                dos_pred, transmission_pred = model(batch_data)
+                
+                dos_loss = criterion(dos_pred, dos_targets)
+                transmission_loss = criterion(transmission_pred, transmission_targets)
+                total_loss = dos_loss + transmission_loss
+                
+                val_loss += total_loss.item()
+                num_val_batches += 1
+        
+        val_loss /= num_val_batches
         val_losses.append(val_loss)
         
         # Print progress

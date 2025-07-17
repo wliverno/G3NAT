@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
 from torch_geometric.utils import to_networkx
-from dna_graph import sequence_to_graph
+from dataset import sequence_to_graph
 import numpy as np
 
 def visualize_dna_graph(graph, primary_sequence=None, complementary_sequence=None, 
@@ -87,7 +87,7 @@ def visualize_dna_graph(graph, primary_sequence=None, complementary_sequence=Non
                 strand = 'complementary'
                 # Find the corresponding position in the complementary sequence
                 comp_node_idx = node - primary_count - 1
-                comp_positions = [i for i, base in enumerate(complementary_sequence) if base != '_'] if complementary_sequence else []
+                comp_positions = [len(primary_sequence) - i - 1 for i, base in enumerate(complementary_sequence) if base != '_'] if complementary_sequence else []
                 if comp_node_idx < len(comp_positions):
                     pos = comp_positions[comp_node_idx]  # Use actual sequence position
                 else:
@@ -109,12 +109,12 @@ def visualize_dna_graph(graph, primary_sequence=None, complementary_sequence=Non
                (graph.edge_index[0, i].item() == dst and graph.edge_index[1, i].item() == src):
                 coupling = graph.edge_attr[i, 0].item()
                 edge_type = graph.edge_attr[i, 1].item()
+                h_bond_flag = graph.edge_attr[i, 2].item()
+                directionality = graph.edge_attr[i, 3].item()
                 edge_found = True
                 break
         
         if edge_found:
-            # Check if this is a hydrogen bond using the h_bond_flag
-            h_bond_flag = graph.edge_attr[i, 2].item()
             
             if h_bond_flag == 1:  # Hydrogen bond
                 edge_weights[edge] = ""  # No label for hydrogen bonds
@@ -186,15 +186,14 @@ def create_sample_visualization():
     """Create a sample visualization to demonstrate the functionality."""
     
     # Create a sample graph
-    converter = DNASequenceToGraph()
     primary = "ACGCTT"
     complementary = "AAGCGT"
     
-    graph = converter.sequence_to_graph(
+    graph = sequence_to_graph(
         primary_sequence=primary,
         complementary_sequence=complementary,
         left_contact_positions=('primary', [0, 1]),
-        right_contact_positions=('complementary', [4, 5]),
+        right_contact_positions=('complementary', [0, 1]),
         left_contact_coupling=0.1,
         right_contact_coupling=0.1
     )
@@ -208,11 +207,9 @@ def create_sample_visualization():
 def visualize_multiple_examples():
     """Create multiple visualization examples."""
     
-    converter = DNASequenceToGraph()
-    
     # Example 1: Single-stranded with multiple contacts
     print("Creating visualization for single-stranded DNA...")
-    graph1 = converter.sequence_to_graph(
+    graph1 = sequence_to_graph(
         primary_sequence="ACGTACGT",
         left_contact_positions=[0, 2],
         right_contact_positions=[5, 7],
@@ -226,11 +223,11 @@ def visualize_multiple_examples():
     
     # Example 2: Double-stranded with mixed contacts
     print("Creating visualization for double-stranded DNA...")
-    graph2 = converter.sequence_to_graph(
+    graph2 = sequence_to_graph(
         primary_sequence="ACGTACGT",
         complementary_sequence="TGCATGCA",
         left_contact_positions=0,
-        right_contact_positions=('complementary', 7),
+        right_contact_positions=('complementary', 0),
         left_contact_coupling=0.1,
         right_contact_coupling=0.2
     )
@@ -241,7 +238,7 @@ def visualize_multiple_examples():
     
     # Example 3: Both contacts on complementary strand
     print("Creating visualization for complementary strand contacts...")
-    graph3 = converter.sequence_to_graph(
+    graph3 = sequence_to_graph(
         primary_sequence="ACGTACGT",
         complementary_sequence="TGCATGCA",
         left_contact_positions=('complementary', [0, 2]),

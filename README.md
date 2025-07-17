@@ -56,7 +56,7 @@ dataset = DNATransportDataset(sequences, dos_data, transmission_data, energy_gri
 # Initialize model
 model = DNATransportGNN(
     node_features=8,
-    edge_features=3,
+    edge_features=4,
     hidden_dim=128,
     num_layers=4,
     num_heads=4,

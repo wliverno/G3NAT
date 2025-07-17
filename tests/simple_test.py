@@ -6,7 +6,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dna_graph import sequence_to_graph
+from dataset import sequence_to_graph
 
 def simple_test():
     """Run a simple test of the double-stranded DNA functionality."""

@@ -4,46 +4,161 @@ import random
 
 
 def create_sample_data(num_samples: int = 1000, seq_length: int = 8, 
-                      num_energy_points: int = 100) -> Tuple[List[str], np.ndarray, np.ndarray, np.ndarray]:
+                      num_energy_points: int = 100) -> Tuple[List[str], List[np.ndarray], List[np.ndarray], np.ndarray]:
     """Generate sample data for demonstration."""
     np.random.seed(42)
     
     # Generate random DNA sequences
     bases = ['A', 'T', 'G', 'C']
+    complementary_bases = {'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G'}
     sequences = []
     for _ in range(num_samples):
         seq = ''.join(np.random.choice(bases, seq_length))
         sequences.append(seq)
+        
+        
     
     # Energy grid (in eV)
     energy_grid = np.linspace(-3, 3, num_energy_points)
     
     # Generate synthetic DOS and transmission data
-    dos_data = np.zeros((num_samples, num_energy_points))
-    transmission_data = np.zeros((num_samples, num_energy_points))
-    
-    for i, seq in enumerate(sequences):
-        # Simple model: DOS depends on GC content and sequence
-        gc_content = (seq.count('G') + seq.count('C')) / len(seq)
-        
-        # Create peaks around HOMO/LUMO
-        homo_energy = -1.5 + 0.5 * gc_content + 0.1 * np.random.randn()
-        lumo_energy = 1.0 + 0.3 * gc_content + 0.1 * np.random.randn()
-        
-        # DOS with Gaussian peaks
-        dos_data[i] = (np.exp(-(energy_grid - homo_energy)**2 / 0.2) + 
-                      np.exp(-(energy_grid - lumo_energy)**2 / 0.3))
-        
-        # Transmission with transport gap
-        transmission_data[i] = 1 / (1 + np.exp(10 * (np.abs(energy_grid) - 0.5)))
-        
-        # Add some noise
-        dos_data[i] += 0.1 * np.random.randn(num_energy_points)
-        transmission_data[i] += 0.05 * np.random.randn(num_energy_points)
-        transmission_data[i] = np.clip(transmission_data[i], 0, 1)
+    dos_data, transmission_data = [], []
+    for seq in sequences:
+        seq_complementary = ''.join(complementary_bases[base] for base in seq)[::-1]
+        dos, trans = getTransmissionDOS(
+            seq=seq, 
+            seq_complementary=seq_complementary, 
+            energy_grid=energy_grid
+        )
+        dos_data.append(np.log10(dos))
+        transmission_data.append(np.log10(trans))
     
     return sequences, dos_data, transmission_data, energy_grid
 
+def getTransmissionDOS(seq: str,
+                       seq_complementary: str = None,
+                       energy_grid: np.ndarray = None,
+                       GammaL: np.ndarray = None,
+                       GammaR: np.ndarray = None) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Calculate transmission and DOS for a given sequence.
+
+    Args:
+        seq: Primary DNA sequence 5' to 3'
+        seq_complementary: Complementary DNA sequence 5' to 3' (optional)
+        energy_grid: Energy grid
+        GammaL: Left coupling value list
+        GammaR: Right coupling value list
+        complementary_bases: Dictionary of complementary bases
+
+    Returns:
+        Tuple of transmission and DOS data
+    """         
+    if seq_complementary is None:
+        seq_complementary = '_' * len(seq)
+    if GammaL is None:
+        GammaL = np.zeros(len(seq)*2)
+        GammaL[0] = -0.1
+    if GammaR is None:
+        GammaR = np.zeros(len(seq)*2)
+        GammaR[-1] = -0.1
+    if energy_grid is None:
+        energy_grid = np.linspace(-3, 3, 100)
+
+    assert len(seq) == len(seq_complementary), "Primary and complementary sequences must have the same length"
+    assert len(GammaL) == len(seq)*2, "GammaL must have the same length as the primary sequence"
+    assert len(GammaR) == len(seq)*2, "GammaR must have the same length as the primary sequence"
+
+    # Initialize Hamiltonian and coupling matrices
+    H = np.zeros((len(seq)*2, len(seq)*2))
+
+    # From Roche et al, 2003 10.1103/PhysRevLett.91.228101
+    onsite_energies = {
+        'A': -0.49,
+        'T': -1.39,
+        'G': 0.00,
+        'C': -1.12,
+        '_': 0.00,
+    }
+
+    # From Voityuk et al, 2001 (10.1063/1.1352035)
+    HBond_energies = {
+        'AA': 0.0,
+        'CC': 0.0,
+        'GG': 0.0,
+        'TT': 0.0,
+        'AT': 0.034,
+        'AG': 0.0,
+        'AC': 0.0,
+        'CT': 0.0,
+        'CG': 0.050,
+        'CA': 0.0, 
+        'GT': 0.0,
+        'GC': 0.050,
+        'GA': 0.0,
+        'TA': 0.034,
+        'TC': 0.0,
+        'TG': 0.0,
+    }
+    nn_energies = {
+        'AA': 0.030,
+        'CC': 0.041,
+        'GG': 0.084,
+        'TT': 0.158,
+        'AT': 0.105,
+        'AG': 0.049,
+        'AC': 0.061,
+        'CT': 0.100,
+        'CG': 0.042,
+        'CA': 0.029, 
+        'GT': 0.137,
+        'GC': 0.110,
+        'GA': 0.089,
+        'TA': 0.086,
+        'TC': 0.076,
+        'TG': 0.085,
+    }
+
+    # Fill in the Hamiltonian
+    full_seq = seq + seq_complementary[::-1]
+    for i in range(len(full_seq)):
+        for j in range(len(full_seq)):
+            base_1 = full_seq[i]
+            base_2 = full_seq[j]
+            if i == j:
+                H[i, j] = onsite_energies[base_1]
+            elif base_1 == '_' or base_2 == '_':
+                continue
+            elif i%len(seq) == j%len(seq):
+                H[i, j] = HBond_energies[base_1 + base_2]
+            elif i == j+1 and i//len(seq) == j//len(seq):
+                BP = base_1 + base_2
+                H[i, j] = nn_energies[BP]
+            elif i == j-1 and i//len(seq) == j//len(seq):
+                BP = base_2 + base_1
+                H[i, j] = nn_energies[BP]
+    
+    # Start energy grid loop
+    transmission_data = np.zeros(len(energy_grid))
+    dos_data = np.zeros(len(energy_grid))
+    for n, energy in enumerate(energy_grid):
+        # Set up Green's function
+        sumSig = 0.5j * (np.diag(GammaL) + np.diag(GammaR))
+        Gr = np.linalg.inv(np.eye(len(seq)*2)*energy - H - sumSig)
+
+        # Calculate transmission
+        gamma1Gr = np.array([GammaL * row for row in Gr])
+        gamma2Ga = np.array([GammaR * row for row in Gr.conj().T])
+        T = 0
+        for i in range(len(seq)*2):
+            T += np.dot(gamma1Gr[i, :], gamma2Ga[:, i])
+        transmission_data[n] = np.real(T)
+
+        # Calculate DOS
+        DOS = -1 *np.trace(np.imag(Gr))
+        dos_data[n] = DOS
+        
+    return transmission_data, dos_data
 
 def generate_realistic_dna_sequences(num_samples: int = 1000, 
                                    min_length: int = 6, 
