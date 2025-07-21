@@ -9,18 +9,28 @@ from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 
 
-# Base encoding - one-hot + additional features
+# Base encoding - 6x one-hot for A, T, G, C, Purine, Pyrimidine
 BASE_TO_IDX = {'A': 0, 'T': 1, 'G': 2, 'C': 3}
 BASE_FEATURES = {
-    'A': [1, 0, 0, 0, 1, 0, 9.0, 331.0],  # one-hot + purine/pyrimidine + num_atoms + molecular_weight
-    'T': [0, 1, 0, 0, 0, 1, 10.0, 322.0],
-    'G': [0, 0, 1, 0, 1, 0, 10.0, 347.0],
-    'C': [0, 0, 0, 1, 0, 1, 9.0, 307.0]
+    'A': [1, 0, 0, 0, 1, 0], 
+    'T': [0, 1, 0, 0, 0, 1],
+    'G': [0, 0, 1, 0, 1, 0],
+    'C': [0, 0, 0, 1, 0, 1]
 }
-
 # Contact features (electrodes)
-CONTACT_FEATURES = [0, 0, 0, 0, 0, 0, 0, 1]  # Special marker for contacts
+CONTACT_FEATURES = [0, 0, 0, 0, 0, 0]  # Special marker for contacts
 
+# Edge encoding - 3x one-hot + directionality + contact coupling
+def get_edge_features(edge_type: str, directionality: int, coupling: float = 0.0):
+    """Return edge features without chemical couplings for non-contact edges"""
+    if edge_type == 'backbone':
+        return [1, 0, 0, directionality, 0.0]  # Coupling always 0 for backbone
+    elif edge_type == 'hydrogen_bond':
+        return [0, 1, 0, directionality, 0.0]  # Coupling always 0 for H-bonds
+    elif edge_type == 'contact':
+        return [0, 0, 1, directionality, coupling]  # User-provided coupling
+    else:
+        raise ValueError(f"Invalid edge type: {edge_type}")
 
 def sequence_to_graph(primary_sequence: str, 
                      complementary_sequence: Optional[str] = None,
@@ -143,10 +153,13 @@ def sequence_to_graph(primary_sequence: str,
         
         coupling = left_contact_coupling[i] if i < len(left_contact_coupling) else left_contact_coupling[-1]
         
-        # Bidirectional connection between left contact and base
-        edge_index.extend([[node_mapping['left_contact'], base_node_idx], 
-                         [base_node_idx, node_mapping['left_contact']]])
-        edge_attr.extend([[coupling, 0, 0, 1], [coupling, 0, 0, -1]])
+        # Contact → base (directionality = 1)
+        edge_index.append([node_mapping['left_contact'], base_node_idx])
+        edge_attr.append(get_edge_features('contact', 1, coupling))
+        
+        # Base → contact (directionality = -1)
+        edge_index.append([base_node_idx, node_mapping['left_contact']])
+        edge_attr.append(get_edge_features('contact', -1, coupling))
     
     # Right contact connections
     for i, pos in enumerate(right_positions):
@@ -163,10 +176,13 @@ def sequence_to_graph(primary_sequence: str,
         
         coupling = right_contact_coupling[i] if i < len(right_contact_coupling) else right_contact_coupling[-1]
         
-        # Bidirectional connection between right contact and base
-        edge_index.extend([[node_mapping['right_contact'], base_node_idx], 
-                         [base_node_idx, node_mapping['right_contact']]])
-        edge_attr.extend([[coupling, 0, 0, 1], [coupling, 0, 0, -1]])
+        # Contact → base (directionality = 1)
+        edge_index.append([node_mapping['right_contact'], base_node_idx])
+        edge_attr.append(get_edge_features('contact', 1, coupling))
+        
+        # Base → contact (directionality = -1)
+        edge_index.append([base_node_idx, node_mapping['right_contact']])
+        edge_attr.append(get_edge_features('contact', -1, coupling))
     
     # Primary strand backbone connections (connect adjacent existing bases)
     primary_positions = [pos for pos, base in enumerate(primary_sequence) if base != '_']
@@ -178,9 +194,15 @@ def sequence_to_graph(primary_sequence: str,
         if pos2 == pos1 + 1:
             node1_idx = node_mapping[('primary', pos1)]
             node2_idx = node_mapping[('primary', pos2)]
-            edge_index.extend([[node1_idx, node2_idx], [node2_idx, node1_idx]])
-            edge_attr.extend([[0.8, 1, 0, 1], [0.8, 1, 0, -1]])  # Strong backbone coupling
-        
+
+            # 5'→3' direction (forward)
+            edge_index.append([node1_idx, node2_idx])
+            edge_attr.append(get_edge_features('backbone', 1))  # Directionality = 1
+            
+            # 3'→5' direction (backward)
+            edge_index.append([node2_idx, node1_idx])
+            edge_attr.append(get_edge_features('backbone', -1))  # Directionality = -1
+
     # Complementary strand backbone connections (only between existing bases)
     complementary_positions = [pos for pos, base in enumerate(complementary_sequence) if base != '_']
     for i in range(len(complementary_positions) - 1):
@@ -191,8 +213,14 @@ def sequence_to_graph(primary_sequence: str,
         if pos2 == pos1 + 1:
             node1_idx = node_mapping[('complementary', pos1)]
             node2_idx = node_mapping[('complementary', pos2)]
-            edge_index.extend([[node1_idx, node2_idx], [node2_idx, node1_idx]])
-            edge_attr.extend([[0.8, 1, 0, 1], [0.8, 1, 0, -1]])  # Strong backbone coupling
+
+            # 5'→3' direction (forward)
+            edge_index.append([node1_idx, node2_idx])
+            edge_attr.append(get_edge_features('backbone', 1))  # Directionality = 1
+            
+            # 3'→5' direction (backward)
+            edge_index.append([node2_idx, node1_idx])
+            edge_attr.append(get_edge_features('backbone', -1))  # Directionality = -1
     
     # Hydrogen bonding between complementary strands
     # Only create hydrogen bonds where both bases exist
@@ -205,12 +233,10 @@ def sequence_to_graph(primary_sequence: str,
         if primary_base != '_' and complementary_base != '_':
             primary_idx = node_mapping[('primary', i)]
             complementary_idx = node_mapping[('complementary', comp_loc)]
-            
-            # Use a default hydrogen bond strength (will be learned by the model)
-            h_bond_strength = 0.4  # Default value, model will learn actual strengths
-            
+
+            # No Directionality for Hydrogen Bonds            
             edge_index.extend([[primary_idx, complementary_idx], [complementary_idx, primary_idx]])
-            edge_attr.extend([[h_bond_strength, 0, 1, 0], [h_bond_strength, 0, 1, 0]])
+            edge_attr.extend([get_edge_features('hydrogen_bond', 0), get_edge_features('hydrogen_bond', 0)])
     
     edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
     edge_attr = torch.tensor(edge_attr, dtype=torch.float)

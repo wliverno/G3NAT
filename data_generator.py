@@ -3,7 +3,7 @@ from typing import List, Tuple
 import random
 
 
-def create_sample_data(num_samples: int = 1000, seq_length: int = 8, 
+def create_sample_data(num_samples: int = 1000, seq_length: int = 10, 
                       num_energy_points: int = 100) -> Tuple[List[str], List[np.ndarray], List[np.ndarray], np.ndarray]:
     """Generate sample data for demonstration."""
     np.random.seed(42)
@@ -13,7 +13,8 @@ def create_sample_data(num_samples: int = 1000, seq_length: int = 8,
     complementary_bases = {'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G'}
     sequences = []
     for _ in range(num_samples):
-        seq = ''.join(np.random.choice(bases, seq_length))
+        length = np.random.randint(1,seq_length)
+        seq = ''.join(np.random.choice(bases, length))
         sequences.append(seq)
         
         
@@ -58,10 +59,10 @@ def getTransmissionDOS(seq: str,
         seq_complementary = '_' * len(seq)
     if GammaL is None:
         GammaL = np.zeros(len(seq)*2)
-        GammaL[0] = -0.1
+        GammaL[0] = 0.1 # Default coupling strength on first site of primary strand
     if GammaR is None:
         GammaR = np.zeros(len(seq)*2)
-        GammaR[-1] = -0.1
+        GammaR[len(seq)-1] = 0.1 # Default coupling strength on last site of primary strand
     if energy_grid is None:
         energy_grid = np.linspace(-3, 3, 100)
 
@@ -143,7 +144,7 @@ def getTransmissionDOS(seq: str,
     dos_data = np.zeros(len(energy_grid))
     for n, energy in enumerate(energy_grid):
         # Set up Green's function
-        sumSig = 0.5j * (np.diag(GammaL) + np.diag(GammaR))
+        sumSig = -0.5j * (np.diag(GammaL) + np.diag(GammaR))
         Gr = np.linalg.inv(np.eye(len(seq)*2)*energy - H - sumSig)
 
         # Calculate transmission

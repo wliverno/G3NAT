@@ -75,8 +75,8 @@ def setup_device(device_arg: str) -> torch.device:
     return device
 
 
-def create_graphs_from_sequences(sequences: List[str], dos_data: np.ndarray, 
-                                transmission_data: np.ndarray) -> List:
+def create_graphs_from_sequences(sequences: List[str], dos_data: List[np.ndarray], 
+                                transmission_data: List[np.ndarray]) -> List:
     """Convert DNA sequences to graph representations."""
     print("Converting sequences to graphs...")
     graphs = []
@@ -122,8 +122,6 @@ def initialize_model(args) -> DNATransportGNN:
     """Initialize the DNA Transport GNN model."""
     
     model = DNATransportGNN(
-        node_features=8,
-        edge_features=4,
         hidden_dim=args.hidden_dim,
         num_layers=args.num_layers,
         num_heads=args.num_heads,

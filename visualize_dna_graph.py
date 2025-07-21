@@ -12,7 +12,7 @@ from dataset import sequence_to_graph
 import numpy as np
 
 def visualize_dna_graph(graph, primary_sequence=None, complementary_sequence=None, 
-                       figsize=(12, 8), node_size=1000, font_size=10):
+                       figsize=(8, 12), node_size=1000, font_size=10):
     """
     Visualize a DNA graph with proper labeling and styling.
     
@@ -54,8 +54,8 @@ def visualize_dna_graph(graph, primary_sequence=None, complementary_sequence=Non
             # For base nodes, determine the base type from node features
             node_features = graph.x[node].numpy()
             
-            # Check if this is a contact node (last feature is 1)
-            if node_features[-1] == 1:
+            # Check if this is a contact node (all features are 0 for contacts)
+            if np.all(node_features == 0):
                 # This shouldn't happen for non-contact nodes, but just in case
                 continue
             
@@ -87,7 +87,7 @@ def visualize_dna_graph(graph, primary_sequence=None, complementary_sequence=Non
                 strand = 'complementary'
                 # Find the corresponding position in the complementary sequence
                 comp_node_idx = node - primary_count - 1
-                comp_positions = [len(primary_sequence) - i - 1 for i, base in enumerate(complementary_sequence) if base != '_'] if complementary_sequence else []
+                comp_positions = [len(primary_sequence) - i - 1 for i, base in enumerate(complementary_sequence) if base != '_'] if complementary_sequence and primary_sequence else []
                 if comp_node_idx < len(comp_positions):
                     pos = comp_positions[comp_node_idx]  # Use actual sequence position
                 else:
@@ -107,10 +107,12 @@ def visualize_dna_graph(graph, primary_sequence=None, complementary_sequence=Non
         for i in range(graph.edge_index.shape[1]):
             if (graph.edge_index[0, i].item() == src and graph.edge_index[1, i].item() == dst) or \
                (graph.edge_index[0, i].item() == dst and graph.edge_index[1, i].item() == src):
-                coupling = graph.edge_attr[i, 0].item()
-                edge_type = graph.edge_attr[i, 1].item()
-                h_bond_flag = graph.edge_attr[i, 2].item()
-                directionality = graph.edge_attr[i, 3].item()
+                # New edge feature structure: [backbone_flag, hbond_flag, contact_flag, coupling, directionality]
+                backbone_flag = graph.edge_attr[i, 0].item()
+                h_bond_flag = graph.edge_attr[i, 1].item()
+                contact_flag = graph.edge_attr[i, 2].item()
+                coupling = graph.edge_attr[i, 3].item()
+                directionality = graph.edge_attr[i, 4].item()
                 edge_found = True
                 break
         
@@ -120,11 +122,11 @@ def visualize_dna_graph(graph, primary_sequence=None, complementary_sequence=Non
                 edge_weights[edge] = ""  # No label for hydrogen bonds
                 edge_styles[edge] = 'dotted'
                 edge_colors.append('blue')
-            elif edge_type == 0:  # Contact connection
+            elif contact_flag == 1:  # Contact connection
                 edge_weights[edge] = f"{coupling:.2f}"  # Only show coupling for contacts
                 edge_styles[edge] = 'solid'
                 edge_colors.append('red')
-            elif edge_type == 1:  # Backbone connection
+            elif backbone_flag == 1:  # Backbone connection
                 edge_weights[edge] = ""  # No label for backbone connections
                 edge_styles[edge] = 'solid'
                 edge_colors.append('black')
@@ -157,7 +159,7 @@ def visualize_dna_graph(graph, primary_sequence=None, complementary_sequence=Non
         Line2D([0], [0], color='blue', linestyle=':', linewidth=2, label='Hydrogen Bonds')
     ]
     
-    ax.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1.15, 1))
+    ax.legend(handles=legend_elements, bbox_to_anchor=(1.15, 1))
     
     # Set title and labels
     if primary_sequence:
@@ -174,7 +176,7 @@ def visualize_dna_graph(graph, primary_sequence=None, complementary_sequence=Non
         ax.set_xlim(-3, len(primary_sequence) + 2)
     else:
         ax.set_xlim(-3, 12)
-    ax.set_ylim(-1.5, 1.5)
+    ax.set_ylim(-1, 1)
     
     # Add grid
     ax.grid(True, alpha=0.3)
