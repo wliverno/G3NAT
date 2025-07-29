@@ -14,7 +14,7 @@ import os
 import argparse
 from typing import Tuple, List
 
-from models import DNATransportGNN, train_model_with_custom_batching
+from models import DNATransportHamiltonianGNN, train_model_with_custom_batching
 from data_generator import create_sample_data
 from dataset import sequence_to_graph
 
@@ -54,7 +54,7 @@ def parse_args():
     # Output parameters
     parser.add_argument('--output_dir', type=str, default='./outputs',
                        help='Output directory for results')
-    parser.add_argument('--model_name', type=str, default='dna_transport_model',
+    parser.add_argument('--model_name', type=str, default='dna_transport_NEGF_model',
                        help='Name for saved model')
     
     return parser.parse_args()
@@ -90,7 +90,7 @@ def create_graphs_from_sequences(primary_sequences: List[str], complementary_seq
             left_contact_positions=0,
             right_contact_positions=len(seq)-1,
             left_contact_coupling=0.1,
-            right_contact_coupling=0.2
+            right_contact_coupling=0.1
         )
         
         if graph is not None:
@@ -119,14 +119,14 @@ def split_graphs(graphs: List, train_split: float = 0.8):
     return train_graphs, val_graphs
 
 
-def initialize_model(args) -> DNATransportGNN:
+def initialize_model(args) -> DNATransportHamiltonianGNN:
     """Initialize the DNA Transport GNN model."""
     
-    model = DNATransportGNN(
+    model = DNATransportHamiltonianGNN(
         hidden_dim=args.hidden_dim,
         num_layers=args.num_layers,
         num_heads=args.num_heads,
-        output_dim=args.num_energy_points,
+        max_len_dna=args.seq_length,
         dropout=args.dropout
     )
     

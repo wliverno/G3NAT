@@ -161,49 +161,101 @@ class DNATransportHamiltonianGNN(nn.Module):
         Calculate the transmission and DOS using the NEGF method.
         
         Args:
-            inMat: Input matrix [num_nodes, num_nodes]
-            GammaL: Left lead coupling [num_nodes]
-            GammaR: Right lead coupling [num_nodes]
+            H_triangular: Upper triangular Hamiltonian elements [batch_size, num_unique_elements]
+            GammaL: Left lead coupling [batch_size, H_size]
+            GammaR: Right lead coupling [batch_size, H_size]
 
         Returns:
             Tuple of (transmission, DOS, H) tensors for output
         """
         
-        # Check input shapes
-        H_triangular = H_triangular.flatten()
-        assert GammaL.shape == (self.H_size,), "GammaL must be 1D tensors shape (H_size,)"
-        assert GammaR.shape == (self.H_size,), "GammaR must be 1D tensors shape (H_size,)"
-        assert H_triangular.shape == (self.num_unique_elements,), "H must have size num_unique_elements"
+        # Handle both single sample and batch cases
+        if H_triangular.dim() == 1:
+            H_triangular = H_triangular.unsqueeze(0)
+            GammaL = GammaL.unsqueeze(0)
+            GammaR = GammaR.unsqueeze(0)
+            squeeze_output = True
+        else:
+            squeeze_output = False
+            
+        batch_size = H_triangular.size(0)
+        device = H_triangular.device
         
-        # Fill upper triangular part (including diagonal)
-        H = torch.zeros(self.H_size, self.H_size, dtype=H_triangular.dtype, device=H_triangular.device)
-        idx = 0
-        for i in range(self.H_size):
-            for j in range(i, self.H_size):  # Upper triangular + diagonal
-                H[i, j] = H_triangular[idx]
-                if i != j:  # Not diagonal
-                    H[j, i] = H_triangular[idx].conj()  # Hermitian conjugate
-                idx += 1        
+        # Check input shapes
+        assert GammaL.shape == (batch_size, self.H_size), f"GammaL must have shape ({batch_size}, {self.H_size}), got {GammaL.shape}"
+        assert GammaR.shape == (batch_size, self.H_size), f"GammaR must have shape ({batch_size}, {self.H_size}), got {GammaR.shape}"
+        assert H_triangular.shape == (batch_size, self.num_unique_elements), f"H must have shape ({batch_size}, {self.num_unique_elements}), got {H_triangular.shape}"
+        
+        # Create output tensors
+        T_batch = torch.zeros(batch_size, len(self.energy_grid), dtype=H_triangular.dtype, device=device)
+        DOS_batch = torch.zeros(batch_size, len(self.energy_grid), dtype=H_triangular.dtype, device=device)
+        H_batch = torch.zeros(batch_size, self.H_size, self.H_size, dtype=H_triangular.dtype, device=device)
+        
+        # Move energy grid to device
+        energy_grid_device = torch.tensor(self.energy_grid, dtype=H_triangular.dtype, device=device)
+        
+        # Process each sample in the batch
+        for b in range(batch_size):
+            H_tri = H_triangular[b]
+            GammaL_b = GammaL[b]
+            GammaR_b = GammaR[b]
+            
+            # Fill upper triangular part (including diagonal)
+            H = torch.zeros(self.H_size, self.H_size, dtype=H_triangular.dtype, device=device)
+            idx = 0
+            for i in range(self.H_size):
+                for j in range(i, self.H_size):  # Upper triangular + diagonal
+                    H[i, j] = H_tri[idx]
+                    if i != j:  # Not diagonal
+                        H[j, i] = H_tri[idx].conj()  # Hermitian conjugate
+                    idx += 1        
 
-
-        # Set up the NEGF calculation
-        sigTot = -0.5j*(GammaL + GammaR)
-        T = torch.zeros(self.energy_grid.shape)
-        DOS = torch.zeros(self.energy_grid.shape)
-        # Calculation of DOS and transmission at each energy point
-        for i in range(len(self.energy_grid)):
-            A = self.energy_grid[i]*torch.eye(self.H_size) - H - sigTot
-            Gr = torch.linalg.inv(A)
-            DOS[i] = -1*torch.trace(torch.imag(Gr))
-            Ga = Gr.conj().T
-            Tcoh = torch.matmul(torch.matmul(GammaL + 0j, Gr),
-                                torch.matmul(GammaR + 0j, Ga))
-            T[i] = torch.real(Tcoh)
-        return torch.log10(T), torch.log10(DOS), H
+            # Set up the NEGF calculation
+            sigTot = -0.5j*(GammaL_b + GammaR_b)
+            
+            # Create output tensors for this sample
+            T = torch.zeros(len(self.energy_grid), dtype=H_triangular.dtype, device=device)
+            DOS = torch.zeros(len(self.energy_grid), dtype=H_triangular.dtype, device=device)
+            I = torch.eye(self.H_size,dtype=torch.complex64,  device=device)
+            
+            # Calculation of DOS and transmission at each energy point
+            for i in range(len(self.energy_grid)):
+                A = energy_grid_device[i]*I - H - sigTot
+                
+                # Use more stable matrix solve instead of direct inversion
+                try:
+                    Gr = torch.linalg.solve(A, I)
+                except torch.linalg.LinAlgError:
+                    # Fallback: add small regularization and use pseudo-inverse
+                    A_reg = A + 1e-8 * I
+                    Gr = torch.linalg.pinv(A_reg)
+                
+                DOS[i] = -1*torch.trace(torch.imag(Gr))
+                Ga = Gr.conj().T
+                # Convert gamma vectors to diagonal matrices for matrix multiplication
+                GammaL_diag = torch.diag(GammaL_b + 0j)
+                GammaR_diag = torch.diag(GammaR_b + 0j)
+                Tcoh = torch.matmul(torch.matmul(GammaL_diag, Gr),
+                                    torch.matmul(GammaR_diag, Ga))
+                T[i] = torch.real(torch.trace(Tcoh))
+            
+            # Add small epsilon to avoid log10(0) issues
+            T_clamped = torch.clamp(T, min=1e-16)
+            DOS_clamped = torch.clamp(DOS, min=1e-16)
+            
+            T_batch[b] = torch.log10(T_clamped)
+            DOS_batch[b] = torch.log10(DOS_clamped)
+            H_batch[b] = H
+        
+        if squeeze_output:
+            return T_batch.squeeze(0), DOS_batch.squeeze(0), H_batch.squeeze(0)
+        else:
+            return T_batch, DOS_batch, H_batch
     
     def get_contact_vectors(self, x: torch.Tensor, 
                         edge_attr: torch.Tensor, 
-                        edge_index: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+                        edge_index: torch.Tensor,
+                        batch: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Extract left and right contact data from a PyTorch Geometric Data object.
         
@@ -211,50 +263,97 @@ class DNATransportHamiltonianGNN(nn.Module):
             x: Node features [num_nodes, node_features]
             edge_index: Edge indices [2, num_edges]
             edge_attr: Edge features [num_edges, edge_features]
+            batch: Batch indices [num_nodes]
                 
         Returns:
-            gammaR: Right lead coupling [num_nodes]
-            gammaL: Left lead coupling [num_nodes]
+            gammaL: Left lead coupling [batch_size, H_size]
+            gammaR: Right lead coupling [batch_size, H_size]
         """
-         # Find contact nodes
-        contact_node_mask = torch.all(x== 0, dim=1)
-        contact_inds = torch.where(contact_node_mask)[0]
-        dna_inds = torch.where(~contact_node_mask)[0]
+        device = x.device
+        
+        # Handle batched processing
+        if batch is None:
+            batch = torch.zeros(x.size(0), dtype=torch.long, device=device)
+        
+        batch_size = batch.max().item() + 1
+        
+        # Initialize output tensors
+        GammaL_batch = torch.zeros(batch_size, self.H_size, device=device, dtype=x.dtype)
+        GammaR_batch = torch.zeros(batch_size, self.H_size, device=device, dtype=x.dtype)
+        
+        # Process each graph in the batch
+        for batch_idx in range(batch_size):
+            # Get nodes and edges for this graph
+            node_mask = batch == batch_idx
+            node_indices = torch.where(node_mask)[0]
+            
+            # Get edges for this graph
+            edge_mask = torch.isin(edge_index[0], node_indices) & torch.isin(edge_index[1], node_indices)
+            graph_edge_index = edge_index[:, edge_mask]
+            graph_edge_attr = edge_attr[edge_mask]
+            graph_x = x[node_mask]
+            
+            # Create mapping from global to local node indices
+            global_to_local = {global_idx.item(): local_idx for local_idx, global_idx in enumerate(node_indices)}
+            
+            # Find contact nodes (all zero features indicate contact nodes)
+            contact_node_mask = torch.all(graph_x == 0, dim=1)
+            contact_inds = torch.where(contact_node_mask)[0]
+            dna_inds = torch.where(~contact_node_mask)[0]
 
-        # Find contact edges (edge_attr[:, 2] == 1 for contact type, one direction only)
-        contact_mask = (edge_attr[:, 2] == 1) 
-        contact_edges = edge_index[:, contact_mask]
-        contact_couplings = edge_attr[contact_mask, 4]  # Coupling strength is at index 4
-        
-        # Find edges connected to left contact
-        left_contact_mask = (contact_edges[0] == contact_inds[0]) 
-        left_contact_edges = contact_edges[:, left_contact_mask]
-        left_contact_couplings = contact_couplings[left_contact_mask]
-        
-        # Find edges connected to right contact
-        right_contact_mask = (contact_edges[0] == contact_inds[-1]) 
-        right_contact_edges = contact_edges[:, right_contact_mask]
-        right_contact_couplings = contact_couplings[right_contact_mask]
-        
-        # Get the DNA base nodes connected to contacts (not the contact nodes themselves)
-        left_contact_indices = [edge[1].item() for edge in left_contact_edges.T]
-        right_contact_indices = [edge[1].item() for edge in right_contact_edges.T]
+            if len(contact_inds) < 2:
+                continue  # Skip if no proper contacts found
+            
+            # Map global edge indices to local indices
+            local_edge_index = torch.zeros_like(graph_edge_index)
+            for i in range(graph_edge_index.size(1)):
+                local_edge_index[0, i] = global_to_local[graph_edge_index[0, i].item()]
+                local_edge_index[1, i] = global_to_local[graph_edge_index[1, i].item()]
 
-        # Initialize coupling vectors
-        GammaL = torch.zeros(self.H_size)
-        GammaR = torch.zeros(self.H_size)
-        
-        # Set left contact couplings
-        for i, coupling in enumerate(left_contact_couplings):
-            ind = torch.where(dna_inds == left_contact_indices[i])[0]
-            GammaL[ind] = coupling
-        
-        # Set right contact couplings
-        for i, coupling in enumerate(right_contact_couplings):
-            ind = torch.where(dna_inds == right_contact_indices[i])[0]
-            GammaR[ind] = coupling
+            # Find contact edges (edge_attr[:, 2] == 1 for contact type)
+            contact_mask = (graph_edge_attr[:, 2] == 1) 
+            contact_edges = local_edge_index[:, contact_mask]
+            contact_couplings = graph_edge_attr[contact_mask, 4]  # Coupling strength is at index 4
+            
+            if len(contact_edges[0]) == 0:
+                continue  # Skip if no contact edges found
+            
+            # Find edges connected to left contact (first contact node)
+            left_contact_mask = (contact_edges[0] == contact_inds[0]) 
+            left_contact_edges = contact_edges[:, left_contact_mask]
+            left_contact_couplings = contact_couplings[left_contact_mask]
+            
+            # Find edges connected to right contact (last contact node)
+            right_contact_mask = (contact_edges[0] == contact_inds[-1]) 
+            right_contact_edges = contact_edges[:, right_contact_mask]
+            right_contact_couplings = contact_couplings[right_contact_mask]
+            
+            # Get the DNA base nodes connected to contacts (not the contact nodes themselves)
+            left_contact_indices = [edge[1].item() for edge in left_contact_edges.T] if len(left_contact_edges[0]) > 0 else []
+            right_contact_indices = [edge[1].item() for edge in right_contact_edges.T] if len(right_contact_edges[0]) > 0 else []
 
-        return GammaL, GammaR
+            # Initialize coupling vectors for this graph
+            GammaL = torch.zeros(self.H_size, device=device, dtype=x.dtype)
+            GammaR = torch.zeros(self.H_size, device=device, dtype=x.dtype)
+            
+            # Set left contact couplings
+            for i, coupling in enumerate(left_contact_couplings):
+                if i < len(left_contact_indices):
+                    ind = torch.where(dna_inds == left_contact_indices[i])[0]
+                    if len(ind) > 0 and ind[0] < self.H_size:
+                        GammaL[ind[0]] = coupling
+            
+            # Set right contact couplings
+            for i, coupling in enumerate(right_contact_couplings):
+                if i < len(right_contact_indices):
+                    ind = torch.where(dna_inds == right_contact_indices[i])[0]
+                    if len(ind) > 0 and ind[0] < self.H_size:
+                        GammaR[ind[0]] = coupling
+
+            GammaL_batch[batch_idx] = GammaL
+            GammaR_batch[batch_idx] = GammaR
+
+        return GammaL_batch, GammaR_batch
 
     def forward(self, data):
         """
@@ -272,8 +371,8 @@ class DNATransportHamiltonianGNN(nn.Module):
         """
         x, edge_index, edge_attr, batch = data.x, data.edge_index, data.edge_attr, data.batch
         
-        # First, get the contact vectors
-        GammaL, GammaR = self.get_contact_vectors(x, edge_attr, edge_index)
+        # First, get the contact vectors (returns batched tensors)
+        GammaL, GammaR = self.get_contact_vectors(x, edge_attr, edge_index, batch)
         
         # Project node and edge features
         x = self.node_proj(x)
@@ -289,10 +388,10 @@ class DNATransportHamiltonianGNN(nn.Module):
         # Global pooling
         x = self.global_pool(x, batch)
 
-        # Hidden layer
+        # Hidden layer (outputs batch_size x num_unique_elements)
         x = self.H_proj(x)
         
-        # Output projections
+        # Output projections (handles batched inputs)
         dos_pred, transmission_pred, H = self.NEGFProjection(x, GammaL, GammaR)
         
         self.H = H

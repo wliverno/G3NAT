@@ -38,47 +38,30 @@ Run the main training script:
 python main.py
 ```
 
-### Custom Training
+### Example using pre-trained model
 
 ```python
-from models import DNATransportGNN, train_model
-from dataset import DNATransportDataset
-from data_generator import create_sample_data
+from models import load_trained_model, predict_sequence
+from data_generator import create_sample_data, getTransmissionDOS
 
 # Generate data
-sequences, dos_data, transmission_data, energy_grid = create_sample_data(
+sequences, sequences_complement, dos_data, transmission_data, energy_grid = create_sample_data(
     num_samples=1000, seq_length=8, num_energy_points=100
 )
 
 # Create dataset
 dataset = DNATransportDataset(sequences, dos_data, transmission_data, energy_grid)
 
-# Initialize model
-model = DNATransportGNN(
-    node_features=8,
-    edge_features=4,
-    hidden_dim=128,
-    num_layers=4,
-    num_heads=4,
-    output_dim=100
-)
+# Load trained model
+model, energy_grid, device = load_trained_model('trained_model.pth')
 
-# Train model
-train_losses, val_losses = train_model(model, train_loader, val_loader)
-```
-
-## Project Structure
-
-```
-G3NAT/
-├── main.py                 # Main training script
-├── dna_transport_gnn.py    # Core GNN model and dataset classes
-├── data_generator.py       # Synthetic data generation utilities
-├── utils.py               # Utility functions
-├── requirements.txt       # Python dependencies
-├── README.md             # This file
-└── examples/             # Example scripts and notebooks
-    └── basic_usage.py
+# Predict DOS and transmission for each sequence
+dos_preds = []
+transmission_preds = []
+for seq, seq_complementary in zip(sequences, sequences_complement)
+    dos_pred, transmission_pred = predict_sequence(model, seq, seq_complementary, energy_grid=energy_grid)
+    dos_preds.append(dos_pred)
+    transmission_preds.append(transmission_pred)
 ```
 
 ## Model Architecture
@@ -134,15 +117,4 @@ After training, the model saves:
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## Citation
-
-If you use this code in your research, please cite:
-
-```bibtex
-@software{dna_transport_gnn,
-  title={DNA Transport GNN: Graph Neural Networks for DNA Transport Property Prediction},
-  author={Your Name},
-  year={2024},
-  url={https://github.com/yourusername/G3NAT}
-}
 ``` 
