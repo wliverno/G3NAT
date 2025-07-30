@@ -4,18 +4,27 @@ import random
 
 
 def create_sample_data(num_samples: int = 1000, seq_length: int = 10, 
-                      num_energy_points: int = 100) -> Tuple[List[str], List[np.ndarray], List[np.ndarray], np.ndarray]:
+                      num_energy_points: int = 100) -> Tuple[List[str], List[str], List[np.ndarray], List[np.ndarray], np.ndarray]:
     """Generate sample data for demonstration."""
     np.random.seed(42)
     
     # Generate random DNA sequences
     bases = ['A', 'T', 'G', 'C']
-    complementary_bases = {'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G'}
-    sequences = []
+    complementary_bases = {'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G'}     
+    primary_sequences = []
+    complementary_sequences = []
     for _ in range(num_samples):
         length = np.random.randint(1,seq_length)
         seq = ''.join(np.random.choice(bases, length))
-        sequences.append(seq)
+        seq_complementary = ''.join(complementary_bases[base] for base in seq)[::-1]
+        # Remove bases from complementary sequence for 1 in 10 sequences
+        num_remove = np.random.randint(0, length) if np.random.random() > 0.9 else 0 
+        pos = np.random.choice(range(length), size=num_remove, replace=False)
+        seq_complementary = ''.join(seq_complementary[i] if i not in pos else '_' for i in range(length))
+        # Add to list
+        primary_sequences.append(seq)
+        complementary_sequences.append(seq_complementary)
+        
         
         
     
@@ -24,8 +33,7 @@ def create_sample_data(num_samples: int = 1000, seq_length: int = 10,
     
     # Generate synthetic DOS and transmission data
     dos_data, transmission_data = [], []
-    for seq in sequences:
-        seq_complementary = ''.join(complementary_bases[base] for base in seq)[::-1]
+    for seq, seq_complementary in zip(primary_sequences, complementary_sequences):
         dos, trans = getTransmissionDOS(
             seq=seq, 
             seq_complementary=seq_complementary, 
@@ -34,7 +42,7 @@ def create_sample_data(num_samples: int = 1000, seq_length: int = 10,
         dos_data.append(np.log10(dos))
         transmission_data.append(np.log10(trans))
     
-    return sequences, dos_data, transmission_data, energy_grid
+    return primary_sequences, complementary_sequences, dos_data, transmission_data, energy_grid
 
 def getTransmissionDOS(seq: str,
                        seq_complementary: str = None,
