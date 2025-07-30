@@ -180,77 +180,62 @@ class DNATransportHamiltonianGNN(nn.Module):
             
         batch_size = H_triangular.size(0)
         device = H_triangular.device
-        
-        # Check input shapes
-        assert GammaL.shape == (batch_size, self.H_size), f"GammaL must have shape ({batch_size}, {self.H_size}), got {GammaL.shape}"
-        assert GammaR.shape == (batch_size, self.H_size), f"GammaR must have shape ({batch_size}, {self.H_size}), got {GammaR.shape}"
-        assert H_triangular.shape == (batch_size, self.num_unique_elements), f"H must have shape ({batch_size}, {self.num_unique_elements}), got {H_triangular.shape}"
-        
-        # Create output tensors
-        T_batch = torch.zeros(batch_size, len(self.energy_grid), dtype=H_triangular.dtype, device=device)
-        DOS_batch = torch.zeros(batch_size, len(self.energy_grid), dtype=H_triangular.dtype, device=device)
-        H_batch = torch.zeros(batch_size, self.H_size, self.H_size, dtype=H_triangular.dtype, device=device)
-        
-        # Move energy grid to device
-        energy_grid_device = torch.tensor(self.energy_grid, dtype=H_triangular.dtype, device=device)
-        
-        # Process each sample in the batch
-        for b in range(batch_size):
-            H_tri = H_triangular[b]
-            GammaL_b = GammaL[b]
-            GammaR_b = GammaR[b]
-            
-            # Fill upper triangular part (including diagonal)
-            H = torch.zeros(self.H_size, self.H_size, dtype=H_triangular.dtype, device=device)
-            idx = 0
-            for i in range(self.H_size):
-                for j in range(i, self.H_size):  # Upper triangular + diagonal
-                    H[i, j] = H_tri[idx]
-                    if i != j:  # Not diagonal
-                        H[j, i] = H_tri[idx].conj()  # Hermitian conjugate
-                    idx += 1        
+        i_indices, j_indices = torch.triu_indices(self.H_size, self.H_size, device=device)
+        H_matrix = torch.zeros(batch_size, self.H_size, self.H_size, 
+                        dtype=H_triangular.dtype, device=device)
+        H_matrix[:, i_indices, j_indices] = H_triangular
+        H_matrix[:, j_indices, i_indices] = H_triangular.conj()
 
-            # Set up the NEGF calculation
-            sigTot = -0.5j*(GammaL_b + GammaR_b)
-            
-            # Create output tensors for this sample
-            T = torch.zeros(len(self.energy_grid), dtype=H_triangular.dtype, device=device)
-            DOS = torch.zeros(len(self.energy_grid), dtype=H_triangular.dtype, device=device)
-            I = torch.eye(self.H_size,dtype=torch.complex64,  device=device)
-            
-            # Calculation of DOS and transmission at each energy point
-            for i in range(len(self.energy_grid)):
-                A = energy_grid_device[i]*I - H - sigTot
-                
-                # Use more stable matrix solve instead of direct inversion
-                try:
-                    Gr = torch.linalg.solve(A, I)
-                except torch.linalg.LinAlgError:
-                    # Fallback: add small regularization and use pseudo-inverse
-                    A_reg = A + 1e-8 * I
-                    Gr = torch.linalg.pinv(A_reg)
-                
-                DOS[i] = -1*torch.trace(torch.imag(Gr))
-                Ga = Gr.conj().T
-                # Convert gamma vectors to diagonal matrices for matrix multiplication
-                GammaL_diag = torch.diag(GammaL_b + 0j)
-                GammaR_diag = torch.diag(GammaR_b + 0j)
-                Tcoh = torch.matmul(torch.matmul(GammaL_diag, Gr),
-                                    torch.matmul(GammaR_diag, Ga))
-                T[i] = torch.real(torch.trace(Tcoh))
-            
-            # Add small epsilon to avoid log10(0) issues
-            T_clamped = torch.clamp(T, min=1e-16)
-            DOS_clamped = torch.clamp(DOS, min=1e-16)
-            
-            T_batch[b] = torch.log10(T_clamped)
-            DOS_batch[b] = torch.log10(DOS_clamped)
-            H_batch[b] = H
+        # Create Identity Matrix
+        I = torch.eye(self.H_size, dtype=H_triangular.dtype, device=device).unsqueeze(0).unsqueeze(0)  # [1, 1, H_size, H_size]
+        I = I.expand(batch_size, len(self.energy_grid), self.H_size, self.H_size) # [batch, energy, H_size, H_size]
+
+        # Expand Hamiltonian and sigTot to match energy grid
+        H_expanded = H_matrix.unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)  # [batch, energy, H_size, H_size]
+        sigTot = (-0.5j * (GammaL + GammaR)).unsqueeze(1).unsqueeze(-1).expand(-1, len(self.energy_grid), -1, -1)
+
+        # Expand energy grid to match batch size and H_size
+        energy_grid_tensor = torch.tensor(self.energy_grid, dtype=H_triangular.dtype, device=device)  # [num_energy]
+        energy_grid_expanded = energy_grid_tensor.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)  # [1, num_energy, 1, 1]
+
+        # Calculate A matrix
+        A = energy_grid_expanded * I - H_expanded - sigTot
+
+        # Calculate Green's functions
+        # Use more stable matrix solve instead of direct inversion
+        try:
+            Gr = torch.linalg.solve(A, I+0j)
+        except torch.linalg.LinAlgError:
+            # Fallback: add small regularization and use pseudo-inverse
+            A_reg = A + 1e-8j * I
+            Gr = torch.linalg.pinv(A_reg)
+        
+        # Calculate DOS using einsum for trace
+        DOS = -1*torch.einsum('benn->be', torch.imag(Gr))
+
+        # Calculate transmission
+        Ga = Gr.conj().transpose(-2, -1)
+        # Convert gamma vectors to diagonal matrices for matrix multiplication
+        # [batch, H_size] -> [batch, energy, H_size, 1]
+        GammaL_diag = (GammaL + 0j).unsqueeze(1).unsqueeze(-1).expand(-1, len(self.energy_grid), -1, -1)
+        GammaR_diag = (GammaR + 0j).unsqueeze(1).unsqueeze(-1).expand(-1, len(self.energy_grid), -1, -1)
+ 
+        # Element-wise multiplication (equivalent to diagonal matrix multiplication)
+        # Gr: [batch, energy, H_size, H_size]
+        # Gamma_diag: [batch, energy, H_size, 1]
+        # Result: [batch, energy, H_size, H_size]
+        gamma1Gr = GammaL_diag * Gr
+        gamma2Ga = GammaR_diag * Ga
+
+        # Do final matrix multiplication to get transmission
+        Tcoh = torch.matmul(gamma1Gr, gamma2Ga)
+        T = torch.real(torch.einsum('benn->be', Tcoh))
+
         
         if squeeze_output:
-            return T_batch.squeeze(0), DOS_batch.squeeze(0), H_batch.squeeze(0)
+            return T.squeeze(0), DOS.squeeze(0), H_matrix.squeeze(0)
         else:
-            return T_batch, DOS_batch, H_batch
+            return T, DOS, H_matrix
     
     def get_contact_vectors(self, x: torch.Tensor, 
                         edge_attr: torch.Tensor, 
