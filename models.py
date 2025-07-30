@@ -42,7 +42,7 @@ class DNATransportGNN(nn.Module):
         
         for i in range(num_layers):
             conv = GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, 
-                          dropout=dropout, add_self_loops=True)
+                          dropout=dropout, add_self_loops=True, edge_dim=hidden_dim)
             self.convs.append(conv)
             self.norms.append(nn.LayerNorm(hidden_dim))
         
@@ -121,6 +121,7 @@ class DNATransportHamiltonianGNN(nn.Module):
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
         self.energy_grid = energy_grid
+        self.dropout = dropout
         self.output_dim = len(energy_grid)
 
         # Hamiltonian size specification
@@ -138,7 +139,7 @@ class DNATransportHamiltonianGNN(nn.Module):
         
         for i in range(num_layers):
             conv = GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, 
-                          dropout=dropout, add_self_loops=True)
+                          dropout=dropout, add_self_loops=True, edge_dim=hidden_dim)
             self.convs.append(conv)
             self.norms.append(nn.LayerNorm(hidden_dim))
         
@@ -185,7 +186,7 @@ class DNATransportHamiltonianGNN(nn.Module):
                         dtype=H_triangular.dtype, device=device)
         H_matrix[:, i_indices, j_indices] = H_triangular
         H_matrix[:, j_indices, i_indices] = H_triangular.conj()
-
+        
         # Create Identity Matrix
         I = torch.eye(self.H_size, dtype=H_triangular.dtype, device=device).unsqueeze(0).unsqueeze(0)  # [1, 1, H_size, H_size]
         I = I.expand(batch_size, len(self.energy_grid), self.H_size, self.H_size) # [batch, energy, H_size, H_size]
@@ -368,7 +369,7 @@ class DNATransportHamiltonianGNN(nn.Module):
             x = self.convs[i](x, edge_index, edge_attr)
             x = self.norms[i](x)
             x = F.relu(x)
-            x = F.dropout(x, p=0.1, training=self.training)
+            x = F.dropout(x, p=self.dropout, training=self.training)
         
         # Global pooling
         x = self.global_pool(x, batch)
