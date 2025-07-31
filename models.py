@@ -470,6 +470,7 @@ class DNAHamiltonianGNN(nn.Module):
         H_elements = self.H_proj(x)
         
         return H_elements
+
 class PhysicsDiscriminator(nn.Module):
     def __init__(self, energy_grid: np.ndarray, max_len_dna: int, n_onsite: int = 1):
         super().__init__()
@@ -542,8 +543,8 @@ def train_physics_informed(
     val_loader,
     energy_grid = np.linspace(-3, 3, 100),
     max_len_dna  = 8,
-    gammaL = np.array([0.1]+[0.0]*7),
-    gammaR = np.array([0.0]+[0.1]+[0.0]*6),
+    gammaL = np.array([0.1]+[0.0]*15),
+    gammaR = np.array([0.0]*7+[0.1]+[0.0]*8),
     epochs=100,
     lr=1e-3,
     device='auto'
@@ -574,8 +575,8 @@ def train_physics_informed(
             transmission_target = batch.transmission.view(batch_size, num_energy_points)
             dos_target = batch.dos.view(batch_size, num_energy_points)
             
-            loss_T = F.mse_loss(T_pred, transmission_target)
-            loss_rho = F.mse_loss(rho_pred, dos_target)
+            loss_T = F.l1_loss(T_pred, transmission_target)
+            loss_rho = F.l1_loss(rho_pred, dos_target)
             loss = loss_T + loss_rho
             
             # Backpropagation
@@ -602,8 +603,8 @@ def train_physics_informed(
                 transmission_target = batch.transmission.view(batch_size, num_energy_points)
                 dos_target = batch.dos.view(batch_size, num_energy_points)
                 
-                loss_T = F.mse_loss(T_pred, transmission_target)
-                loss_rho = F.mse_loss(rho_pred, dos_target)
+                loss_T = F.l1_loss(T_pred, transmission_target)
+                loss_rho = F.l1_loss(rho_pred, dos_target)
                 loss = loss_T + loss_rho
                 
                 val_loss += loss.item()
@@ -632,7 +633,7 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
     """
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    criterion = nn.MSELoss()
+    criterion = nn.L1Loss()
     
     train_losses = []
     val_losses = []

@@ -18,6 +18,7 @@ from sklearn.model_selection import train_test_split
 from data_generator import create_sample_data
 from dataset import sequence_to_graph, DNATransportDataset, create_dna_dataset
 from models import train_physics_informed, DNAHamiltonianGNN, PhysicsDiscriminator
+from torch_geometric.data import Data
 
 
 def create_data_loaders(num_samples=100, seq_length=8, num_energy_points=100, batch_size=16):
@@ -45,74 +46,44 @@ def create_data_loaders(num_samples=100, seq_length=8, num_energy_points=100, ba
     print(f"Generated {len(primary_sequences)} sequences")
     print(f"Energy grid: {len(energy_grid)} points from {energy_grid[0]:.2f} to {energy_grid[-1]:.2f} eV")
     
-    # Convert sequences to graphs
-    print("Converting sequences to graphs...")
-    graphs = []
+    # Filter out sequences that might cause issues during graph conversion
+    print("Filtering sequences and preparing data...")
     valid_indices = []
     
     for i, (seq, comp_seq) in enumerate(zip(primary_sequences, complementary_sequences)):
-        try:
-            # Create graph with contacts
-            graph = sequence_to_graph(
-                primary_sequence=seq,
-                complementary_sequence=comp_seq,
-                left_contact_positions=0,
-                right_contact_positions=len(seq) - 1,
-                left_contact_coupling=0.1,
-                right_contact_coupling=0.1
-            )
-            
-            graphs.append(graph)
+        # Basic validation - check if sequences are valid
+        if len(seq) > 0 and len(comp_seq) > 0:
             valid_indices.append(i)
-            
-        except Exception as e:
-            print(f"Error converting sequence {seq}: {e}")
-            continue
     
-    print(f"Successfully converted {len(graphs)} sequences to graphs")
+    print(f"Found {len(valid_indices)} valid sequences out of {len(primary_sequences)}")
     
-    # Filter data to only include valid graphs
+    # Convert lists to numpy arrays first, then filter
+    dos_data_array = np.array(dos_data)
+    transmission_data_array = np.array(transmission_data)
+    
+    # Filter data to only include valid sequences
     filtered_sequences = [primary_sequences[i] for i in valid_indices]
-    filtered_dos_data = [dos_data[i] for i in valid_indices]  # List indexing
-    filtered_transmission_data = [transmission_data[i] for i in valid_indices]  # List indexing
-    
-    # Convert lists to numpy arrays for the dataset
-    filtered_dos_data = np.array(filtered_dos_data)
-    filtered_transmission_data = np.array(filtered_transmission_data)
+    filtered_complementary_sequences = [complementary_sequences[i] for i in valid_indices]
+    filtered_dos_data = dos_data_array[valid_indices]  # Numpy array indexing
+    filtered_transmission_data = transmission_data_array[valid_indices]  # Numpy array indexing
     
     print(f"Filtered data shapes: DOS {filtered_dos_data.shape}, Transmission {filtered_transmission_data.shape}")
     
-    # Create dataset directly with pre-converted graphs
+    # Create dataset using the proper function from dataset.py
     print("Creating dataset with proper batching...")
     
-    # Create a custom dataset class that uses our pre-converted graphs
-    from torch_geometric.data import Data
-    
-    class CustomDNATransportDataset(torch.utils.data.Dataset):
-        def __init__(self, graphs, dos_data, transmission_data, energy_grid):
-            self.graphs = graphs
-            self.dos_tensor = torch.tensor(dos_data, dtype=torch.float)
-            self.transmission_tensor = torch.tensor(transmission_data, dtype=torch.float)
-            self.energy_tensor = torch.tensor(energy_grid, dtype=torch.float)
-            
-        def __len__(self):
-            return len(self.graphs)
-            
-        def __getitem__(self, idx):
-            graph = self.graphs[idx]
-            dos = self.dos_tensor[idx]
-            transmission = self.transmission_tensor[idx]
-            
-            return Data(
-                x=graph.x,
-                edge_index=graph.edge_index,
-                edge_attr=graph.edge_attr,
-                dos=dos,
-                transmission=transmission,
-                energy_grid=self.energy_tensor
-            )
-    
-    dataset = CustomDNATransportDataset(graphs, filtered_dos_data, filtered_transmission_data, energy_grid)
+    dataset = create_dna_dataset(
+        sequences=filtered_sequences,
+        dos_data=filtered_dos_data,
+        transmission_data=filtered_transmission_data,
+        energy_grid=energy_grid,
+        complementary_sequences=filtered_complementary_sequences,
+        graph_converter_func=sequence_to_graph,
+        left_contact_positions=0,
+        right_contact_positions=0,  # Will be automatically updated to len(sequence) - 1 for each sequence
+        left_contact_coupling=0.1,
+        right_contact_coupling=0.1
+    )
     
     # Split dataset indices
     dataset_size = len(dataset)
