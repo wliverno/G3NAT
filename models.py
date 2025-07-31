@@ -384,9 +384,238 @@ class DNATransportHamiltonianGNN(nn.Module):
 
         return dos_pred, transmission_pred
 
+class DNAHamiltonianGNN(nn.Module):
+    """Graph Neural Network for DNA Hamiltonian prediction."""
+    
+    def __init__(self, 
+                 hidden_dim: int = 128, 
+                 num_layers: int = 4,
+                 num_heads: int = 4,
+                 energy_grid: np.ndarray = np.linspace(-3, 3, 100),
+                 max_len_dna: int = 10,
+                 dropout: float = 0.1):
+        super().__init__()
+        # Use features specified in dataset.py
+        node_features = 6  # 6 one-hot features (A, T, G, C, Purine, Pyrimidine)
+        edge_features = 5  # 3 one-hot + directionality + coupling
+        
+        
+        self.hidden_dim = hidden_dim
+        self.num_layers = num_layers
+        self.energy_grid = energy_grid
+        self.dropout = dropout
+        self.output_dim = len(energy_grid)
+
+        # Hamiltonian size specification
+        self.H_size = max_len_dna*2
+        # number of unique elements in upper triangular + diagonal
+        self.num_unique_elements = self.H_size + (self.H_size * (self.H_size - 1)) // 2
+        
+        # Input projections
+        self.node_proj = nn.Linear(node_features, hidden_dim)
+        self.edge_proj = nn.Linear(edge_features, hidden_dim)
+        
+        # Graph attention layers
+        self.convs = nn.ModuleList()
+        self.norms = nn.ModuleList()
+        
+        for i in range(num_layers):
+            conv = GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, 
+                          dropout=dropout, add_self_loops=True, edge_dim=hidden_dim)
+            self.convs.append(conv)
+            self.norms.append(nn.LayerNorm(hidden_dim))
+        
+        # Output projections for Hamiltonian elements
+        self.H_proj = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim // 2, self.num_unique_elements)
+        )
+        
+        # Global pooling
+        self.global_pool = global_mean_pool
+
+    def forward(self, data):
+        """
+        Forward pass through the GNN.
+        
+        Args:
+            data: PyTorch Geometric Data object with:
+                - x: Node features [num_nodes, node_features]
+                - edge_index: Edge indices [2, num_edges]
+                - edge_attr: Edge features [num_edges, edge_features]
+                - batch: Batch indices [num_nodes]
+                
+        Returns:
+            Hamiltonian elements tensor [batch_size, num_unique_elements]
+        """
+        x, edge_index, edge_attr, batch = data.x, data.edge_index, data.edge_attr, data.batch
+        
+        # Project node and edge features
+        x = self.node_proj(x)
+        edge_attr = self.edge_proj(edge_attr)
+        
+        # Graph convolution layers
+        for i in range(self.num_layers):
+            x = self.convs[i](x, edge_index, edge_attr)
+            x = self.norms[i](x)
+            x = F.relu(x)
+            x = F.dropout(x, p=self.dropout, training=self.training)
+        
+        # Global pooling
+        x = self.global_pool(x, batch)
+
+        # Output Hamiltonian elements
+        H_elements = self.H_proj(x)
+        
+        return H_elements
+class PhysicsDiscriminator(nn.Module):
+    def __init__(self, energy_grid: np.ndarray, max_len_dna: int, n_onsite: int = 1):
+        super().__init__()
+        self.energy_grid = energy_grid  # Energy points
+        self.H_size = max_len_dna*2*n_onsite
+
+    def forward(self, H_triangular: torch.Tensor, GammaL: np.ndarray, GammaR: np.ndarray):
+        # Handle both single sample and batch cases
+        batch_size = H_triangular.size(0)
+        device = H_triangular.device
+
+        # Convert gamma vectors to diagonal matrices for matrix multiplication
+        # [batch, H_size] -> [batch, energy, H_size, 1]
+        GammaL_diag = torch.tensor(GammaL, dtype=H_triangular.dtype, device=device)
+        GammaL_diag = GammaL_diag.unsqueeze(0).unsqueeze(0).unsqueeze(-1).expand(batch_size, len(self.energy_grid), -1, -1)
+        GammaR_diag = torch.tensor(GammaR, dtype=H_triangular.dtype, device=device)
+        GammaR_diag = GammaR_diag.unsqueeze(0).unsqueeze(0).unsqueeze(-1).expand(batch_size, len(self.energy_grid), -1, -1)
+
+        # Create Hamiltonian matrix
+        i_indices, j_indices = torch.triu_indices(self.H_size, self.H_size, device=device)
+        H_matrix = torch.zeros(batch_size, self.H_size, self.H_size, 
+                        dtype=H_triangular.dtype, device=device)
+        H_matrix[:, i_indices, j_indices] = H_triangular
+        H_matrix[:, j_indices, i_indices] = H_triangular.conj()
+        
+        # Create Identity Matrix
+        I = torch.eye(self.H_size, dtype=H_triangular.dtype, device=device).unsqueeze(0).unsqueeze(0)  # [1, 1, H_size, H_size]
+        I = I.expand(batch_size, len(self.energy_grid), self.H_size, self.H_size) # [batch, energy, H_size, H_size]
+
+        # Expand Hamiltonian and sigTot to match energy grid
+        H_expanded = H_matrix.unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)  # [batch, energy, H_size, H_size]
+        sigTot = -0.5j *torch.tensor(np.diag(GammaL + GammaR), dtype=H_triangular.dtype, device=device)
+        sigTot = sigTot.unsqueeze(0).unsqueeze(0).expand(batch_size, len(self.energy_grid), -1, -1)
+
+        # Expand energy grid to match batch size and H_size
+        energy_grid_tensor = torch.tensor(self.energy_grid, dtype=H_triangular.dtype, device=device)  # [num_energy]
+        energy_grid_expanded = energy_grid_tensor.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)  # [1, num_energy, 1, 1]
+
+        # Calculate A matrix
+        A = energy_grid_expanded * I - H_expanded - sigTot
+        # Calculate Green's functions
+        # Use more stable matrix solve instead of direct inversion
+        try:
+            Gr = torch.linalg.solve(A, I+0j)
+        except torch.linalg.LinAlgError:
+            # Fallback: add small regularization and use pseudo-inverse
+            A_reg = A + 1e-8j * I
+            Gr = torch.linalg.pinv(A_reg)
+        
+        # Calculate DOS using einsum for trace
+        DOS = -1*torch.einsum('benn->be', torch.imag(Gr))
+
+        # Calculate transmission
+        Ga = Gr.conj().transpose(-2, -1)
+        
+        # Element-wise multiplication (equivalent to diagonal matrix multiplication)
+        # Gr: [batch, energy, H_size, H_size]
+        # Gamma_diag: [batch, energy, H_size, 1]
+        # Result: [batch, energy, H_size, H_size]
+        gamma1Gr = GammaL_diag * Gr
+        gamma2Ga = GammaR_diag * Ga
+
+        # Do final matrix multiplication to get transmission
+        Tcoh = torch.matmul(gamma1Gr, gamma2Ga)
+        T = torch.real(torch.einsum('benn->be', Tcoh))
+        return T, DOS
+
+def train_physics_informed(
+    train_loader,
+    val_loader,
+    energy_grid = np.linspace(-3, 3, 100),
+    max_len_dna  = 8,
+    gammaL = np.array([0.1]+[0.0]*7),
+    gammaR = np.array([0.0]+[0.1]+[0.0]*6),
+    epochs=100,
+    lr=1e-3,
+    device='auto'
+):
+    generator = DNAHamiltonianGNN(energy_grid=energy_grid, max_len_dna=max_len_dna).to(device)
+    discriminator = PhysicsDiscriminator(energy_grid, max_len_dna).to(device)
+    optimizer = torch.optim.Adam(generator.parameters(), lr=lr)
+    train_losses = []  
+    val_losses = []
+    # Training loop
+    for epoch in range(epochs):
+        total_loss = 0.0
+        generator.train()
+        discriminator.train()
+        for batch in train_loader:
+            # Move batch to device
+            batch = batch.to(device)
+            
+            # Forward pass (generates H and computes physics)
+            H_pred = generator(batch)
+            T_pred, rho_pred = discriminator(H_pred, gammaL, gammaR)
+            
+            # Physics-based loss
+            # Reshape batched targets to match predictions
+            batch_size = T_pred.size(0)
+            num_energy_points = T_pred.size(1)
+            
+            transmission_target = batch.transmission.view(batch_size, num_energy_points)
+            dos_target = batch.dos.view(batch_size, num_energy_points)
+            
+            loss_T = F.mse_loss(T_pred, transmission_target)
+            loss_rho = F.mse_loss(rho_pred, dos_target)
+            loss = loss_T + loss_rho
+            
+            # Backpropagation
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            
+            total_loss += loss.item()
+        train_loss = total_loss/len(train_loader)
+        train_losses.append(train_loss)
+        # Validation loop
+        generator.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for batch in val_loader:
+                batch = batch.to(device)
+                H_pred = generator(batch)
+                T_pred, rho_pred = discriminator(H_pred, gammaL, gammaR)
+                
+                # Reshape batched targets to match predictions
+                batch_size = T_pred.size(0)
+                num_energy_points = T_pred.size(1)
+                
+                transmission_target = batch.transmission.view(batch_size, num_energy_points)
+                dos_target = batch.dos.view(batch_size, num_energy_points)
+                
+                loss_T = F.mse_loss(T_pred, transmission_target)
+                loss_rho = F.mse_loss(rho_pred, dos_target)
+                loss = loss_T + loss_rho
+                
+                val_loss += loss.item()
+        
+        val_loss /= len(val_loader)
+        val_losses.append(val_loss)
+        print(f'Epoch [{epoch+1}/{epochs}], Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}')
+    
+    return generator, train_losses, val_losses  # Return trained Hamiltonian generator
 
 def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, 
-               num_epochs: int = 100, learning_rate: float = 1e-3, device: str = 'cpu'):
+               num_epochs: int = 100, learning_rate: float = 1e-3, device: str = 'auto'):
     """
     Train the DNA Transport GNN model.
     
@@ -418,9 +647,16 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
             
             dos_pred, transmission_pred = model(batch)
             
+            # Reshape batched targets to match predictions
+            batch_size = dos_pred.size(0)
+            num_energy_points = dos_pred.size(1)
+            
+            dos_target = batch.dos.view(batch_size, num_energy_points)
+            transmission_target = batch.transmission.view(batch_size, num_energy_points)
+            
             # Combined loss for DOS and transmission
-            dos_loss = criterion(dos_pred, batch.dos)
-            transmission_loss = criterion(transmission_pred, batch.transmission)
+            dos_loss = criterion(dos_pred, dos_target)
+            transmission_loss = criterion(transmission_pred, transmission_target)
             total_loss = dos_loss + transmission_loss
             
             total_loss.backward()
@@ -439,8 +675,15 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
                 batch = batch.to(device)
                 dos_pred, transmission_pred = model(batch)
                 
-                dos_loss = criterion(dos_pred, batch.dos)
-                transmission_loss = criterion(transmission_pred, batch.transmission)
+                # Reshape batched targets to match predictions
+                batch_size = dos_pred.size(0)
+                num_energy_points = dos_pred.size(1)
+                
+                dos_target = batch.dos.view(batch_size, num_energy_points)
+                transmission_target = batch.transmission.view(batch_size, num_energy_points)
+                
+                dos_loss = criterion(dos_pred, dos_target)
+                transmission_loss = criterion(transmission_pred, transmission_target)
                 total_loss = dos_loss + transmission_loss
                 
                 val_loss += total_loss.item()
@@ -455,92 +698,7 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
     return train_losses, val_losses
 
 
-def train_model_with_custom_batching(model, train_graphs, val_graphs, num_epochs=50, learning_rate=1e-3, device='cpu'):
-    """Train model with manual batching to handle target data properly."""
-    model = model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    criterion = torch.nn.MSELoss()
-    
-    train_losses = []
-    val_losses = []
-    batch_size = 32
-    
-    for epoch in range(num_epochs):
-        # Training phase
-        model.train()
-        train_loss = 0.0
-        num_batches = 0
-        
-        # Manual batching for training
-        for i in range(0, len(train_graphs), batch_size):
-            batch_graphs = train_graphs[i:i+batch_size]
-            
-            # Create batch manually
-            batch_data = Batch.from_data_list(batch_graphs)
-            
-            # Stack targets manually
-            dos_targets = torch.stack([g.dos for g in batch_graphs])
-            transmission_targets = torch.stack([g.transmission for g in batch_graphs])
-            
-            batch_data = batch_data.to(device)
-            dos_targets = dos_targets.to(device)
-            transmission_targets = transmission_targets.to(device)
-            
-            optimizer.zero_grad()
-            
-            dos_pred, transmission_pred = model(batch_data)
-            
-            # Combined loss for DOS and transmission
-            dos_loss = criterion(dos_pred, dos_targets)
-            transmission_loss = criterion(transmission_pred, transmission_targets)
-            total_loss = dos_loss + transmission_loss
-            
-            total_loss.backward()
-            optimizer.step()
-            
-            train_loss += total_loss.item()
-            num_batches += 1
-        
-        train_loss /= num_batches
-        train_losses.append(train_loss)
-        
-        # Validation phase
-        model.eval()
-        val_loss = 0.0
-        num_val_batches = 0
-        
-        with torch.no_grad():
-            for i in range(0, len(val_graphs), batch_size):
-                batch_graphs = val_graphs[i:i+batch_size]
-                
-                # Create batch manually
-                batch_data = Batch.from_data_list(batch_graphs)
-                
-                # Stack targets manually
-                dos_targets = torch.stack([g.dos for g in batch_graphs])
-                transmission_targets = torch.stack([g.transmission for g in batch_graphs])
-                
-                batch_data = batch_data.to(device)
-                dos_targets = dos_targets.to(device)
-                transmission_targets = transmission_targets.to(device)
-                
-                dos_pred, transmission_pred = model(batch_data)
-                
-                dos_loss = criterion(dos_pred, dos_targets)
-                transmission_loss = criterion(transmission_pred, transmission_targets)
-                total_loss = dos_loss + transmission_loss
-                
-                val_loss += total_loss.item()
-                num_val_batches += 1
-        
-        val_loss /= num_val_batches
-        val_losses.append(val_loss)
-        
-        # Print progress
-        if (epoch + 1) % 10 == 0:
-            print(f'Epoch [{epoch+1}/{num_epochs}], Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}')
-    
-    return train_losses, val_losses
+
 
 
 def load_trained_model(model_path: str, device: str = 'auto'):

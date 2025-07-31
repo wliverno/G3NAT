@@ -13,10 +13,12 @@ import numpy as np
 import os
 import argparse
 from typing import Tuple, List
+from torch_geometric.loader import DataLoader
 
-from models import DNATransportGNN, train_model_with_custom_batching
+from models import DNATransportGNN, DNATransportHamiltonianGNN, train_model
 from data_generator import create_sample_data
-from dataset import sequence_to_graph
+from dataset import sequence_to_graph, create_dna_dataset
+from torch_geometric.data import Data
 
 
 def parse_args():
@@ -32,6 +34,8 @@ def parse_args():
                        help='Number of energy points for DOS/transmission')
     
     # Model parameters
+    parser.add_argument('--model_type', type=str, default='standard', choices=['standard', 'hamiltonian'],
+                       help='Model type: standard (DNATransportGNN) or hamiltonian (DNATransportHamiltonianGNN)')
     parser.add_argument('--hidden_dim', type=int, default=128,
                        help='Hidden dimension size')
     parser.add_argument('--num_layers', type=int, default=4,
@@ -54,8 +58,8 @@ def parse_args():
     # Output parameters
     parser.add_argument('--output_dir', type=str, default='./outputs',
                        help='Output directory for results')
-    parser.add_argument('--model_name', type=str, default='dna_transport_model',
-                       help='Name for saved model')
+    parser.add_argument('--model_name', type=str, default=None,
+                       help='Name for saved model (default: dna_transport_{model_type}_model)')
     
     return parser.parse_args()
 
@@ -75,66 +79,59 @@ def setup_device(device_arg: str) -> torch.device:
     return device
 
 
-def create_graphs_from_sequences(primary_sequences: List[str], complementary_sequences: List[str], dos_data: List[np.ndarray], 
-                                transmission_data: List[np.ndarray]) -> List:
-    """Convert DNA sequences to graph representations."""
-    print("Converting sequences to graphs...")
-    graphs = []
-    failed_conversions = 0
-    
-    for i, (seq, seq_complementary) in enumerate(zip(primary_sequences, complementary_sequences)):
-        # Create graph with contacts at ends
-        graph = sequence_to_graph(
-            primary_sequence=seq,
-            complementary_sequence=seq_complementary,
-            left_contact_positions=0,
-            right_contact_positions=len(seq)-1,
-            left_contact_coupling=0.1,
-            right_contact_coupling=0.2
-        )
-        
-        if graph is not None:
-            # Add target data to graph
-            graph.dos = torch.tensor(dos_data[i], dtype=torch.float32)
-            graph.transmission = torch.tensor(transmission_data[i], dtype=torch.float32)
-            graphs.append(graph)
-        else:
-            failed_conversions += 1
-    
-    print(f"Successfully created {len(graphs)} graphs")
-    print(f"Failed conversions: {failed_conversions}")
-    
-    return graphs
 
 
-def split_graphs(graphs: List, train_split: float = 0.8):
-    """Split graphs into training and validation sets."""
-    train_size = int(train_split * len(graphs))
-    train_graphs = graphs[:train_size]
-    val_graphs = graphs[train_size:]
-    
-    print(f"Training set: {len(train_graphs)} graphs")
-    print(f"Validation set: {len(val_graphs)} graphs")
-    
-    return train_graphs, val_graphs
 
 
-def initialize_model(args) -> DNATransportGNN:
+
+def split_dataset(dataset, train_split: float = 0.8):
+    """Split dataset into training and validation sets."""
+    from torch.utils.data import Subset
+    from sklearn.model_selection import train_test_split
+    
+    dataset_size = len(dataset)
+    train_indices, val_indices = train_test_split(
+        range(dataset_size), 
+        test_size=1-train_split, 
+        random_state=42
+    )
+    
+    train_dataset = Subset(dataset, train_indices)
+    val_dataset = Subset(dataset, val_indices)
+    
+    print(f"Training set: {len(train_dataset)} samples")
+    print(f"Validation set: {len(val_dataset)} samples")
+    
+    return train_dataset, val_dataset
+
+
+def initialize_model(args):
     """Initialize the DNA Transport GNN model."""
     
-    model = DNATransportGNN(
-        hidden_dim=args.hidden_dim,
-        num_layers=args.num_layers,
-        num_heads=args.num_heads,
-        output_dim=args.num_energy_points,
-        dropout=args.dropout
-    )
+    if args.model_type == 'standard':
+        model = DNATransportGNN(
+            hidden_dim=args.hidden_dim,
+            num_layers=args.num_layers,
+            num_heads=args.num_heads,
+            output_dim=args.num_energy_points,
+            dropout=args.dropout
+        )
+    elif args.model_type == 'hamiltonian':
+        model = DNATransportHamiltonianGNN(
+            hidden_dim=args.hidden_dim,
+            num_layers=args.num_layers,
+            num_heads=args.num_heads,
+            max_len_dna=args.seq_length,
+            dropout=args.dropout
+        )
+    else:
+        raise ValueError(f"Unknown model type: {args.model_type}")
     
     # Count parameters
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     
-    print(f"Model initialized:")
+    print(f"Model initialized ({args.model_type}):")
     print(f"  Total parameters: {total_params:,}")
     print(f"  Trainable parameters: {trainable_params:,}")
     print(f"  Hidden dimension: {args.hidden_dim}")
@@ -194,11 +191,29 @@ def main():
     print(f"Generated {len(primary_sequences)} sequences")
     print(f"Energy grid: {len(energy_grid)} points from {energy_grid[0]:.2f} to {energy_grid[-1]:.2f} eV")
     
-    # Convert sequences to graphs
-    graphs = create_graphs_from_sequences(primary_sequences, complementary_sequences, dos_data, transmission_data)
+    # Convert dos_data and transmission_data to numpy arrays for the dataset
+    dos_data_array = np.array(dos_data)
+    transmission_data_array = np.array(transmission_data)
+    
+    # Create dataset using the existing function with complementary sequences
+    dataset = create_dna_dataset(
+        sequences=primary_sequences,
+        dos_data=dos_data_array,
+        transmission_data=transmission_data_array,
+        energy_grid=energy_grid,
+        complementary_sequences=complementary_sequences,
+        left_contact_positions=0,
+        right_contact_positions=-1,  # Will be automatically set to len(sequence)-1 for each sequence
+        left_contact_coupling=0.1,
+        right_contact_coupling=0.2
+    )
     
     # Split into train/validation sets
-    train_graphs, val_graphs = split_graphs(graphs)
+    train_dataset, val_dataset = split_dataset(dataset)
+    
+    # Create data loaders
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
     
     # Initialize model
     print("Initializing model...")
@@ -206,10 +221,11 @@ def main():
     
     # Train model
     print("Starting training...")
-    train_losses, val_losses = train_model_with_custom_batching(
+    # Use normal batching for both models
+    train_losses, val_losses = train_model(
         model=model,
-        train_graphs=train_graphs,
-        val_graphs=val_graphs,
+        train_loader=train_loader,
+        val_loader=val_loader,
         num_epochs=args.num_epochs,
         learning_rate=args.learning_rate,
         device=str(device)
@@ -217,7 +233,11 @@ def main():
     
     # Save model and results
     print("Saving results...")
-    model_path = os.path.join(args.output_dir, f"{args.model_name}.pth")
+    if args.model_name is None:
+        model_name = f"dna_transport_{args.model_type}_model"
+    else:
+        model_name = args.model_name
+    model_path = os.path.join(args.output_dir, f"{model_name}.pth")
     torch.save({
         'model_state_dict': model.state_dict(),
         'args': vars(args),
@@ -234,19 +254,19 @@ def main():
     model.eval()
     with torch.no_grad():
         # Test on first validation sample
-        if len(val_graphs) > 0:
-            from torch_geometric.data import Batch
+        if len(val_dataset) > 0:
+            # Get a single batch from validation loader
+            batch = next(iter(val_loader))
+            batch = batch.to(device)
             
-            # Create single graph batch
-            batch_data = Batch.from_data_list([val_graphs[0]])
-            dos_target = torch.stack([val_graphs[0].dos])
-            transmission_target = torch.stack([val_graphs[0].transmission])
+            dos_pred, trans_pred = model(batch)
             
-            batch_data = batch_data.to(device)
-            dos_target = dos_target.to(device)
-            transmission_target = transmission_target.to(device)
+            # Extract targets from batch
+            batch_size = dos_pred.size(0)
+            num_energy_points = dos_pred.size(1)
             
-            dos_pred, trans_pred = model(batch_data)
+            dos_target = batch.dos.view(batch_size, num_energy_points)
+            transmission_target = batch.transmission.view(batch_size, num_energy_points)
             
             # Plot first sample
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
