@@ -4,7 +4,7 @@ import random
 
 
 def create_sample_data(num_samples: int = 1000, seq_length: int = 10, 
-                      num_energy_points: int = 100) -> Tuple[List[str], List[str], List[np.ndarray], List[np.ndarray], np.ndarray]:
+                      num_energy_points: int = 100, min_length: int = -1) -> Tuple[List[str], List[str], List[np.ndarray], List[np.ndarray], np.ndarray]:
     """Generate sample data for demonstration."""
     np.random.seed(42)
     
@@ -14,7 +14,9 @@ def create_sample_data(num_samples: int = 1000, seq_length: int = 10,
     primary_sequences = []
     complementary_sequences = []
     for _ in range(num_samples):
-        length = np.random.randint(1,seq_length)
+        if min_length == -1:
+            min_length = seq_length
+        length = np.random.randint(min_length,seq_length+1)
         seq = ''.join(np.random.choice(bases, length))
         seq_complementary = ''.join(complementary_bases[base] for base in seq)[::-1]
         # Remove bases from complementary sequence for 1 in 10 sequences
