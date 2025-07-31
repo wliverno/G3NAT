@@ -616,7 +616,11 @@ def train_physics_informed(
     return generator, train_losses, val_losses  # Return trained Hamiltonian generator
 
 def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, 
-               num_epochs: int = 100, learning_rate: float = 1e-3, device: str = 'auto'):
+               num_epochs: int = 100, learning_rate: float = 1e-3, device: str = 'auto',
+               checkpoint_dir: str = None, checkpoint_frequency: int = 10,
+               start_epoch: int = 0, train_losses: List[float] = None, 
+               val_losses: List[float] = None, optimizer: torch.optim.Optimizer = None,
+               checkpoint_callback=None, progress_callback=None):
     """
     Train the DNA Transport GNN model.
     
@@ -627,18 +631,31 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         num_epochs: Number of training epochs
         learning_rate: Learning rate
         device: Device to train on ('cpu' or 'cuda')
+        checkpoint_dir: Directory to save checkpoints (optional)
+        checkpoint_frequency: Save checkpoint every N epochs (default: 10)
+        start_epoch: Starting epoch for resumption (default: 0)
+        train_losses: Existing training losses for resumption (optional)
+        val_losses: Existing validation losses for resumption (optional)
+        optimizer: Existing optimizer for resumption (optional)
+        checkpoint_callback: Function to call for saving checkpoints (optional)
+        progress_callback: Function to call for saving progress (optional)
         
     Returns:
         Tuple of (train_losses, val_losses) lists
     """
     model = model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    
+    # Initialize optimizer and loss history if not provided (fresh start)
+    if optimizer is None:
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    if train_losses is None:
+        train_losses = []
+    if val_losses is None:
+        val_losses = []
+    
     criterion = nn.L1Loss()
     
-    train_losses = []
-    val_losses = []
-    
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch, num_epochs):
         # Training phase
         model.train()
         train_loss = 0.0
@@ -692,9 +709,22 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         val_loss /= len(val_loader)
         val_losses.append(val_loss)
         
+        # Call progress callback if provided
+        if progress_callback is not None:
+            progress_callback(epoch, train_loss, val_loss)
+        
+        # Save checkpoint periodically if checkpointing is enabled
+        if checkpoint_dir is not None and checkpoint_callback is not None:
+            if (epoch + 1) % checkpoint_frequency == 0:
+                checkpoint_callback(model, optimizer, epoch, train_losses, val_losses)
+        
         # Print progress
         if (epoch + 1) % 10 == 0:
             print(f'Epoch [{epoch+1}/{num_epochs}], Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}')
+    
+    # Save final checkpoint if checkpointing is enabled
+    if checkpoint_dir is not None and checkpoint_callback is not None:
+        checkpoint_callback(model, optimizer, num_epochs - 1, train_losses, val_losses)
     
     return train_losses, val_losses
 

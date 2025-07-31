@@ -12,7 +12,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import argparse
-from typing import Tuple, List
+import json
+import time
+from typing import Tuple, List, Dict, Optional
 from torch_geometric.loader import DataLoader
 
 from models import DNATransportGNN, DNATransportHamiltonianGNN, train_model
@@ -30,6 +32,8 @@ def parse_args():
                        help='Number of training samples')
     parser.add_argument('--seq_length', type=int, default=8,
                        help='Length of DNA sequences')
+    parser.add_argument('--min_length', type=int, default=-1,
+                       help='Minimum length of DNA sequences')
     parser.add_argument('--num_energy_points', type=int, default=100,
                        help='Number of energy points for DOS/transmission')
     
@@ -61,6 +65,14 @@ def parse_args():
     parser.add_argument('--model_name', type=str, default=None,
                        help='Name for saved model (default: dna_transport_{model_type}_model)')
     
+    # Checkpoint parameters
+    parser.add_argument('--checkpoint_dir', type=str, default='./checkpoints',
+                       help='Directory to save checkpoints')
+    parser.add_argument('--resume_from', type=str, default=None,
+                       help='Path to checkpoint file to resume from')
+    parser.add_argument('--checkpoint_frequency', type=int, default=10,
+                       help='Save checkpoint every N epochs')
+    
     return parser.parse_args()
 
 
@@ -79,9 +91,91 @@ def setup_device(device_arg: str) -> torch.device:
     return device
 
 
+def save_checkpoint(model: nn.Module, optimizer: torch.optim.Optimizer, epoch: int, 
+                   train_losses: List[float], val_losses: List[float], args: Dict, 
+                   energy_grid: np.ndarray, checkpoint_path: str):
+    """Save training checkpoint."""
+    checkpoint = {
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'train_losses': train_losses,
+        'val_losses': val_losses,
+        'args': args,
+        'energy_grid': energy_grid,
+        'timestamp': time.time()
+    }
+    torch.save(checkpoint, checkpoint_path)
+    print(f"Checkpoint saved: {checkpoint_path}")
 
 
+def load_checkpoint(checkpoint_path: str, model: nn.Module, device: torch.device) -> Tuple[int, List[float], List[float], torch.optim.Optimizer]:
+    """Load training checkpoint."""
+    if not os.path.exists(checkpoint_path):
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+    
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    
+    # Load model state
+    model.load_state_dict(checkpoint['model_state_dict'])
+    
+    # Create optimizer and load its state
+    optimizer = torch.optim.Adam(model.parameters(), lr=checkpoint['args']['learning_rate'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    
+    epoch = checkpoint['epoch']
+    train_losses = checkpoint['train_losses']
+    val_losses = checkpoint['val_losses']
+    
+    print(f"Resumed from checkpoint: {checkpoint_path}")
+    print(f"Resuming from epoch: {epoch + 1}")
+    print(f"Previous train loss: {train_losses[-1]:.4f}, val loss: {val_losses[-1]:.4f}")
+    
+    return epoch, train_losses, val_losses, optimizer
 
+
+def save_progress_file(epoch: int, train_loss: float, val_loss: float, 
+                      checkpoint_dir: str, args: Dict):
+    """Save lightweight progress tracking file."""
+    progress_file = os.path.join(checkpoint_dir, 'training_progress.json')
+    status_file = os.path.join(checkpoint_dir, 'training_status.txt')
+    
+    # Save detailed progress
+    progress_data = {
+        'epoch': epoch,
+        'train_loss': train_loss,
+        'val_loss': val_loss,
+        'timestamp': time.time(),
+        'args': args
+    }
+    
+    with open(progress_file, 'w') as f:
+        json.dump(progress_data, f, indent=2)
+    
+    # Save simple status file for quick monitoring
+    with open(status_file, 'w') as f:
+        f.write(f"Epoch: {epoch}\n")
+        f.write(f"Train Loss: {train_loss:.4f}\n")
+        f.write(f"Val Loss: {val_loss:.4f}\n")
+        f.write(f"Last Update: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+
+def create_checkpoint_callback(checkpoint_dir: str, args: Dict, energy_grid: np.ndarray):
+    """Create a checkpoint callback function."""
+    checkpoint_path = os.path.join(checkpoint_dir, 'checkpoint_latest.pth')
+    
+    def checkpoint_callback(model, optimizer, epoch, train_losses, val_losses):
+        save_checkpoint(model, optimizer, epoch, train_losses, val_losses, args, energy_grid, checkpoint_path)
+    
+    return checkpoint_callback
+
+
+def create_progress_callback(checkpoint_dir: str, args: Dict):
+    """Create a progress callback function."""
+    def progress_callback(epoch, train_loss, val_loss):
+        save_progress_file(epoch, train_loss, val_loss, checkpoint_dir, args)
+    
+    return progress_callback
 
 
 def split_dataset(dataset, train_split: float = 0.8):
@@ -174,18 +268,64 @@ def main():
     # Setup output directory
     os.makedirs(args.output_dir, exist_ok=True)
     
+    # Setup checkpoint directory
+    os.makedirs(args.checkpoint_dir, exist_ok=True)
+    
     print("Starting DNA Transport GNN training")
     print(f"Arguments: {vars(args)}")
     
     # Setup device
     device = setup_device(args.device)
     
+
+    
+    # Check for checkpoint resumption
+    start_epoch = 0
+    train_losses = []
+    val_losses = []
+    optimizer = None
+    
+    if args.resume_from:
+        checkpoint_path = args.resume_from
+        print(f"Attempting to resume from checkpoint: {checkpoint_path}")
+        try:
+            start_epoch, train_losses, val_losses, optimizer = load_checkpoint(
+                checkpoint_path, model, device
+            )
+            start_epoch += 1  # Resume from next epoch
+        except Exception as e:
+            print(f"Failed to load checkpoint: {e}")
+            print("Starting fresh training...")
+            start_epoch = 0
+            train_losses = []
+            val_losses = []
+            optimizer = None
+    else:
+        # Check for latest checkpoint in checkpoint directory
+        latest_checkpoint = os.path.join(args.checkpoint_dir, 'checkpoint_latest.pth')
+        if os.path.exists(latest_checkpoint):
+            print(f"Found existing checkpoint: {latest_checkpoint}")
+            try:
+                start_epoch, train_losses, val_losses, optimizer = load_checkpoint(
+                    latest_checkpoint, model, device
+                )
+                start_epoch += 1  # Resume from next epoch
+                print("Resuming from latest checkpoint...")
+            except Exception as e:
+                print(f"Failed to load latest checkpoint: {e}")
+                print("Starting fresh training...")
+                start_epoch = 0
+                train_losses = []
+                val_losses = []
+                optimizer = None
+    
     # Generate sample data
     print("Generating sample data...")
     primary_sequences, complementary_sequences, dos_data, transmission_data, energy_grid = create_sample_data(
         num_samples=args.num_samples,
         seq_length=args.seq_length,
-        num_energy_points=args.num_energy_points
+        num_energy_points=args.num_energy_points,
+        min_length=args.min_length
     )
     
     print(f"Generated {len(primary_sequences)} sequences")
@@ -228,7 +368,15 @@ def main():
         val_loader=val_loader,
         num_epochs=args.num_epochs,
         learning_rate=args.learning_rate,
-        device=str(device)
+        device=str(device),
+        checkpoint_dir=args.checkpoint_dir,
+        checkpoint_frequency=args.checkpoint_frequency,
+        start_epoch=start_epoch,
+        train_losses=train_losses,
+        val_losses=val_losses,
+        optimizer=optimizer,
+        checkpoint_callback=create_checkpoint_callback(args.checkpoint_dir, vars(args), energy_grid),
+        progress_callback=create_progress_callback(args.checkpoint_dir, vars(args))
     )
     
     # Save model and results
