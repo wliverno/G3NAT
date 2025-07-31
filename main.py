@@ -397,6 +397,14 @@ def main():
     # Save training results
     save_training_results(train_losses, val_losses, energy_grid, args.output_dir)
     
+    # Inform user about checkpoint cleanup
+    if os.path.exists(args.checkpoint_dir):
+        print(f"\nTraining completed successfully!")
+        print(f"Checkpoint directory '{args.checkpoint_dir}' contains training checkpoints.")
+        print(f"You can safely delete this directory if you don't need to resume training:")
+        print(f"  rm -rf {args.checkpoint_dir}")
+        print(f"Or keep it for potential resumption of training.")
+    
     # Test prediction on a sample
     print("Generating sample predictions...")
     model.eval()

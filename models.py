@@ -360,6 +360,49 @@ class DNATransportHamiltonianGNN(nn.Module):
         # First, get the contact vectors (returns batched tensors)
         GammaL, GammaR = self.get_contact_vectors(x, edge_attr, edge_index, batch)
         
+        # Compare model gammas with training data gammas for debugging
+        # Uncomment the following block to enable gamma debugging during training
+        # if hasattr(data, 'gamma_l') and data.gamma_l is not None and hasattr(data, 'gamma_r') and data.gamma_r is not None:
+        #     print("=== GAMMA COMPARISON ===")
+        #     print(f"Model GammaL shape: {GammaL.shape}")
+        #     print(f"Model GammaR shape: {GammaR.shape}")
+        #     print(f"Training gamma_l shape: {data.gamma_l.shape}")
+        #     print(f"Training gamma_r shape: {data.gamma_r.shape}")
+        #     
+        #     batch_size = GammaL.size(0)
+        #     for i in range(min(batch_size, 3)):  # Print first 3 samples to avoid spam
+        #         model_gamma_l = GammaL[i]
+        #         model_gamma_r = GammaR[i]
+        #         train_gamma_l = data.gamma_l[i] if data.gamma_l.dim() > 1 else data.gamma_l
+        #         train_gamma_r = data.gamma_r[i] if data.gamma_r.dim() > 1 else data.gamma_r
+        #         
+        #         # Find non-zero positions
+        #         model_active_l = torch.nonzero(model_gamma_l).flatten()
+        #         model_active_r = torch.nonzero(model_gamma_r).flatten()
+        #         train_active_l = torch.nonzero(train_gamma_l).flatten()
+        #         train_active_r = torch.nonzero(train_gamma_r).flatten()
+        #         
+        #         print(f"Sample {i}:")
+        #         # Format the gamma values for display
+        #         model_l_values = [f"{model_gamma_l[pos].item():.3f}" for pos in model_active_l]
+        #         model_r_values = [f"{model_gamma_r[pos].item():.3f}" for pos in model_active_r]
+        #         train_l_values = [f"{train_gamma_l[pos].item():.3f}" for pos in train_active_l]
+        #         train_r_values = [f"{train_gamma_r[pos].item():.3f}" for pos in train_active_r]
+        #         
+        #         print(f"  Model GammaL active: {model_active_l.tolist()} = {model_l_values}")
+        #         print(f"  Model GammaR active: {model_active_r.tolist()} = {model_r_values}")
+        #         print(f"  Train gamma_l active: {train_active_l.tolist()} = {train_l_values}")
+        #         print(f"  Train gamma_r active: {train_active_r.tolist()} = {train_r_values}")
+        #         
+        #         # Check if they match
+        #         l_match = torch.allclose(model_gamma_l, train_gamma_l, atol=1e-6)
+        #         r_match = torch.allclose(model_gamma_r, train_gamma_r, atol=1e-6)
+        #         print(f"  GammaL match: {l_match}")
+        #         print(f"  GammaR match: {r_match}")
+        #         if not l_match or not r_match:
+        #             print(f"  WARNING: Gamma mismatch detected!")
+        #     print("========================")
+        
         # Project node and edge features
         x = self.node_proj(x)
         edge_attr = self.edge_proj(edge_attr)
@@ -671,6 +714,9 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
             
             dos_target = batch.dos.view(batch_size, num_energy_points)
             transmission_target = batch.transmission.view(batch_size, num_energy_points)
+            # Uncomment the following lines to debug gamma values during training
+            # print(batch.gamma_l)
+            # print(batch.gamma_r)
             
             # Combined loss for DOS and transmission
             dos_loss = criterion(dos_pred, dos_target)

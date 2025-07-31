@@ -248,7 +248,9 @@ class DNATransportDataset(torch.utils.data.Dataset):
     """Dataset for DNA transport property prediction."""
     
     def __init__(self, sequences: List[str], dos_data: np.ndarray, 
-                 transmission_data: np.ndarray, energy_grid: np.ndarray, graphs: Optional[List] = None):
+                 transmission_data: np.ndarray, energy_grid: np.ndarray, 
+                 gamma_l: Optional[np.ndarray] = None, gamma_r: Optional[np.ndarray] = None,
+                 graphs: Optional[List] = None):
         """
         Initialize the dataset.
         
@@ -257,6 +259,8 @@ class DNATransportDataset(torch.utils.data.Dataset):
             dos_data: Density of states data [num_samples, num_energy_points]
             transmission_data: Transmission data [num_samples, num_energy_points]
             energy_grid: Energy grid [num_energy_points]
+            gamma_l: Left contact coupling strengths as vectors [num_samples, seq_length * 2] (optional, for debugging)
+            gamma_r: Right contact coupling strengths as vectors [num_samples, seq_length * 2] (optional, for debugging)
             graphs: Pre-converted graphs (optional)
         """
         self.sequences = sequences
@@ -269,6 +273,17 @@ class DNATransportDataset(torch.utils.data.Dataset):
         self.dos_tensor = torch.tensor(dos_data, dtype=torch.float)
         self.transmission_tensor = torch.tensor(transmission_data, dtype=torch.float)
         self.energy_tensor = torch.tensor(energy_grid, dtype=torch.float)
+        
+        # Store gamma values as vectors for debugging
+        if gamma_l is not None:
+            self.gamma_l = torch.tensor(gamma_l, dtype=torch.float)
+        else:
+            self.gamma_l = None
+            
+        if gamma_r is not None:
+            self.gamma_r = torch.tensor(gamma_r, dtype=torch.float)
+        else:
+            self.gamma_r = None
         
     def __len__(self):
         return len(self.sequences)
@@ -285,7 +300,8 @@ class DNATransportDataset(torch.utils.data.Dataset):
             dos = self.dos_tensor[idx]
             transmission = self.transmission_tensor[idx]
             
-            return Data(
+            # Create the base Data object
+            data = Data(
                 x=graph.x,
                 edge_index=graph.edge_index,
                 edge_attr=graph.edge_attr,
@@ -293,6 +309,14 @@ class DNATransportDataset(torch.utils.data.Dataset):
                 transmission=transmission,
                 energy_grid=self.energy_tensor
             )
+            
+            # Add gamma values if available
+            if self.gamma_l is not None:
+                data.gamma_l = self.gamma_l[idx]  # Vector of left contact couplings for this sequence
+            if self.gamma_r is not None:
+                data.gamma_r = self.gamma_r[idx]  # Vector of right contact couplings for this sequence
+                
+            return data
         else:
             raise NotImplementedError(
                 "DNATransportDataset requires pre-converted graphs. "
@@ -300,9 +324,41 @@ class DNATransportDataset(torch.utils.data.Dataset):
             )
 
 
+def create_default_gamma_vectors(sequences: List[str]) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Create default gamma vectors for a list of sequences.
+    
+    By default:
+    - Left contact at position 0 of primary strand with coupling 0.1
+    - Right contact at last position of primary strand with coupling 0.1
+    - All other positions have coupling 0.0
+    
+    Args:
+        sequences: List of DNA sequences
+        
+    Returns:
+        Tuple of (gamma_l, gamma_r) arrays, each of shape [num_samples, max_seq_length * 2]
+    """
+    max_seq_length = max(len(seq) for seq in sequences)
+    num_samples = len(sequences)
+    
+    gamma_l = np.zeros((num_samples, max_seq_length * 2))
+    gamma_r = np.zeros((num_samples, max_seq_length * 2))
+    
+    for i, seq in enumerate(sequences):
+        seq_length = len(seq)
+        # Left contact at position 0 of primary strand
+        gamma_l[i, 0] = 0.1
+        # Right contact at last position of primary strand  
+        gamma_r[i, seq_length - 1] = 0.1
+    
+    return gamma_l, gamma_r
+
+
 def create_dna_dataset(sequences: List[str], dos_data: np.ndarray, 
                       transmission_data: np.ndarray, energy_grid: np.ndarray,
                       complementary_sequences: Optional[List[str]] = None,
+                      gamma_l: Optional[np.ndarray] = None, gamma_r: Optional[np.ndarray] = None,
                       graph_converter_func=None,
                       **graph_kwargs) -> DNATransportDataset:
     """
@@ -314,6 +370,8 @@ def create_dna_dataset(sequences: List[str], dos_data: np.ndarray,
         transmission_data: Transmission data
         energy_grid: Energy grid
         complementary_sequences: List of complementary DNA sequences (optional)
+        gamma_l: Left contact coupling strengths as vectors [num_samples, seq_length * 2] (optional, for debugging)
+        gamma_r: Right contact coupling strengths as vectors [num_samples, seq_length * 2] (optional, for debugging)
         graph_converter_func: Function to convert sequences to graphs
         **graph_kwargs: Additional arguments to pass to graph_converter_func
         
@@ -334,6 +392,25 @@ def create_dna_dataset(sequences: List[str], dos_data: np.ndarray,
         if 'right_contact_positions' in seq_kwargs and isinstance(seq_kwargs['right_contact_positions'], int):
             seq_kwargs['right_contact_positions'] = len(sequence) - 1
         
+        # Use provided gamma values if available
+        if gamma_l is not None and i < len(gamma_l):
+            # Extract non-zero gamma values for left contacts
+            seq_gamma_l = gamma_l[i]
+            left_contacts = np.where(seq_gamma_l > 0)[0]
+            if len(left_contacts) > 0:
+                # Use the first non-zero position as left contact
+                seq_kwargs['left_contact_positions'] = int(left_contacts[0])  # Convert to Python int
+                seq_kwargs['left_contact_coupling'] = float(seq_gamma_l[left_contacts[0]])  # Convert to Python float
+        
+        if gamma_r is not None and i < len(gamma_r):
+            # Extract non-zero gamma values for right contacts
+            seq_gamma_r = gamma_r[i]
+            right_contacts = np.where(seq_gamma_r > 0)[0]
+            if len(right_contacts) > 0:
+                # Use the last non-zero position as right contact
+                seq_kwargs['right_contact_positions'] = int(right_contacts[-1])  # Convert to Python int
+                seq_kwargs['right_contact_coupling'] = float(seq_gamma_r[right_contacts[-1]])  # Convert to Python float
+        
         if complementary_sequences is not None and i < len(complementary_sequences):
             # Use both primary and complementary sequences
             graph = graph_converter_func(
@@ -350,4 +427,4 @@ def create_dna_dataset(sequences: List[str], dos_data: np.ndarray,
         graphs.append(graph)
     
     # Create and return the dataset with pre-converted graphs
-    return DNATransportDataset(sequences, dos_data, transmission_data, energy_grid, graphs) 
+    return DNATransportDataset(sequences, dos_data, transmission_data, energy_grid, gamma_l, gamma_r, graphs) 
