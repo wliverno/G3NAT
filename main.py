@@ -284,40 +284,7 @@ def main():
     train_losses = []
     val_losses = []
     optimizer = None
-    
-    if args.resume_from:
-        checkpoint_path = args.resume_from
-        print(f"Attempting to resume from checkpoint: {checkpoint_path}")
-        try:
-            start_epoch, train_losses, val_losses, optimizer = load_checkpoint(
-                checkpoint_path, model, device
-            )
-            start_epoch += 1  # Resume from next epoch
-        except Exception as e:
-            print(f"Failed to load checkpoint: {e}")
-            print("Starting fresh training...")
-            start_epoch = 0
-            train_losses = []
-            val_losses = []
-            optimizer = None
-    else:
-        # Check for latest checkpoint in checkpoint directory
-        latest_checkpoint = os.path.join(args.checkpoint_dir, 'checkpoint_latest.pth')
-        if os.path.exists(latest_checkpoint):
-            print(f"Found existing checkpoint: {latest_checkpoint}")
-            try:
-                start_epoch, train_losses, val_losses, optimizer = load_checkpoint(
-                    latest_checkpoint, model, device
-                )
-                start_epoch += 1  # Resume from next epoch
-                print("Resuming from latest checkpoint...")
-            except Exception as e:
-                print(f"Failed to load latest checkpoint: {e}")
-                print("Starting fresh training...")
-                start_epoch = 0
-                train_losses = []
-                val_losses = []
-                optimizer = None
+    resume_from_checkpoint = False
     
     # Generate sample data
     print("Generating sample data...")
@@ -358,6 +325,45 @@ def main():
     # Initialize model
     print("Initializing model...")
     model = initialize_model(args)
+    
+    # Check for checkpoint resumption (after model is created)
+    if args.resume_from:
+        checkpoint_path = args.resume_from
+        print(f"Attempting to resume from checkpoint: {checkpoint_path}")
+        try:
+            start_epoch, train_losses, val_losses, optimizer = load_checkpoint(
+                checkpoint_path, model, device
+            )
+            start_epoch += 1  # Resume from next epoch
+            resume_from_checkpoint = True
+        except Exception as e:
+            print(f"Failed to load checkpoint: {e}")
+            print("Starting fresh training...")
+            start_epoch = 0
+            train_losses = []
+            val_losses = []
+            optimizer = None
+            resume_from_checkpoint = False
+    else:
+        # Check for latest checkpoint in checkpoint directory
+        latest_checkpoint = os.path.join(args.checkpoint_dir, 'checkpoint_latest.pth')
+        if os.path.exists(latest_checkpoint):
+            print(f"Found existing checkpoint: {latest_checkpoint}")
+            try:
+                start_epoch, train_losses, val_losses, optimizer = load_checkpoint(
+                    latest_checkpoint, model, device
+                )
+                start_epoch += 1  # Resume from next epoch
+                print("Resuming from latest checkpoint...")
+                resume_from_checkpoint = True
+            except Exception as e:
+                print(f"Failed to load latest checkpoint: {e}")
+                print("Starting fresh training...")
+                start_epoch = 0
+                train_losses = []
+                val_losses = []
+                optimizer = None
+                resume_from_checkpoint = False
     
     # Train model
     print("Starting training...")
