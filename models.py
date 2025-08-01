@@ -2,7 +2,7 @@ from numpy._typing import _128Bit
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GATConv, global_mean_pool, global_add_pool
+from torch_geometric.nn import GATConv, TransformerConv, global_mean_pool, global_add_pool
 from torch_geometric.data import Data, Batch
 from torch_geometric.loader import DataLoader
 import numpy as np
@@ -36,13 +36,25 @@ class DNATransportGNN(nn.Module):
         self.node_proj = nn.Linear(node_features, hidden_dim)
         self.edge_proj = nn.Linear(edge_features, hidden_dim)
         
-        # Graph attention layers
+        # Graph convolution layers
         self.convs = nn.ModuleList()
         self.norms = nn.ModuleList()
         
         for i in range(num_layers):
-            conv = GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, 
-                          dropout=dropout, add_self_loops=True, edge_dim=hidden_dim)
+            # EXPERIMENTAL: Using TransformerConv instead of GATConv
+            # TransformerConv can capture long-range dependencies more effectively
+            # To revert: change back to GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, 
+            #                                  dropout=dropout, add_self_loops=True, edge_dim=hidden_dim)
+            conv = TransformerConv(
+                in_channels=hidden_dim,
+                out_channels=hidden_dim,
+                heads=num_heads,
+                dropout=dropout,
+                edge_dim=hidden_dim,
+                concat=False,  # Sum the heads instead of concatenating
+                beta=True,  # Use beta parameter for better performance
+                root_weight=True  # Include self-connections
+            )
             self.convs.append(conv)
             self.norms.append(nn.LayerNorm(hidden_dim))
         
@@ -138,8 +150,20 @@ class DNATransportHamiltonianGNN(nn.Module):
         self.norms = nn.ModuleList()
         
         for i in range(num_layers):
-            conv = GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, 
-                          dropout=dropout, add_self_loops=True, edge_dim=hidden_dim)
+            # EXPERIMENTAL: Using TransformerConv instead of GATConv
+            # TransformerConv can capture long-range dependencies more effectively
+            # To revert: change back to GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, 
+            #                                  dropout=dropout, add_self_loops=True, edge_dim=hidden_dim)
+            conv = TransformerConv(
+                in_channels=hidden_dim,
+                out_channels=hidden_dim,
+                heads=num_heads,
+                dropout=dropout,
+                edge_dim=hidden_dim,
+                concat=False,  # Sum the heads instead of concatenating
+                beta=True,  # Use beta parameter for better performance
+                root_weight=True  # Include self-connections
+            )
             self.convs.append(conv)
             self.norms.append(nn.LayerNorm(hidden_dim))
         
@@ -463,8 +487,20 @@ class DNAHamiltonianGNN(nn.Module):
         self.norms = nn.ModuleList()
         
         for i in range(num_layers):
-            conv = GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, 
-                          dropout=dropout, add_self_loops=True, edge_dim=hidden_dim)
+            # EXPERIMENTAL: Using TransformerConv instead of GATConv
+            # TransformerConv can capture long-range dependencies more effectively
+            # To revert: change back to GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, 
+            #                                  dropout=dropout, add_self_loops=True, edge_dim=hidden_dim)
+            conv = TransformerConv(
+                in_channels=hidden_dim,
+                out_channels=hidden_dim,
+                heads=num_heads,
+                dropout=dropout,
+                edge_dim=hidden_dim,
+                concat=False,  # Sum the heads instead of concatenating
+                beta=True,  # Use beta parameter for better performance
+                root_weight=True  # Include self-connections
+            )
             self.convs.append(conv)
             self.norms.append(nn.LayerNorm(hidden_dim))
         
