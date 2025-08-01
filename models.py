@@ -236,7 +236,7 @@ class DNATransportHamiltonianGNN(nn.Module):
             Gr = torch.linalg.pinv(A_reg)
         
         # Calculate DOS using einsum for trace
-        DOS = -1*torch.einsum('benn->be', torch.imag(Gr))
+        DOS = torch.log10(-1*torch.einsum('benn->be', torch.imag(Gr)))
 
         # Calculate transmission
         Ga = Gr.conj().transpose(-2, -1)
@@ -254,7 +254,7 @@ class DNATransportHamiltonianGNN(nn.Module):
 
         # Do final matrix multiplication to get transmission
         Tcoh = torch.matmul(gamma1Gr, gamma2Ga)
-        T = torch.real(torch.einsum('benn->be', Tcoh))
+        T = torch.log10(torch.real(torch.einsum('benn->be', Tcoh)))
 
         
         if squeeze_output:
@@ -840,14 +840,57 @@ def load_trained_model(model_path: str, device: str = 'auto'):
     args = checkpoint.get('args', {})
     energy_grid = checkpoint.get('energy_grid', np.linspace(-3, 3, 100))
     
+    # Detect model type from state dict keys
+    state_dict = checkpoint['model_state_dict']
+    model_type = None
+    
+    # Check for Hamiltonian model (has H_proj layers)
+    if any('H_proj' in key for key in state_dict.keys()):
+        model_type = 'hamiltonian'
+        print("Detected DNATransportHamiltonianGNN model")
+    # Check for standard model (has dos_proj and transmission_proj layers)
+    elif any('dos_proj' in key for key in state_dict.keys()) and any('transmission_proj' in key for key in state_dict.keys()):
+        model_type = 'standard'
+        print("Detected DNATransportGNN model")
+    # Check for simple Hamiltonian model (has H_proj but no NEGF components)
+    elif any('H_proj' in key for key in state_dict.keys()) and not any('NEGF' in key for key in state_dict.keys()):
+        model_type = 'simple_hamiltonian'
+        print("Detected DNAHamiltonianGNN model")
+    else:
+        # Default to standard model
+        model_type = 'standard'
+        print("Could not detect model type, defaulting to DNATransportGNN")
+    
     # Initialize model with same architecture
-    model = DNATransportGNN(
-        hidden_dim=args.get('hidden_dim', 128),
-        num_layers=args.get('num_layers', 4),
-        num_heads=args.get('num_heads', 4),
-        output_dim=args.get('num_energy_points', 100),
-        dropout=args.get('dropout', 0.1)
-    )
+    if model_type == 'hamiltonian':
+        model = DNATransportHamiltonianGNN(
+            hidden_dim=args.get('hidden_dim', 128),
+            num_layers=args.get('num_layers', 4),
+            num_heads=args.get('num_heads', 4),
+            energy_grid=energy_grid,
+            max_len_dna=args.get('max_len_dna', 10),
+            dropout=args.get('dropout', 0.1)
+        )
+        print("DNATransportHamiltonianGNN initialized successfully")
+    elif model_type == 'simple_hamiltonian':
+        model = DNAHamiltonianGNN(
+            hidden_dim=args.get('hidden_dim', 128),
+            num_layers=args.get('num_layers', 4),
+            num_heads=args.get('num_heads', 4),
+            energy_grid=energy_grid,
+            max_len_dna=args.get('max_len_dna', 10),
+            dropout=args.get('dropout', 0.1)
+        )
+        print("DNAHamiltonianGNN initialized successfully")
+    else:  # standard
+        model = DNATransportGNN(
+            hidden_dim=args.get('hidden_dim', 128),
+            num_layers=args.get('num_layers', 4),
+            num_heads=args.get('num_heads', 4),
+            output_dim=args.get('num_energy_points', 100),
+            dropout=args.get('dropout', 0.1)
+        )
+        print("DNATransportGNN initialized successfully")
     
     # Load trained weights
     model.load_state_dict(checkpoint['model_state_dict'])
