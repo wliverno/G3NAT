@@ -199,7 +199,7 @@ def split_dataset(dataset, train_split: float = 0.8):
     return train_dataset, val_dataset
 
 
-def initialize_model(args):
+def initialize_model(args, energy_grid=None):
     """Initialize the DNA Transport GNN model."""
     
     if args.model_type == 'standard':
@@ -211,12 +211,15 @@ def initialize_model(args):
             dropout=args.dropout
         )
     elif args.model_type == 'hamiltonian':
+        if energy_grid is None:
+            raise ValueError("energy_grid parameter is required for hamiltonian model")
         model = DNATransportHamiltonianGNN(
             hidden_dim=args.hidden_dim,
             num_layers=args.num_layers,
             num_heads=args.num_heads,
-            max_len_dna=args.seq_length,
-            dropout=args.dropout
+            energy_grid=energy_grid,
+            dropout=args.dropout,
+            n_orb=1  # Number of orbitals per DNA base
         )
     else:
         raise ValueError(f"Unknown model type: {args.model_type}")
@@ -309,8 +312,8 @@ def main():
         transmission_data=transmission_data_array,
         energy_grid=energy_grid,
         complementary_sequences=complementary_sequences,
-        left_contact_positions=0,
-        right_contact_positions=-1,  # Will be automatically set to len(sequence)-1 for each sequence
+        left_contact_positions=0,  # Left contact connects to first DNA base
+        right_contact_positions=None,  # Will be automatically set to len(sequence)-1 for each sequence
         left_contact_coupling=0.1,
         right_contact_coupling=0.2
     )
@@ -324,7 +327,7 @@ def main():
     
     # Initialize model
     print("Initializing model...")
-    model = initialize_model(args)
+    model = initialize_model(args, energy_grid)
     
     # Check for checkpoint resumption (after model is created)
     if args.resume_from:

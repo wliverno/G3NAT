@@ -122,8 +122,8 @@ class DNATransportHamiltonianGNN(nn.Module):
                  num_layers: int = 4,
                  num_heads: int = 4,
                  energy_grid: np.ndarray = np.linspace(-3, 3, 100),
-                 max_len_dna: int = 10,
-                 dropout: float = 0.1):
+                 dropout: float = 0.1,
+                 n_orb: int = 1):
         super().__init__()
         # Use features specified in dataset.py
         node_features = 6  # 6 one-hot features (A, T, G, C, Purine, Pyrimidine)
@@ -135,11 +135,10 @@ class DNATransportHamiltonianGNN(nn.Module):
         self.energy_grid = energy_grid
         self.dropout = dropout
         self.output_dim = len(energy_grid)
+        self.n_orb = n_orb  # Number of orbitals per site (n_onsite = n_coupling = n_orb)
 
-        # Hamiltonian size specification
-        self.H_size = max_len_dna*2
-        # number of unique elements in upper triangular + diagonal
-        self.num_unique_elements = self.H_size + (self.H_size * (self.H_size - 1)) // 2
+        # Size-agnostic: Hamiltonian constructed from graph structure
+        # H_size = num_dna_nodes * n_orb (total number of orbitals)
         
         # Input projections
         self.node_proj = nn.Linear(node_features, hidden_dim)
@@ -167,26 +166,129 @@ class DNATransportHamiltonianGNN(nn.Module):
             self.convs.append(conv)
             self.norms.append(nn.LayerNorm(hidden_dim))
         
-        # Output projections for DOS and transmission
-        self.H_proj = nn.Sequential(
+        # Graph-based Hamiltonian projections
+        # Each node contributes n_orb x n_orb onsite energy block
+        self.onsite_proj = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim // 2),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(hidden_dim // 2, self.num_unique_elements)
+            nn.Linear(hidden_dim // 2, n_orb * n_orb)
+        )
+        
+        # Each edge contributes n_orb x n_orb coupling block  
+        self.coupling_proj = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim // 2, n_orb * n_orb)
         )
         
         # Global pooling
         self.global_pool = global_mean_pool
+    
+    def construct_hamiltonian_from_graph(self, 
+                                       node_features: torch.Tensor,
+                                       edge_features: torch.Tensor,
+                                       edge_index: torch.Tensor,
+                                       batch: torch.Tensor,
+                                       original_node_features: torch.Tensor) -> Tuple[torch.Tensor, int]:
+        """
+        Construct Hamiltonian matrix directly from graph structure.
+        
+        Args:
+            node_features: Node features after GNN layers [num_nodes, hidden_dim]
+            edge_features: Edge features after GNN layers [num_edges, hidden_dim] 
+            edge_index: Edge connectivity [2, num_edges]
+            batch: Batch indices [num_nodes]
+            original_node_features: Original node features for contact detection [num_nodes, node_features]
+            
+        Returns:
+            H_matrix: Hamiltonian matrix [batch_size, H_size, H_size]
+            H_size: Size of Hamiltonian (num_dna_nodes * n_orb)
+        """
+        device = node_features.device
+        
+        # Handle batched processing
+        if batch is None:
+            batch = torch.zeros(node_features.size(0), dtype=torch.long, device=device)
+        
+        batch_size = batch.max().item() + 1
+        
+        # Find DNA nodes (non-contact nodes: not all zeros in original features)
+        contact_node_mask = torch.all(original_node_features == 0, dim=1)
+        dna_node_mask = ~contact_node_mask
+        dna_nodes = torch.where(dna_node_mask)[0]
+        num_dna_nodes = len(dna_nodes)
+        
+        # Calculate H_size: num_dna_nodes * n_orb
+        if batch_size > 1:
+            num_dna_nodes = num_dna_nodes // batch_size
+        H_size = num_dna_nodes * self.n_orb
+        
+        # Get onsite energies for DNA nodes only
+        dna_node_features = node_features[dna_node_mask]  # [num_dna_nodes, hidden_dim]
+        onsite_blocks = self.onsite_proj(dna_node_features)  # [num_dna_nodes, n_orb²]
+        onsite_blocks = onsite_blocks.view(-1, self.n_orb, self.n_orb)  # [num_dna_nodes, n_orb, n_orb]
+        
+        # Get coupling blocks for edges between DNA nodes
+        coupling_blocks = self.coupling_proj(edge_features)  # [num_edges, n_orb²]
+        coupling_blocks = coupling_blocks.view(-1, self.n_orb, self.n_orb)  # [num_edges, n_orb, n_orb]
+        
+        # Initialize Hamiltonian matrix
+        H_matrix = torch.zeros(batch_size, H_size, H_size, 
+                              dtype=torch.complex64, device=device)
+        
+        # Process each graph in the batch
+        for batch_idx in range(batch_size):
+            # Get nodes and edges for this graph
+            node_mask = batch == batch_idx
+            dna_nodes_batch = torch.where(node_mask & dna_node_mask)[0]
+            
+            # Create mapping from global DNA node indices to local block indices
+            dna_to_local = {global_idx.item(): local_idx 
+                           for local_idx, global_idx in enumerate(dna_nodes_batch)}
+            
+            # Fill diagonal blocks (onsite energies)
+            start_idx = batch_idx * num_dna_nodes if batch_size > 1 else 0
+            for local_idx, global_idx in enumerate(dna_nodes_batch):
+                orb_start = local_idx * self.n_orb
+                orb_end = orb_start + self.n_orb
+                block_idx = start_idx + local_idx
+                H_matrix[batch_idx, orb_start:orb_end, orb_start:orb_end] = onsite_blocks[block_idx]
+            
+            # Fill off-diagonal blocks (couplings)
+            edge_mask = torch.isin(edge_index[0], dna_nodes_batch) & torch.isin(edge_index[1], dna_nodes_batch)
+            graph_edge_index = edge_index[:, edge_mask]
+            
+            for edge_idx, (src, dst) in enumerate(graph_edge_index.T):
+                if src.item() in dna_to_local and dst.item() in dna_to_local:
+                    src_local = dna_to_local[src.item()]
+                    dst_local = dna_to_local[dst.item()]
+                    
+                    src_orb_start = src_local * self.n_orb
+                    src_orb_end = src_orb_start + self.n_orb
+                    dst_orb_start = dst_local * self.n_orb  
+                    dst_orb_end = dst_orb_start + self.n_orb
+                    
+                    # Get the coupling block for this edge
+                    coupling_block = coupling_blocks[torch.where(edge_mask)[0][edge_idx]]
+                    
+                    # Set coupling: H[i,j] = coupling_block
+                    H_matrix[batch_idx, src_orb_start:src_orb_end, dst_orb_start:dst_orb_end] = coupling_block
+                    # Hermiticity: H[j,i] = coupling_block.conj().T
+                    H_matrix[batch_idx, dst_orb_start:dst_orb_end, src_orb_start:src_orb_end] = coupling_block.conj().T
+        
+        return H_matrix, H_size
         
     def NEGFProjection(self, 
-        H_triangular: torch.Tensor, 
+        H_matrix: torch.Tensor, 
         GammaL: torch.Tensor, 
         GammaR: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Calculate the transmission and DOS using the NEGF method.
         
         Args:
-            H_triangular: Upper triangular Hamiltonian elements [batch_size, num_unique_elements]
+            H_matrix: Hamiltonian matrix [batch_size, H_size, H_size]
             GammaL: Left lead coupling [batch_size, H_size]
             GammaR: Right lead coupling [batch_size, H_size]
 
@@ -195,36 +297,42 @@ class DNATransportHamiltonianGNN(nn.Module):
         """
         
         # Handle both single sample and batch cases
-        if H_triangular.dim() == 1:
-            H_triangular = H_triangular.unsqueeze(0)
-            GammaL = GammaL.unsqueeze(0)
-            GammaR = GammaR.unsqueeze(0)
+        if H_matrix.dim() == 2:
+            H_matrix = H_matrix.unsqueeze(0)
             squeeze_output = True
         else:
             squeeze_output = False
             
-        batch_size = H_triangular.size(0)
-        device = H_triangular.device
-        i_indices, j_indices = torch.triu_indices(self.H_size, self.H_size, device=device)
-        H_matrix = torch.zeros(batch_size, self.H_size, self.H_size, 
-                        dtype=H_triangular.dtype, device=device)
-        H_matrix[:, i_indices, j_indices] = H_triangular
-        H_matrix[:, j_indices, i_indices] = H_triangular.conj()
+        # Ensure GammaL and GammaR have batch dimension
+        if GammaL.dim() == 1:
+            GammaL = GammaL.unsqueeze(0)
+        if GammaR.dim() == 1:
+            GammaR = GammaR.unsqueeze(0)
+            
+        batch_size = H_matrix.size(0)
+        H_size = H_matrix.size(1)
+        device = H_matrix.device
         
         # Create Identity Matrix
-        I = torch.eye(self.H_size, dtype=H_triangular.dtype, device=device).unsqueeze(0).unsqueeze(0)  # [1, 1, H_size, H_size]
-        I = I.expand(batch_size, len(self.energy_grid), self.H_size, self.H_size) # [batch, energy, H_size, H_size]
+        I = torch.eye(H_size, dtype=H_matrix.dtype, device=device).unsqueeze(0).unsqueeze(0)  # [1, 1, H_size, H_size]
+        I = I.expand(batch_size, len(self.energy_grid), H_size, H_size) # [batch, energy, H_size, H_size]
 
-        # Expand Hamiltonian and sigTot to match energy grid
+        # Expand Hamiltonian to match energy grid
         H_expanded = H_matrix.unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)  # [batch, energy, H_size, H_size]
-        sigTot = (-0.5j * (GammaL + GammaR)).unsqueeze(1).unsqueeze(-1).expand(-1, len(self.energy_grid), -1, -1)
+        
+        # Create sigTot: gamma vectors should be diagonal matrices
+        # GammaL + GammaR has shape [batch, H_size], we need [batch, energy, H_size, H_size] diagonal
+        gamma_total = GammaL + GammaR  # [batch, H_size]
+        sigTot_diag = -0.5j * torch.diag_embed(gamma_total)  # [batch, H_size, H_size]
+        sigTot = sigTot_diag.unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)  # [batch, energy, H_size, H_size]
 
         # Expand energy grid to match batch size and H_size
-        energy_grid_tensor = torch.tensor(self.energy_grid, dtype=H_triangular.dtype, device=device)  # [num_energy]
+        energy_grid_tensor = torch.tensor(self.energy_grid, dtype=H_matrix.dtype, device=device)  # [num_energy]
         energy_grid_expanded = energy_grid_tensor.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)  # [1, num_energy, 1, 1]
 
         # Calculate A matrix
-        A = energy_grid_expanded * I - H_expanded - sigTot
+        delta = I*1e-12j
+        A = energy_grid_expanded * I - H_expanded - sigTot + delta
 
         # Calculate Green's functions
         # Use more stable matrix solve instead of direct inversion
@@ -235,8 +343,12 @@ class DNATransportHamiltonianGNN(nn.Module):
             A_reg = A + 1e-8j * I
             Gr = torch.linalg.pinv(A_reg)
         
-        # Calculate DOS using einsum for trace
-        DOS = torch.log10(-1*torch.einsum('benn->be', torch.imag(Gr)))
+        # Calculate DOS using correct NEGF formula
+        # DOS = -Im(Tr(Gr)) / π, but we omit π factor for consistency
+        dos_raw = -torch.einsum('benn->be', torch.imag(Gr))
+        # DOS should be positive by construction in NEGF, but add safety check
+        dos_safe = torch.clamp(dos_raw, min=1e-16)  # Ensure positive values without abs()
+        DOS = torch.log10(dos_safe)
 
         # Calculate transmission
         Ga = Gr.conj().transpose(-2, -1)
@@ -254,8 +366,12 @@ class DNATransportHamiltonianGNN(nn.Module):
 
         # Do final matrix multiplication to get transmission
         Tcoh = torch.matmul(gamma1Gr, gamma2Ga)
-        T = torch.log10(torch.real(torch.einsum('benn->be', Tcoh)))
-
+        T_raw = torch.real(torch.einsum('benn->be', Tcoh))
+        # Transmission should be positive by construction, add safety check
+        if torch.any(T_raw < 0):
+            print(f"Warning: Negative transmission detected! Min T: {T_raw.min().item():.2e}")
+        T_safe = torch.clamp(T_raw, min=1e-16)  # Ensure positive values
+        T = torch.log10(T_safe)
         
         if squeeze_output:
             return T.squeeze(0), DOS.squeeze(0), H_matrix.squeeze(0)
@@ -268,6 +384,7 @@ class DNATransportHamiltonianGNN(nn.Module):
                         batch: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Extract left and right contact data from a PyTorch Geometric Data object.
+        Assumes left contact is node 0 and right contact is last node in each graph.
         
         Args:
             x: Node features [num_nodes, node_features]
@@ -276,8 +393,8 @@ class DNATransportHamiltonianGNN(nn.Module):
             batch: Batch indices [num_nodes]
                 
         Returns:
-            gammaL: Left lead coupling [batch_size, H_size]
-            gammaR: Right lead coupling [batch_size, H_size]
+            gammaL: Left lead coupling [batch_size, H_size] or [H_size] for single graph
+            gammaR: Right lead coupling [batch_size, H_size] or [H_size] for single graph
         """
         device = x.device
         
@@ -287,82 +404,87 @@ class DNATransportHamiltonianGNN(nn.Module):
         
         batch_size = batch.max().item() + 1
         
+        # Calculate nodes per graph and H_size
+        nodes_per_graph = x.size(0) // batch_size if batch_size > 1 else x.size(0)
+        # Subtract 2 contacts (node 0 and node 1) from each graph  
+        num_dna_nodes = nodes_per_graph - 2
+        H_size = num_dna_nodes * self.n_orb
+        
         # Initialize output tensors
-        GammaL_batch = torch.zeros(batch_size, self.H_size, device=device, dtype=x.dtype)
-        GammaR_batch = torch.zeros(batch_size, self.H_size, device=device, dtype=x.dtype)
+        GammaL_batch = torch.zeros(batch_size, H_size, device=device, dtype=x.dtype)
+        GammaR_batch = torch.zeros(batch_size, H_size, device=device, dtype=x.dtype)
         
         # Process each graph in the batch
         for batch_idx in range(batch_size):
-            # Get nodes and edges for this graph
-            node_mask = batch == batch_idx
-            node_indices = torch.where(node_mask)[0]
+            # Get node range for this graph
+            if batch_size > 1:
+                start_node = batch_idx * nodes_per_graph
+                end_node = start_node + nodes_per_graph
+                graph_nodes = torch.arange(start_node, end_node, device=device)
+            else:
+                graph_nodes = torch.arange(x.size(0), device=device)
+            
+            # Left contact is node 0, right contact is node 1
+            left_contact_idx = graph_nodes[0]
+            right_contact_idx = graph_nodes[1]
             
             # Get edges for this graph
-            edge_mask = torch.isin(edge_index[0], node_indices) & torch.isin(edge_index[1], node_indices)
+            edge_mask = torch.isin(edge_index[0], graph_nodes) & torch.isin(edge_index[1], graph_nodes)
             graph_edge_index = edge_index[:, edge_mask]
             graph_edge_attr = edge_attr[edge_mask]
-            graph_x = x[node_mask]
             
-            # Create mapping from global to local node indices
-            global_to_local = {global_idx.item(): local_idx for local_idx, global_idx in enumerate(node_indices)}
-            
-            # Find contact nodes (all zero features indicate contact nodes)
-            contact_node_mask = torch.all(graph_x == 0, dim=1)
-            contact_inds = torch.where(contact_node_mask)[0]
-            dna_inds = torch.where(~contact_node_mask)[0]
-
-            if len(contact_inds) < 2:
-                continue  # Skip if no proper contacts found
-            
-            # Map global edge indices to local indices
-            local_edge_index = torch.zeros_like(graph_edge_index)
-            for i in range(graph_edge_index.size(1)):
-                local_edge_index[0, i] = global_to_local[graph_edge_index[0, i].item()]
-                local_edge_index[1, i] = global_to_local[graph_edge_index[1, i].item()]
-
             # Find contact edges (edge_attr[:, 2] == 1 for contact type)
-            contact_mask = (graph_edge_attr[:, 2] == 1) 
-            contact_edges = local_edge_index[:, contact_mask]
-            contact_couplings = graph_edge_attr[contact_mask, 4]  # Coupling strength is at index 4
-            
-            if len(contact_edges[0]) == 0:
+            contact_mask = (graph_edge_attr[:, 2] == 1)
+            if contact_mask.sum() == 0:
                 continue  # Skip if no contact edges found
+                
+            contact_edges = graph_edge_index[:, contact_mask]
+            contact_couplings = graph_edge_attr[contact_mask, 4]  # Coupling strength at index 4
             
-            # Find edges connected to left contact (first contact node)
-            left_contact_mask = (contact_edges[0] == contact_inds[0]) 
+            # Find edges connected to left contact (node 0)
+            left_contact_mask = (contact_edges[0] == left_contact_idx)
             left_contact_edges = contact_edges[:, left_contact_mask]
             left_contact_couplings = contact_couplings[left_contact_mask]
             
-            # Find edges connected to right contact (last contact node)
-            right_contact_mask = (contact_edges[0] == contact_inds[-1]) 
+            # Find edges connected to right contact (last node)
+            right_contact_mask = (contact_edges[0] == right_contact_idx)
             right_contact_edges = contact_edges[:, right_contact_mask]
             right_contact_couplings = contact_couplings[right_contact_mask]
             
-            # Get the DNA base nodes connected to contacts (not the contact nodes themselves)
-            left_contact_indices = [edge[1].item() for edge in left_contact_edges.T] if len(left_contact_edges[0]) > 0 else []
-            right_contact_indices = [edge[1].item() for edge in right_contact_edges.T] if len(right_contact_edges[0]) > 0 else []
-
-            # Initialize coupling vectors for this graph
-            GammaL = torch.zeros(self.H_size, device=device, dtype=x.dtype)
-            GammaR = torch.zeros(self.H_size, device=device, dtype=x.dtype)
+            # Map DNA nodes to Hamiltonian indices (excluding contacts)
+            # DNA nodes are indices 2 to nodes_per_graph-1 (after both contacts)
+            dna_start = graph_nodes[2]  # First DNA node (after both contacts)
             
             # Set left contact couplings
             for i, coupling in enumerate(left_contact_couplings):
-                if i < len(left_contact_indices):
-                    ind = torch.where(dna_inds == left_contact_indices[i])[0]
-                    if len(ind) > 0 and ind[0] < self.H_size:
-                        GammaL[ind[0]] = coupling
+                if i < len(left_contact_edges[1]):
+                    dna_node = left_contact_edges[1, i]
+                    # Map to Hamiltonian index (subtract contact offset)
+                    dna_idx = dna_node - dna_start  # 0-indexed DNA node
+                    if 0 <= dna_idx < num_dna_nodes:
+                        # Apply coupling to all orbitals of this DNA node
+                        orb_start = dna_idx * self.n_orb
+                        orb_end = orb_start + self.n_orb
+                        if orb_end <= H_size:
+                            GammaL_batch[batch_idx, orb_start:orb_end] = coupling
             
-            # Set right contact couplings
+            # Set right contact couplings  
             for i, coupling in enumerate(right_contact_couplings):
-                if i < len(right_contact_indices):
-                    ind = torch.where(dna_inds == right_contact_indices[i])[0]
-                    if len(ind) > 0 and ind[0] < self.H_size:
-                        GammaR[ind[0]] = coupling
-
-            GammaL_batch[batch_idx] = GammaL
-            GammaR_batch[batch_idx] = GammaR
-
+                if i < len(right_contact_edges[1]):
+                    dna_node = right_contact_edges[1, i]
+                    # Map to Hamiltonian index (subtract contact offset)
+                    dna_idx = dna_node - dna_start  # 0-indexed DNA node
+                    if 0 <= dna_idx < num_dna_nodes:
+                        # Apply coupling to all orbitals of this DNA node
+                        orb_start = dna_idx * self.n_orb
+                        orb_end = orb_start + self.n_orb
+                        if orb_end <= H_size:
+                            GammaR_batch[batch_idx, orb_start:orb_end] = coupling
+        
+        # Return squeezed tensors for single batch case to maintain backward compatibility
+        if batch_size == 1:
+            return GammaL_batch.squeeze(0), GammaR_batch.squeeze(0)
+        
         return GammaL_batch, GammaR_batch
 
     def forward(self, data):
@@ -381,8 +503,9 @@ class DNATransportHamiltonianGNN(nn.Module):
         """
         x, edge_index, edge_attr, batch = data.x, data.edge_index, data.edge_attr, data.batch
         
-        # First, get the contact vectors (returns batched tensors)
-        GammaL, GammaR = self.get_contact_vectors(x, edge_attr, edge_index, batch)
+        # Get initial node and edge features for Hamiltonian construction
+        x_initial = x.clone()  # Keep original features for contact detection
+        edge_attr_initial = edge_attr.clone()
         
         # Compare model gammas with training data gammas for debugging
         # Uncomment the following block to enable gamma debugging during training
@@ -438,14 +561,14 @@ class DNATransportHamiltonianGNN(nn.Module):
             x = F.relu(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
         
-        # Global pooling
-        x = self.global_pool(x, batch)
-
-        # Hidden layer (outputs batch_size x num_unique_elements)
-        x = self.H_proj(x)
+        # Construct Hamiltonian matrix directly from graph structure
+        H_matrix, H_size = self.construct_hamiltonian_from_graph(x, edge_attr, edge_index, batch, x_initial)
         
-        # Output projections (handles batched inputs)
-        dos_pred, transmission_pred, H = self.NEGFProjection(x, GammaL, GammaR)
+        # Get contact vectors using original features for contact detection
+        GammaL, GammaR = self.get_contact_vectors(x_initial, edge_attr_initial, edge_index, batch)
+        
+        # Calculate transport properties using NEGF
+        dos_pred, transmission_pred, H = self.NEGFProjection(H_matrix, GammaL, GammaR)
         
         self.H = H
 
