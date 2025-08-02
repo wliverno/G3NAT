@@ -149,20 +149,8 @@ class DNATransportHamiltonianGNN(nn.Module):
         self.norms = nn.ModuleList()
         
         for i in range(num_layers):
-            # EXPERIMENTAL: Using TransformerConv instead of GATConv
-            # TransformerConv can capture long-range dependencies more effectively
-            # To revert: change back to GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, 
-            #                                  dropout=dropout, add_self_loops=True, edge_dim=hidden_dim)
-            conv = TransformerConv(
-                in_channels=hidden_dim,
-                out_channels=hidden_dim,
-                heads=num_heads,
-                dropout=dropout,
-                edge_dim=hidden_dim,
-                concat=False,  # Sum the heads instead of concatenating
-                beta=True,  # Use beta parameter for better performance
-                root_weight=True  # Include self-connections
-            )
+            conv = GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, 
+                          dropout=dropout, add_self_loops=True, edge_dim=hidden_dim)
             self.convs.append(conv)
             self.norms.append(nn.LayerNorm(hidden_dim))
         
