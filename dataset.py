@@ -106,8 +106,13 @@ def sequence_to_graph(primary_sequence: str,
     node_to_strand.append('left_contact')
     node_mapping['left_contact'] = 0
     
+    # Add right contact (node 1)
+    node_features.append(CONTACT_FEATURES)
+    node_to_strand.append('right_contact')
+    node_mapping['right_contact'] = 1
+    
     # Add primary strand features (only for existing bases)
-    primary_start_idx = 1
+    primary_start_idx = 2
     primary_node_count = 0
     for i, base in enumerate(primary_sequence):
         if base != '_':  # Only create nodes for actual bases
@@ -125,12 +130,6 @@ def sequence_to_graph(primary_sequence: str,
             node_to_strand.append('complementary')
             node_mapping[('complementary', i)] = complementary_start_idx + complementary_node_count
             complementary_node_count += 1
-    
-    # Add right contact (last node)
-    right_contact_idx = complementary_start_idx + complementary_node_count
-    node_features.append(CONTACT_FEATURES)
-    node_to_strand.append('right_contact')
-    node_mapping['right_contact'] = right_contact_idx
     
     x = torch.tensor(node_features, dtype=torch.float)
     
