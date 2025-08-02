@@ -249,18 +249,19 @@ class DNATransportHamiltonianGNN(nn.Module):
                            for local_idx, global_idx in enumerate(dna_nodes_batch)}
             
             # Fill diagonal blocks (onsite energies)
-            start_idx = batch_idx * num_dna_nodes if batch_size > 1 else 0
             for local_idx, global_idx in enumerate(dna_nodes_batch):
                 orb_start = local_idx * self.n_orb
                 orb_end = orb_start + self.n_orb
-                block_idx = start_idx + local_idx
-                H_matrix[batch_idx, orb_start:orb_end, orb_start:orb_end] = onsite_blocks[block_idx]
+                # Find the position of this global_idx in the dna_nodes array
+                global_dna_idx = torch.where(dna_nodes == global_idx)[0][0].item()
+                H_matrix[batch_idx, orb_start:orb_end, orb_start:orb_end] = onsite_blocks[global_dna_idx]
             
             # Fill off-diagonal blocks (couplings)
             edge_mask = torch.isin(edge_index[0], dna_nodes_batch) & torch.isin(edge_index[1], dna_nodes_batch)
+            graph_edge_indices = torch.where(edge_mask)[0]  # Global edge indices
             graph_edge_index = edge_index[:, edge_mask]
             
-            for edge_idx, (src, dst) in enumerate(graph_edge_index.T):
+            for local_edge_idx, (src, dst) in enumerate(graph_edge_index.T):
                 if src.item() in dna_to_local and dst.item() in dna_to_local:
                     src_local = dna_to_local[src.item()]
                     dst_local = dna_to_local[dst.item()]
@@ -270,8 +271,9 @@ class DNATransportHamiltonianGNN(nn.Module):
                     dst_orb_start = dst_local * self.n_orb  
                     dst_orb_end = dst_orb_start + self.n_orb
                     
-                    # Get the coupling block for this edge
-                    coupling_block = coupling_blocks[torch.where(edge_mask)[0][edge_idx]]
+                    # Get the coupling block for this edge using global edge index
+                    global_edge_idx = graph_edge_indices[local_edge_idx]
+                    coupling_block = coupling_blocks[global_edge_idx]
                     
                     # Set coupling: H[i,j] = coupling_block
                     H_matrix[batch_idx, src_orb_start:src_orb_end, dst_orb_start:dst_orb_end] = coupling_block

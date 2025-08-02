@@ -341,6 +341,10 @@ def main():
             resume_from_checkpoint = True
         except Exception as e:
             print(f"Failed to load checkpoint: {e}")
+            if "Missing key(s) in state_dict" in str(e):
+                print("Checkpoint is from an incompatible model architecture.")
+                print("This is likely due to recent model improvements.")
+                print(f"Consider using a compatible checkpoint or starting fresh training.")
             print("Starting fresh training...")
             start_epoch = 0
             train_losses = []
@@ -361,6 +365,10 @@ def main():
                 resume_from_checkpoint = True
             except Exception as e:
                 print(f"Failed to load latest checkpoint: {e}")
+                if "Missing key(s) in state_dict" in str(e):
+                    print("Checkpoint is from an incompatible model architecture.")
+                    print("This is likely due to recent model improvements.")
+                    print(f"Consider deleting the checkpoint directory: {args.checkpoint_dir}")
                 print("Starting fresh training...")
                 start_epoch = 0
                 train_losses = []
