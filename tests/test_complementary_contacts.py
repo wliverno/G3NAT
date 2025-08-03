@@ -38,9 +38,9 @@ def test_complementary_contacts():
     print("\nContact connections:")
     for i in range(graph.edge_index.shape[1]):
         src, dst = graph.edge_index[:, i].tolist()
-        coupling = graph.edge_attr[i, 0].item()
-        edge_type = graph.edge_attr[i, 1].item()
-        if edge_type == 0:  # Contact connection
+        coupling = graph.edge_attr[i, 3].item()  # coupling is now at index 3
+        contact_flag = graph.edge_attr[i, 2].item()
+        if contact_flag == 1:  # Contact connection
             if src == 0:  # Left contact
                 if dst <= len(primary):
                     print(f"  Left contact -> Primary base {dst-1} (coupling: {coupling:.3f})")
@@ -83,7 +83,7 @@ def test_complementary_contacts():
     print("\nContact connections:")
     for i in range(graph2.edge_index.shape[1]):
         src, dst = graph2.edge_index[:, i].tolist()
-        coupling = graph2.edge_attr[i, 0].item()
+                        coupling = graph2.edge_attr[i, 2].item()  # coupling is now at index 3
         edge_type = graph2.edge_attr[i, 1].item()
         if edge_type == 0:  # Contact connection
             if src == 0:  # Left contact

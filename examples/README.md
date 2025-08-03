@@ -6,6 +6,7 @@ This directory contains examples demonstrating how to use the DNA Transport GNN 
 
 - `basic_usage.py` - Basic examples showing graph creation and model usage
 - `training_example.py` - Comprehensive training example with synthetic data
+- `gamma_debugging_example.py` - Example demonstrating gamma debugging functionality
 
 ## How the Model Works Without Training
 
@@ -69,12 +70,16 @@ python examples/basic_usage.py
 python examples/training_example.py
 ```
 
+### Gamma Debugging Example
+```bash
+python examples/gamma_debugging_example.py
+```
+
 This will:
-1. Generate synthetic training data
-2. Train the model for 100 epochs
-3. Evaluate performance on test set
-4. Save training curves plot
-5. Save trained model weights
+1. Create a dataset with specific gamma values for each sequence
+2. Demonstrate how to access gamma values during training
+3. Verify that gamma values in graphs match stored values
+4. Show how to use gamma values for debugging purposes
 
 ## Model Architecture
 
@@ -101,6 +106,55 @@ The `DNATransportGNN` consists of:
 3. **Regularization**: Use dropout to prevent overfitting
 4. **Learning Rate**: Start with 1e-3 and reduce if needed
 5. **Early Stopping**: Monitor validation loss to prevent overfitting
+
+## Gamma Debugging
+
+The dataset now supports storing and accessing gamma values (contact coupling strengths) for debugging purposes:
+
+### Why Use Gamma Debugging?
+- **Verify Consistency**: Ensure gamma values used in graph creation match those expected by your model
+- **Parameter Tracking**: Track how different gamma values affect model performance
+- **Debugging**: Identify issues related to contact coupling parameters
+
+### How to Use
+```python
+# Create dataset with gamma vectors
+gamma_l, gamma_r = create_default_gamma_vectors(sequences)  # Creates default vectors
+
+# Or create custom gamma vectors
+gamma_l = np.zeros((num_samples, max_seq_length * 2))
+gamma_r = np.zeros((num_samples, max_seq_length * 2))
+gamma_l[0, 0] = 0.1  # Left contact at position 0 for sequence 0
+gamma_r[0, 3] = 0.1  # Right contact at position 3 for sequence 0
+
+dataset = create_dna_dataset(
+    sequences=sequences,
+    dos_data=dos_data,
+    transmission_data=transmission_data,
+    energy_grid=energy_grid,
+    gamma_l=gamma_l,  # Left contact coupling vectors [num_samples, seq_length * 2]
+    gamma_r=gamma_r   # Right contact coupling vectors [num_samples, seq_length * 2]
+)
+
+# Access gamma vectors during training
+for sample in dataset:
+    gamma_l = sample.gamma_l  # Vector of left contact couplings for this sequence
+    gamma_r = sample.gamma_r  # Vector of right contact couplings for this sequence
+    
+    # Find active contact positions
+    active_l_positions = torch.nonzero(gamma_l).flatten()
+    active_r_positions = torch.nonzero(gamma_r).flatten()
+    
+    # Use for debugging, logging, or parameter verification
+    print(f"Active left contacts: {active_l_positions.tolist()}")
+    print(f"Active right contacts: {active_r_positions.tolist()}")
+```
+
+### Example Use Cases
+1. **Parameter Verification**: Compare stored gamma values with model parameters
+2. **Performance Analysis**: Analyze how different gamma values affect predictions
+3. **Debugging**: Identify discrepancies between expected and actual coupling strengths
+4. **Logging**: Include gamma values in training logs for reproducibility
 
 ## Expected Performance
 
