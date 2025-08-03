@@ -119,9 +119,37 @@ def load_checkpoint(checkpoint_path: str, model: nn.Module, device: torch.device
     # Load model state
     model.load_state_dict(checkpoint['model_state_dict'])
     
+    # Ensure all model parameters are on the correct device
+    model = model.to(device)
+    
     # Create optimizer and load its state
     optimizer = torch.optim.Adam(model.parameters(), lr=checkpoint['args']['learning_rate'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    
+    # Move optimizer state tensors to the correct device
+    for state in optimizer.state.values():
+        for k, v in state.items():
+            if isinstance(v, torch.Tensor):
+                state[k] = v.to(device)
+    
+    # Verify all tensors are on the correct device
+    param_devices = set(p.device for p in model.parameters())
+    if len(param_devices) > 1:
+        print(f"WARNING: Model parameters on different devices: {param_devices}")
+        # Move all parameters to the target device
+        model = model.to(device)
+    
+    optimizer_devices = set()
+    for state in optimizer.state.values():
+        for k, v in state.items():
+            if isinstance(v, torch.Tensor):
+                optimizer_devices.add(v.device)
+    
+    if len(optimizer_devices) > 1:
+        print(f"WARNING: Optimizer state on different devices: {optimizer_devices}")
+    
+    print(f"Model device: {next(model.parameters()).device}")
+    print(f"Optimizer state devices: {optimizer_devices}")
     
     epoch = checkpoint['epoch']
     train_losses = checkpoint['train_losses']

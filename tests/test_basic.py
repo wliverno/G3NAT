@@ -34,8 +34,8 @@ def test_sequence_to_graph():
     
     # Check graph properties
     assert graph.x is not None and graph.x.shape[0] == len(sequence) + 2, f"Expected {len(sequence) + 2} nodes, got {graph.x.shape[0] if graph.x is not None else 'None'}"
-    assert graph.x is not None and graph.x.shape[1] == 8, f"Expected 8 node features, got {graph.x.shape[1] if graph.x is not None else 'None'}"
-    assert graph.edge_attr is not None and graph.edge_attr.shape[1] == 4, f"Expected 4 edge features, got {graph.edge_attr.shape[1] if graph.edge_attr is not None else 'None'}"
+    assert graph.x is not None and graph.x.shape[1] == 6, f"Expected 6 node features, got {graph.x.shape[1] if graph.x is not None else 'None'}"
+    assert graph.edge_attr is not None and graph.edge_attr.shape[1] == 5, f"Expected 5 edge features, got {graph.edge_attr.shape[1] if graph.edge_attr is not None else 'None'}"
     
     print("✓ Sequence to graph conversion works correctly")
 
@@ -45,8 +45,6 @@ def test_model_initialization():
     print("Testing model initialization...")
     
     model = DNATransportGNN(
-        node_features=8,
-        edge_features=4,
         hidden_dim=64,
         num_layers=2,
         num_heads=2,

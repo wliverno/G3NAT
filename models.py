@@ -41,20 +41,8 @@ class DNATransportGNN(nn.Module):
         self.norms = nn.ModuleList()
         
         for i in range(num_layers):
-            # EXPERIMENTAL: Using TransformerConv instead of GATConv
-            # TransformerConv can capture long-range dependencies more effectively
-            # To revert: change back to GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, 
-            #                                  dropout=dropout, add_self_loops=True, edge_dim=hidden_dim)
-            conv = TransformerConv(
-                in_channels=hidden_dim,
-                out_channels=hidden_dim,
-                heads=num_heads,
-                dropout=dropout,
-                edge_dim=hidden_dim,
-                concat=False,  # Sum the heads instead of concatenating
-                beta=True,  # Use beta parameter for better performance
-                root_weight=True  # Include self-connections
-            )
+            conv = GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, 
+                          dropout=dropout, add_self_loops=True, edge_dim=hidden_dim)
             self.convs.append(conv)
             self.norms.append(nn.LayerNorm(hidden_dim))
         
@@ -358,8 +346,6 @@ class DNATransportHamiltonianGNN(nn.Module):
         Tcoh = torch.matmul(gamma1Gr, gamma2Ga)
         T_raw = torch.real(torch.einsum('benn->be', Tcoh))
         # Transmission should be positive by construction, add safety check
-        if torch.any(T_raw < 0):
-            print(f"Warning: Negative transmission detected! Min T: {T_raw.min().item():.2e}")
         T_safe = torch.clamp(T_raw, min=1e-16)  # Ensure positive values
         T = torch.log10(T_safe)
         
@@ -559,7 +545,7 @@ class DNATransportHamiltonianGNN(nn.Module):
         
         # Calculate transport properties using NEGF
         dos_pred, transmission_pred, H = self.NEGFProjection(H_matrix, GammaL, GammaR)
-        
+
         self.H = H
 
         return dos_pred, transmission_pred
@@ -600,20 +586,8 @@ class DNAHamiltonianGNN(nn.Module):
         self.norms = nn.ModuleList()
         
         for i in range(num_layers):
-            # EXPERIMENTAL: Using TransformerConv instead of GATConv
-            # TransformerConv can capture long-range dependencies more effectively
-            # To revert: change back to GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, 
-            #                                  dropout=dropout, add_self_loops=True, edge_dim=hidden_dim)
-            conv = TransformerConv(
-                in_channels=hidden_dim,
-                out_channels=hidden_dim,
-                heads=num_heads,
-                dropout=dropout,
-                edge_dim=hidden_dim,
-                concat=False,  # Sum the heads instead of concatenating
-                beta=True,  # Use beta parameter for better performance
-                root_weight=True  # Include self-connections
-            )
+            conv = GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, 
+                          dropout=dropout, add_self_loops=True, edge_dim=hidden_dim)
             self.convs.append(conv)
             self.norms.append(nn.LayerNorm(hidden_dim))
         
@@ -812,7 +786,7 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
                checkpoint_dir: str = None, checkpoint_frequency: int = 10,
                start_epoch: int = 0, train_losses: List[float] = None, 
                val_losses: List[float] = None, optimizer: torch.optim.Optimizer = None,
-               checkpoint_callback=None, progress_callback=None):
+               checkpoint_callback=None, progress_callback=None, max_grad_norm: float = 1.0):
     """
     Train the DNA Transport GNN model.
     
@@ -831,15 +805,39 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         optimizer: Existing optimizer for resumption (optional)
         checkpoint_callback: Function to call for saving checkpoints (optional)
         progress_callback: Function to call for saving progress (optional)
+        max_grad_norm: Maximum gradient norm for gradient clipping (default: 1.0)
         
     Returns:
         Tuple of (train_losses, val_losses) lists
     """
     model = model.to(device)
     
+    # Verify all model parameters are on the same device
+    param_devices = set(p.device for p in model.parameters())
+    if len(param_devices) > 1:
+        print(f"WARNING: Model parameters on different devices: {param_devices}")
+        model = model.to(device)
+    
     # Initialize optimizer and loss history if not provided (fresh start)
     if optimizer is None:
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    else:
+        # Verify optimizer state is on the correct device
+        optimizer_devices = set()
+        for state in optimizer.state.values():
+            for k, v in state.items():
+                if isinstance(v, torch.Tensor):
+                    optimizer_devices.add(v.device)
+        
+        if len(optimizer_devices) > 1:
+            print(f"WARNING: Optimizer state on different devices: {optimizer_devices}")
+            # Move all optimizer state tensors to the model's device
+            model_device = next(model.parameters()).device
+            for state in optimizer.state.values():
+                for k, v in state.items():
+                    if isinstance(v, torch.Tensor):
+                        state[k] = v.to(model_device)
+    
     if train_losses is None:
         train_losses = []
     if val_losses is None:
@@ -873,6 +871,10 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
             total_loss = dos_loss + transmission_loss
             
             total_loss.backward()
+            
+            # Gradient clipping to prevent gradient explosion in physics-informed models
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_grad_norm)
+            
             optimizer.step()
             
             train_loss += total_loss.item()
