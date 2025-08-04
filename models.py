@@ -212,7 +212,7 @@ class DNATransportHamiltonianGNN(nn.Module):
         
         # Initialize Hamiltonian matrix
         H_matrix = torch.zeros(batch_size, H_size, H_size, 
-                              dtype=torch.complex64, device=device)
+                              dtype=torch.float32, device=device)
         
         # Process each graph in the batch
         for batch_idx in range(batch_size):
@@ -301,50 +301,63 @@ class DNATransportHamiltonianGNN(nn.Module):
         # Create sigTot: gamma vectors should be diagonal matrices
         # GammaL + GammaR has shape [batch, H_size], we need [batch, energy, H_size, H_size] diagonal
         gamma_total = GammaL + GammaR  # [batch, H_size]
-        sigTot_diag = -0.5j * torch.diag_embed(gamma_total)  # [batch, H_size, H_size]
-        sigTot = sigTot_diag.unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)  # [batch, energy, H_size, H_size]
+        sigTotImag_diag = -0.5 * torch.diag_embed(gamma_total)  # [batch, H_size, H_size]
+        sigTotImag = sigTotImag_diag.unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)  # [batch, energy, H_size, H_size]
 
         # Expand energy grid to match batch size and H_size
         energy_grid_tensor = torch.tensor(self.energy_grid, dtype=H_matrix.dtype, device=device)  # [num_energy]
         energy_grid_expanded = energy_grid_tensor.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)  # [1, num_energy, 1, 1]
 
-        # Calculate A matrix
-        delta = I*1e-12j
-        A = energy_grid_expanded * I - H_expanded - sigTot + delta
-
-        # Calculate Green's functions
-        # Use more stable matrix solve instead of direct inversion
-        try:
-            Gr = torch.linalg.solve(A, I+0j)
-        except torch.linalg.LinAlgError:
-            # Fallback: add small regularization and use pseudo-inverse
-            A_reg = A + 1e-8j * I
-            Gr = torch.linalg.pinv(A_reg)
+        # Calculate A matrix components for Frobenius formula
+        delta = I*1e-12  # Small imaginary regularization
+        A = energy_grid_expanded * I - H_expanded  # Real part
+        B = -sigTotImag + delta  # Imaginary part (purely imaginary)
+        
+        # Calculate Green's functions using Frobenius formula for maximum stability
+        # inv(A + 1j*B) = inv(A + B@inv(A)@B) - 1j*inv(A)@B@inv(A + B@inv(A)@B)
+        # Compute inv(A) first
+        A_inv = torch.linalg.solve(A, I)
+        
+        # Compute B@inv(A)@B (note: B is purely imaginary, so this is real)
+        B_Ainv_B = torch.matmul(torch.matmul(B, A_inv), B)
+        
+        # Compute inv(A + B@inv(A)@B)
+        A_plus_B_Ainv_B = A + B_Ainv_B
+        Gr_real = torch.linalg.solve(A_plus_B_Ainv_B, I)
+        
+        # Compute inv(A)@B@inv(A + B@inv(A)@B)
+        Gr_imag = -1*torch.matmul(torch.matmul(A_inv, B), Gr_real)
+        
+        # Apply Frobenius formula
+        #Gr = Gr_real - 1j * Gr_imag
+        #Ga = Gr_real.transpose(-2, -1) - 1j*Gr_imag.transpose(-2, -1)
         
         # Calculate DOS using correct NEGF formula
         # DOS = -Im(Tr(Gr)) / π, but we omit π factor for consistency
-        dos_raw = -torch.einsum('benn->be', torch.imag(Gr))
+        dos_raw = -1*torch.einsum('benn->be', Gr_imag)/np.pi
         # DOS should be positive by construction in NEGF, but add safety check
         dos_safe = torch.clamp(dos_raw, min=1e-16)  # Ensure positive values without abs()
         DOS = torch.log10(dos_safe)
 
         # Calculate transmission
-        Ga = Gr.conj().transpose(-2, -1)
         # Convert gamma vectors to diagonal matrices for matrix multiplication
         # [batch, H_size] -> [batch, energy, H_size, 1]
-        GammaL_diag = (GammaL + 0j).unsqueeze(1).unsqueeze(-1).expand(-1, len(self.energy_grid), -1, -1)
-        GammaR_diag = (GammaR + 0j).unsqueeze(1).unsqueeze(-1).expand(-1, len(self.energy_grid), -1, -1)
+        GammaL_diag = (GammaL).unsqueeze(1).unsqueeze(-1).expand(-1, len(self.energy_grid), -1, -1)
+        GammaR_diag = (GammaR).unsqueeze(1).unsqueeze(-1).expand(-1, len(self.energy_grid), -1, -1)
  
         # Element-wise multiplication (equivalent to diagonal matrix multiplication)
         # Gr: [batch, energy, H_size, H_size]
         # Gamma_diag: [batch, energy, H_size, 1]
         # Result: [batch, energy, H_size, H_size]
-        gamma1Gr = GammaL_diag * Gr
-        gamma2Ga = GammaR_diag * Ga
+        gamma1Gr_real = GammaL_diag * Gr_real
+        gamma2Ga_real = GammaR_diag * Gr_real.transpose(-2, -1)
+        gamma1Gr_imag = GammaL_diag * Gr_imag
+        gamma2Ga_imag = -1 * GammaR_diag * Gr_imag.transpose(-2, -1)
 
         # Do final matrix multiplication to get transmission
-        Tcoh = torch.matmul(gamma1Gr, gamma2Ga)
-        T_raw = torch.real(torch.einsum('benn->be', Tcoh))
+        # Imaginary parts cancel out, only real part is left
+        Tcoh = torch.matmul(gamma1Gr_real, gamma2Ga_real) - torch.matmul(gamma1Gr_imag, gamma2Ga_imag)
+        T_raw = torch.einsum('benn->be', Tcoh)
         # Transmission should be positive by construction, add safety check
         T_safe = torch.clamp(T_raw, min=1e-16)  # Ensure positive values
         T = torch.log10(T_safe)
@@ -353,6 +366,7 @@ class DNATransportHamiltonianGNN(nn.Module):
             return T.squeeze(0), DOS.squeeze(0), H_matrix.squeeze(0)
         else:
             return T, DOS, H_matrix
+    
     
     def get_contact_vectors(self, x: torch.Tensor, 
                         edge_attr: torch.Tensor, 
