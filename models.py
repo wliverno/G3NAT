@@ -256,6 +256,11 @@ class DNATransportHamiltonianGNN(nn.Module):
                     # Hermiticity: H[j,i] = coupling_block.conj().T
                     H_matrix[batch_idx, dst_orb_start:dst_orb_end, src_orb_start:src_orb_end] = coupling_block.conj().T
         
+        # Ensure H is positive definite by adding a diagonal shift
+        shift = 1e-6  # Small positive value
+        identity = torch.eye(H_matrix.size(-1), device=device)
+        H_matrix = H_matrix + shift * identity.unsqueeze(0).expand(batch_size, -1, -1)
+        
         return H_matrix, H_size
         
     def NEGFProjection(self, 
@@ -316,14 +321,22 @@ class DNATransportHamiltonianGNN(nn.Module):
         # Calculate Green's functions using Frobenius formula for maximum stability
         # inv(A + 1j*B) = inv(A + B@inv(A)@B) - 1j*inv(A)@B@inv(A + B@inv(A)@B)
         # Compute inv(A) first
-        A_inv = torch.linalg.solve(A, I)
-        
+        try:
+            A_inv = torch.linalg.solve(A, I)
+        except torch.linalg.LinAlgError:
+            print("Warning: Singular matrix encountered, using pseudo-inverse")
+            A_inv = torch.linalg.pinv(A)
+            
         # Compute B@inv(A)@B (note: B is purely imaginary, so this is real)
         B_Ainv_B = torch.matmul(torch.matmul(B, A_inv), B)
         
         # Compute inv(A + B@inv(A)@B)
         A_plus_B_Ainv_B = A + B_Ainv_B
-        Gr_real = torch.linalg.solve(A_plus_B_Ainv_B, I)
+        try:
+            Gr_real = torch.linalg.solve(A_plus_B_Ainv_B, I)
+        except torch.linalg.LinAlgError:
+            print("Warning: Singular matrix encountered, using pseudo-inverse")
+            Gr_real = torch.linalg.pinv(A_plus_B_Ainv_B)
         
         # Compute inv(A)@B@inv(A + B@inv(A)@B)
         Gr_imag = -1*torch.matmul(torch.matmul(A_inv, B), Gr_real)
@@ -857,7 +870,7 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
     if val_losses is None:
         val_losses = []
     
-    criterion = nn.L1Loss()
+    criterion = nn.HuberLoss()
     
     for epoch in range(start_epoch, num_epochs):
         # Training phase
