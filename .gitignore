@@ -158,3 +158,4 @@ Thumbs.db
 checkpoints/*
 checkpoints/training_progress.json
 checkpoints/training_status.txt
+.claude/settings.local.json

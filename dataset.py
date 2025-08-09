@@ -393,9 +393,7 @@ def create_dna_dataset(sequences: List[str], dos_data: np.ndarray,
         # Create a copy of graph_kwargs for this sequence
         seq_kwargs = graph_kwargs.copy()
         
-        # Update right_contact_positions if it's a single value
-        if 'right_contact_positions' in seq_kwargs and isinstance(seq_kwargs['right_contact_positions'], int):
-            seq_kwargs['right_contact_positions'] = len(sequence) - 1
+        # Do not override caller-provided right_contact_positions; leave as-is
         
         # Use provided gamma values if available
         if gamma_l is not None and i < len(gamma_l):
