@@ -112,7 +112,12 @@ class DNATransportHamiltonianGNN(nn.Module):
                  num_heads: int = 4,
                  energy_grid: np.ndarray = np.linspace(-3, 3, 100),
                  dropout: float = 0.1,
-                 n_orb: int = 1):
+                 n_orb: int = 1,
+                 enforce_hermiticity: bool = True,
+                 solver_type: str = "frobenius",  # "frobenius" | "complex"
+                 use_log_outputs: bool = True,
+                 log_floor: float = 1e-16,
+                 complex_eta: float = 1e-12):
         super().__init__()
         # Use features specified in dataset.py
         node_features = 4  # 4 one-hot features (A, T, G, C)
@@ -125,6 +130,11 @@ class DNATransportHamiltonianGNN(nn.Module):
         self.dropout = dropout
         self.output_dim = len(energy_grid)
         self.n_orb = n_orb  # Number of orbitals per site (n_onsite = n_coupling = n_orb)
+        self.enforce_hermiticity = enforce_hermiticity
+        self.solver_type = solver_type
+        self.use_log_outputs = use_log_outputs
+        self.log_floor = float(log_floor)
+        self.complex_eta = float(complex_eta)
 
         # Size-agnostic: Hamiltonian constructed from graph structure
         # H_size = num_dna_nodes * n_orb (total number of orbitals)
@@ -221,6 +231,9 @@ class DNATransportHamiltonianGNN(nn.Module):
         dna_node_features = node_features[dna_node_mask]  # [num_dna_nodes, hidden_dim]
         onsite_blocks = self.onsite_proj(dna_node_features)  # [num_dna_nodes, n_orb²]
         onsite_blocks = onsite_blocks.view(-1, self.n_orb, self.n_orb)  # [num_dna_nodes, n_orb, n_orb]
+        if self.enforce_hermiticity:
+            # Symmetrize onsite blocks to ensure Hermiticity (real symmetric here)
+            onsite_blocks = 0.5 * (onsite_blocks + onsite_blocks.transpose(-1, -2))
         
         # Get coupling blocks for edges between DNA nodes
         coupling_blocks = self.coupling_proj(edge_features)  # [num_edges, n_orb²]
@@ -295,7 +308,7 @@ class DNATransportHamiltonianGNN(nn.Module):
         GammaL: torch.Tensor, 
         GammaR: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        Calculate the transmission and DOS using the NEGF method.
+        Calculate the transmission and DOS using NEGF with Frobenius formula (real matrices).
         
         Args:
             H_matrix: Hamiltonian matrix [batch_size, H_size, H_size]
@@ -322,7 +335,7 @@ class DNATransportHamiltonianGNN(nn.Module):
         batch_size = H_matrix.size(0)
         H_size = H_matrix.size(1)
         device = H_matrix.device
-        
+
         # Create Identity Matrix
         I = torch.eye(H_size, dtype=H_matrix.dtype, device=device).unsqueeze(0).unsqueeze(0)  # [1, 1, H_size, H_size]
         I = I.expand(batch_size, len(self.energy_grid), H_size, H_size) # [batch, energy, H_size, H_size]
@@ -402,6 +415,77 @@ class DNATransportHamiltonianGNN(nn.Module):
         T_safe = torch.clamp(T_raw, min=1e-16)  # Ensure positive values
         T = torch.log10(T_safe)
         
+        if squeeze_output:
+            return T.squeeze(0), DOS.squeeze(0), H_matrix.squeeze(0)
+        else:
+            return T, DOS, H_matrix
+
+    def NEGFProjectionComplex(self,
+        H_matrix: torch.Tensor, 
+        GammaL: torch.Tensor, 
+        GammaR: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Exact complex-valued NEGF with wide-band, purely imaginary self-energies.
+        Returns log10 or linear outputs depending on flags.
+        """
+        # Handle both single sample and batch cases
+        if H_matrix.dim() == 2:
+            H_matrix = H_matrix.unsqueeze(0)
+            squeeze_output = True
+        else:
+            squeeze_output = False
+            
+        # Ensure GammaL and GammaR have batch dimension
+        if GammaL.dim() == 1:
+            GammaL = GammaL.unsqueeze(0)
+        if GammaR.dim() == 1:
+            GammaR = GammaR.unsqueeze(0)
+
+        batch_size = H_matrix.size(0)
+        H_size = H_matrix.size(1)
+        device = H_matrix.device
+
+        def maybe_log10(x: torch.Tensor) -> torch.Tensor:
+            if self.use_log_outputs:
+                return torch.log10(torch.clamp(x, min=self.log_floor))
+            return x
+
+        dtype_real = H_matrix.dtype
+        H_expanded = H_matrix.unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)
+        energy = torch.tensor(self.energy_grid, dtype=dtype_real, device=device)
+        energy = energy.view(1, -1, 1, 1).expand(batch_size, -1, H_size, H_size)
+        I = torch.eye(H_size, dtype=dtype_real, device=device).view(1, 1, H_size, H_size).expand_as(H_expanded)
+
+        gamma_total = (GammaL + GammaR)
+        Sigma_im = -0.5 * torch.diag_embed(gamma_total)  # [batch, H_size, H_size]
+        Sigma = 1j * Sigma_im.unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)
+
+        # Small positive imaginary part for causality
+        eta = self.complex_eta
+        A = (energy + 1j * eta) * I - H_expanded - Sigma
+
+        # Solve A @ Gr = I
+        I_c = torch.eye(H_size, dtype=torch.complex64 if dtype_real==torch.float32 else torch.complex128, device=device)
+        I_c = I_c.view(1, 1, H_size, H_size).expand_as(A)
+        try:
+            Gr = torch.linalg.solve(A, I_c)
+        except torch.linalg.LinAlgError:
+            Gr = torch.linalg.pinv(A)
+        Ga = Gr.conj().transpose(-2, -1)
+
+        # DOS = -1/pi * Im Tr(Gr)
+        DOS_lin = (-1/np.pi) * torch.imag(torch.einsum('benn->be', Gr))
+        DOS_lin = torch.clamp(DOS_lin, min=self.log_floor)
+
+        # Transmission: Tr[GammaL Gr GammaR Ga]
+        GammaL_mat = torch.diag_embed(GammaL).unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)
+        GammaR_mat = torch.diag_embed(GammaR).unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)
+        M = torch.matmul(torch.matmul(GammaL_mat, Gr), torch.matmul(GammaR_mat, Ga))
+        T_lin = torch.real(torch.einsum('benn->be', M))
+        T_lin = torch.clamp(T_lin, min=self.log_floor)
+
+        DOS = maybe_log10(DOS_lin)
+        T = maybe_log10(T_lin)
+
         if squeeze_output:
             return T.squeeze(0), DOS.squeeze(0), H_matrix.squeeze(0)
         else:
@@ -604,8 +688,14 @@ class DNATransportHamiltonianGNN(nn.Module):
         # Get contact vectors using original features for contact detection
         GammaL, GammaR = self.get_contact_vectors(x_initial, edge_attr_initial, edge_index, batch)
         
-        # Calculate transport properties using NEGF
-        dos_pred, transmission_pred, H = self.NEGFProjection(H_matrix, GammaL, GammaR)
+        # Calculate transport properties using selected NEGF solver
+        if getattr(self, 'solver_type', 'frobenius') == 'complex':
+            out1, out2, H = self.NEGFProjectionComplex(H_matrix, GammaL, GammaR)
+        else:
+            out1, out2, H = self.NEGFProjection(H_matrix, GammaL, GammaR)
+
+        # Preserve existing variable order for backward compatibility
+        dos_pred, transmission_pred = out1, out2
 
         self.H = H
 
