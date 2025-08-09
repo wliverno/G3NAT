@@ -156,3 +156,5 @@ Thumbs.db
 
 # Checkpoints
 checkpoints/*
+checkpoints/training_progress.json
+checkpoints/training_status.txt

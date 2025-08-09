@@ -9,16 +9,16 @@ from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 
 
-# Base encoding - 6x one-hot for A, T, G, C, Purine, Pyrimidine
+# Base encoding - 4x one-hot for A, T, G, C
 BASE_TO_IDX = {'A': 0, 'T': 1, 'G': 2, 'C': 3}
 BASE_FEATURES = {
-    'A': [1, 0, 0, 0, 1, 0], 
-    'T': [0, 1, 0, 0, 0, 1],
-    'G': [0, 0, 1, 0, 1, 0],
-    'C': [0, 0, 0, 1, 0, 1]
+    'A': [1, 0, 0, 0], 
+    'T': [0, 1, 0, 0],
+    'G': [0, 0, 1, 0],
+    'C': [0, 0, 0, 1]
 }
 # Contact features (electrodes)
-CONTACT_FEATURES = [0, 0, 0, 0, 0, 0]  # Special marker for contacts
+CONTACT_FEATURES = [0, 0, 0, 0]  # Special marker for contacts
 
 # Edge encoding - 3x one-hot + directionality + contact coupling
 def get_edge_features(edge_type: str, directionality: int, coupling: float = 0.0):
