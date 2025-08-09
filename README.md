@@ -77,5 +77,26 @@ pytest -q
 - Edge features: 5 values per edge: [backbone_onehot, hbond_onehot, contact_onehot, directionality, coupling]
 - Hamiltonian NEGF implementation is vectorized for stability; transmission/DOS are returned as log10-safe values for training stability in `DNATransportHamiltonianGNN`.
 
-### License
-MIT 
+### Contact configuration defaults
+- **Default policy (graph + generator)**: left contact attaches to position `0` of the primary strand; right contact attaches to position `len(primary_sequence) - 1` of the primary strand.
+- **Specifying contacts**: pass `int`, `List[int]`, or `Tuple[str, Union[int, List[int]]]` where the first element of the tuple is `'primary'` or `'complementary'` to target a specific strand.
+  - Example:
+    ```python
+    from dataset import sequence_to_graph
+
+    G = sequence_to_graph(
+        primary_sequence="ACGTACGT",
+        complementary_sequence="TGCATGCA",
+        left_contact_positions=("primary", 0),
+        right_contact_positions=("primary", 7),
+        left_contact_coupling=0.1,
+        right_contact_coupling=0.2,
+    )
+    ```
+- **Complementary indexing**: positions for the complementary strand are 0-indexed into the provided `complementary_sequence` string.
+- **Consistency**: the simple physics generator in `data_generator.create_hamiltonian` follows the same default (primary-end) policy. Dataset helpers will not override explicitly provided contact positions.
+
+### Hamiltonian construction semantics
+- In `DNATransportHamiltonianGNN`, the Hamiltonian is constructed directly from the graph:
+  - **Nodes** contribute onsite blocks (diagonal terms).
+  - **Edges** contribute coupling blocks (off-diagonal terms).

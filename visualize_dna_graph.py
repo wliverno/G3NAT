@@ -40,63 +40,83 @@ def visualize_dna_graph(graph, primary_sequence=None, complementary_sequence=Non
     edge_styles = {}
     edge_colors = []
     
+    # Precompute strand segmentation and position maps based on how sequence_to_graph builds nodes
+    if primary_sequence is not None:
+        primary_positions_nonblank = [i for i, b in enumerate(primary_sequence) if b != '_']
+        primary_count = len(primary_positions_nonblank)
+    else:
+        primary_positions_nonblank = []
+        primary_count = 0
+
+    if complementary_sequence is not None:
+        complementary_positions_nonblank = [i for i, b in enumerate(complementary_sequence) if b != '_']
+        complementary_count = len(complementary_positions_nonblank)
+    else:
+        complementary_positions_nonblank = []
+        complementary_count = 0
+
+    primary_start_idx = 2
+    complementary_start_idx = primary_start_idx + primary_count
+
     # Process nodes
     for node in nx_graph.nodes():
         if node == 0:  # Left contact
             node_labels[node] = 'L'
             node_colors.append('red')
             node_positions[node] = (-2, 0)
-        elif node == 1:  # Right contact (dataset defines right contact as node 1)
+            continue
+        if node == 1:  # Right contact
             node_labels[node] = 'R'
             node_colors.append('red')
-            node_positions[node] = (len(primary_sequence) + 1 if primary_sequence else 10, 0)
+            node_positions[node] = ((len(primary_sequence) if primary_sequence else 10) + 1, 0)
+            continue
+
+        # For base nodes, determine the base type from node features
+        node_features = graph.x[node].numpy()
+        # Skip safety for malformed data
+        if np.all(node_features == 0):
+            continue
+
+        # Determine base type from one-hot encoding
+        base_features = node_features[:4]
+        if base_features[0] == 1:
+            base = 'A'
+        elif base_features[1] == 1:
+            base = 'T'
+        elif base_features[2] == 1:
+            base = 'G'
+        elif base_features[3] == 1:
+            base = 'C'
         else:
-            # For base nodes, determine the base type from node features
-            node_features = graph.x[node].numpy()
-            
-            # Check if this is a contact node (all features are 0 for contacts)
-            if np.all(node_features == 0):
-                # This shouldn't happen for non-contact nodes, but just in case
-                continue
-            
-            # Determine base type from one-hot encoding
-            base_features = node_features[:4]
-            if base_features[0] == 1:  # A
-                base = 'A'
-            elif base_features[1] == 1:  # T
-                base = 'T'
-            elif base_features[2] == 1:  # G
-                base = 'G'
-            elif base_features[3] == 1:  # C
-                base = 'C'
+            base = '?'
+
+        # Positioning: map node index back to original sequence position
+        if primary_sequence is not None and primary_start_idx <= node < primary_start_idx + primary_count:
+            # Primary strand node
+            k = node - primary_start_idx
+            seq_pos = primary_positions_nonblank[k]
+            x_pos = seq_pos
+            y_pos = 0.5
+            node_colors.append('lightblue')
+        elif complementary_sequence is not None and complementary_start_idx <= node < complementary_start_idx + complementary_count:
+            # Complementary strand node
+            k = node - complementary_start_idx
+            comp_seq_pos = complementary_positions_nonblank[k]
+            # Align with its paired primary position: x = len(primary) - 1 - comp_pos
+            if primary_sequence is not None:
+                x_pos = len(primary_sequence) - 1 - comp_seq_pos
             else:
-                base = '?'  # Unknown base
-            
-            # Simple positioning based on node index
-            # Primary strand nodes come first, then complementary strand nodes
-            primary_count = sum(1 for i, base in enumerate(primary_sequence) if base != '_') if primary_sequence else 0
-            
-            if node <= primary_count:
-                # Primary strand
-                strand = 'primary'
-                pos = node - 1
-                y_pos = 0.5
-                node_colors.append('lightblue')
-            else:
-                # Complementary strand - align with corresponding primary positions for vertical hydrogen bonds
-                strand = 'complementary'
-                # Find the corresponding position in the complementary sequence
-                comp_node_idx = node - primary_count - 1
-                comp_positions = [len(primary_sequence) - i - 1 for i, base in enumerate(complementary_sequence) if base != '_'] if complementary_sequence and primary_sequence else []
-                if comp_node_idx < len(comp_positions):
-                    pos = comp_positions[comp_node_idx]  # Use actual sequence position
-                else:
-                    pos = comp_node_idx  # Fallback
-                y_pos = -0.5
-                node_colors.append('lightgreen')
-            
-            node_labels[node] = base
-            node_positions[node] = (pos, y_pos)
+                x_pos = comp_seq_pos
+            y_pos = -0.5
+            node_colors.append('lightgreen')
+        else:
+            # Fallback: place sequentially
+            x_pos = node
+            y_pos = 0
+            node_colors.append('gray')
+
+        node_labels[node] = base
+        node_positions[node] = (x_pos, y_pos)
     
     # Process edges
     for edge in nx_graph.edges():
@@ -243,8 +263,8 @@ def visualize_multiple_examples():
     graph3 = sequence_to_graph(
         primary_sequence="ACGTACGT",
         complementary_sequence="TGCATGCA",
-        left_contact_positions=('complementary', [0, 2]),
-        right_contact_positions=('complementary', [5, 7]),
+        left_contact_positions=('complementary', [5, 7]),
+        right_contact_positions=('complementary', [0, 2]),
         left_contact_coupling=[0.1, 0.15],
         right_contact_coupling=[0.2, 0.25]
     )
