@@ -73,7 +73,7 @@ pytest -q
 ```
 
 ### Notes
-- Node features: 6 one-hot features (A, T, G, C, Purine, Pyrimidine)
+- Node features: 4 one-hot features (A, T, G, C)
 - Edge features: 5 values per edge: [backbone_onehot, hbond_onehot, contact_onehot, directionality, coupling]
 - Hamiltonian NEGF implementation is vectorized for stability; transmission/DOS are returned as log10-safe values for training stability in `DNATransportHamiltonianGNN`.
 

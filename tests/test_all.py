@@ -21,8 +21,8 @@ def test_sequence_to_graph_single_strand():
     assert graph.x is not None and graph.edge_index is not None and graph.edge_attr is not None
     # 2 contacts + len(seq) bases
     assert graph.x.shape[0] == len(seq) + 2
-    # Node features = 6, edge features = 5 per current implementation
-    assert graph.x.shape[1] == 6
+    # Node features = 4, edge features = 5 per current implementation
+    assert graph.x.shape[1] == 4
     assert graph.edge_attr.shape[1] == 5
 
     # Contact edges should have contact flag at index 2 and coupling at index 4

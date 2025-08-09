@@ -24,7 +24,7 @@ class DNATransportGNN(nn.Module):
                  dropout: float = 0.1):
         super().__init__()
         # Use features specified in dataset.py
-        node_features = 6  # 6 one-hot features (A, T, G, C, Purine, Pyrimidine)
+        node_features = 4  # 4 one-hot features (A, T, G, C)
         edge_features = 5  # 3 one-hot + directionality + coupling
         
         
@@ -114,7 +114,7 @@ class DNATransportHamiltonianGNN(nn.Module):
                  n_orb: int = 1):
         super().__init__()
         # Use features specified in dataset.py
-        node_features = 6  # 6 one-hot features (A, T, G, C, Purine, Pyrimidine)
+        node_features = 4  # 4 one-hot features (A, T, G, C)
         edge_features = 5  # 3 one-hot + directionality + coupling
         
         
@@ -622,7 +622,7 @@ class DNAHamiltonianGNN(nn.Module):
                  dropout: float = 0.1):
         super().__init__()
         # Use features specified in dataset.py
-        node_features = 6  # 6 one-hot features (A, T, G, C, Purine, Pyrimidine)
+        node_features = 4  # 4 one-hot features (A, T, G, C)
         edge_features = 5  # 3 one-hot + directionality + coupling
         
         
