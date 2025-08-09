@@ -153,3 +153,6 @@ sample_predictions.png
 # OS
 .DS_Store
 Thumbs.db 
+
+# Checkpoints
+checkpoints/*

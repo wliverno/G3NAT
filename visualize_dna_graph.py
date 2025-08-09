@@ -46,7 +46,7 @@ def visualize_dna_graph(graph, primary_sequence=None, complementary_sequence=Non
             node_labels[node] = 'L'
             node_colors.append('red')
             node_positions[node] = (-2, 0)
-        elif node == graph.x.shape[0] - 1:  # Right contact
+        elif node == 1:  # Right contact (dataset defines right contact as node 1)
             node_labels[node] = 'R'
             node_colors.append('red')
             node_positions[node] = (len(primary_sequence) + 1 if primary_sequence else 10, 0)
@@ -107,12 +107,12 @@ def visualize_dna_graph(graph, primary_sequence=None, complementary_sequence=Non
         for i in range(graph.edge_index.shape[1]):
             if (graph.edge_index[0, i].item() == src and graph.edge_index[1, i].item() == dst) or \
                (graph.edge_index[0, i].item() == dst and graph.edge_index[1, i].item() == src):
-                # New edge feature structure: [backbone_flag, hbond_flag, contact_flag, coupling, directionality]
+                # Edge features: [backbone_onehot, hbond_onehot, contact_onehot, directionality, coupling]
                 backbone_flag = graph.edge_attr[i, 0].item()
                 h_bond_flag = graph.edge_attr[i, 1].item()
                 contact_flag = graph.edge_attr[i, 2].item()
-                coupling = graph.edge_attr[i, 3].item()
-                directionality = graph.edge_attr[i, 4].item()
+                directionality = graph.edge_attr[i, 3].item()
+                coupling = graph.edge_attr[i, 4].item()
                 edge_found = True
                 break
         
