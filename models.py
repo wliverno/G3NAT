@@ -1080,8 +1080,8 @@ def load_trained_model(model_path: str, device: str = 'auto'):
 
 
 def predict_sequence(model, sequence: str, complementary_sequence: str,
-                    left_contact_positions=0, right_contact_positions=None,
-                    left_contact_coupling=0.1, right_contact_coupling=0.2):
+                    left_contact_positions=None, right_contact_positions=None,
+                    left_contact_coupling=0.1, right_contact_coupling=0.1):
     """
     Predict DOS and transmission for a DNA sequence.
     
@@ -1101,6 +1101,7 @@ def predict_sequence(model, sequence: str, complementary_sequence: str,
         right_contact_positions = len(sequence) - 1
     
     print(f"Predicting for sequence: {sequence}")
+    print(f"                         {complementary_sequence[::-1]}")
     print(f"Left contact at position {left_contact_positions}, coupling: {left_contact_coupling}")
     print(f"Right contact at position {right_contact_positions}, coupling: {right_contact_coupling}")
     

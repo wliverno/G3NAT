@@ -93,12 +93,21 @@ def create_hamiltonian(seq: str,
         H[i, i+1] = coupling_strength
         H[i+1, i] = coupling_strength  # Hermitian
     
-    # Default gamma vectors: contact coupling only on first and last DNA nodes
+    # Default gamma vectors (Option A semantics):
+    # - Left contact couples to the first PRIMARY base
+    # - Right contact couples to the LAST PRIMARY base
+    # Fallback: if no primary bases exist, couple to the first/last available DNA node respectively
     GammaL = np.zeros(num_dna_nodes)
-    GammaL[0] = 0.1  # Left contact couples to first DNA base
+    if primary_nodes > 0:
+        GammaL[0] = 0.1
+    elif num_dna_nodes > 0:
+        GammaL[0] = 0.1
     
-    GammaR = np.zeros(num_dna_nodes)  
-    GammaR[-1] = 0.1  # Right contact couples to last DNA base
+    GammaR = np.zeros(num_dna_nodes)
+    if primary_nodes > 0:
+        GammaR[primary_nodes - 1] = 0.1
+    elif num_dna_nodes > 0:
+        GammaR[-1] = 0.1
     
     return H, GammaL, GammaR
 
