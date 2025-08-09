@@ -188,17 +188,32 @@ class DNATransportHamiltonianGNN(nn.Module):
         if batch is None:
             batch = torch.zeros(node_features.size(0), dtype=torch.long, device=device)
         
-        batch_size = batch.max().item() + 1
+        batch_size = int(batch.max().item() + 1)
         
         # Find DNA nodes (non-contact nodes: not all zeros in original features)
         contact_node_mask = torch.all(original_node_features == 0, dim=1)
         dna_node_mask = ~contact_node_mask
         dna_nodes = torch.where(dna_node_mask)[0]
-        num_dna_nodes = len(dna_nodes)
+
+        # Compute per-graph DNA node counts to support batching safely
+        node_counts = torch.bincount(batch, minlength=batch_size)
+        dna_counts = []
+        start_idx = 0
+        for b_idx in range(batch_size):
+            count = int(node_counts[b_idx].item())
+            end_idx = start_idx + count
+            graph_mask = torch.zeros_like(batch, dtype=torch.bool)
+            graph_mask[start_idx:end_idx] = True
+            dna_counts.append(int((dna_node_mask & graph_mask).sum().item()))
+            start_idx = end_idx
         
-        # Calculate H_size: num_dna_nodes * n_orb
-        if batch_size > 1:
-            num_dna_nodes = num_dna_nodes // batch_size
+        # Ensure all graphs in the batch have the same number of DNA nodes
+        if batch_size > 1 and not all(dc == dna_counts[0] for dc in dna_counts):
+            raise ValueError(
+                f"All graphs in a batch must have the same number of DNA nodes. Got {dna_counts}. "
+                "Enable length-bucketing DataLoader for the hamiltonian model."
+            )
+        num_dna_nodes = dna_counts[0]
         H_size = num_dna_nodes * self.n_orb
         
         # Get onsite energies for DNA nodes only
@@ -216,8 +231,13 @@ class DNATransportHamiltonianGNN(nn.Module):
         
         # Process each graph in the batch
         for batch_idx in range(batch_size):
-            # Get nodes and edges for this graph
-            node_mask = batch == batch_idx
+            # Get nodes and edges for this graph using contiguous block ranges
+            # torch_geometric batches concatenate node arrays in order
+            nodes_before = int(torch.sum(torch.bincount(batch, minlength=batch_size)[:batch_idx]).item())
+            nodes_in_graph = int(torch.bincount(batch, minlength=batch_size)[batch_idx].item())
+            graph_node_indices = torch.arange(nodes_before, nodes_before + nodes_in_graph, device=device)
+            node_mask = torch.zeros_like(batch, dtype=torch.bool)
+            node_mask[graph_node_indices] = True
             dna_nodes_batch = torch.where(node_mask & dna_node_mask)[0]
             
             # Create mapping from global DNA node indices to local block indices
@@ -232,29 +252,35 @@ class DNATransportHamiltonianGNN(nn.Module):
                 global_dna_idx = torch.where(dna_nodes == global_idx)[0][0].item()
                 H_matrix[batch_idx, orb_start:orb_end, orb_start:orb_end] = onsite_blocks[global_dna_idx]
             
-            # Fill off-diagonal blocks (couplings)
+            # Fill off-diagonal blocks (couplings) using unique undirected pairs only
             edge_mask = torch.isin(edge_index[0], dna_nodes_batch) & torch.isin(edge_index[1], dna_nodes_batch)
             graph_edge_indices = torch.where(edge_mask)[0]  # Global edge indices
             graph_edge_index = edge_index[:, edge_mask]
-            
+
+            processed_pairs = set()
             for local_edge_idx, (src, dst) in enumerate(graph_edge_index.T):
-                if src.item() in dna_to_local and dst.item() in dna_to_local:
-                    src_local = dna_to_local[src.item()]
-                    dst_local = dna_to_local[dst.item()]
-                    
-                    src_orb_start = src_local * self.n_orb
-                    src_orb_end = src_orb_start + self.n_orb
-                    dst_orb_start = dst_local * self.n_orb  
-                    dst_orb_end = dst_orb_start + self.n_orb
-                    
-                    # Get the coupling block for this edge using global edge index
+                src_g = src.item(); dst_g = dst.item()
+                if src_g in dna_to_local and dst_g in dna_to_local:
+                    src_local = dna_to_local[src_g]
+                    dst_local = dna_to_local[dst_g]
+                    u, v = (src_local, dst_local) if src_local <= dst_local else (dst_local, src_local)
+                    pair = (u, v)
+                    if u == v or pair in processed_pairs:
+                        continue  # skip self-loops and duplicate reverse edges
+                    processed_pairs.add(pair)
+
+                    u_orb_start = u * self.n_orb
+                    u_orb_end = u_orb_start + self.n_orb
+                    v_orb_start = v * self.n_orb
+                    v_orb_end = v_orb_start + self.n_orb
+
+                    # Use the first occurrence's coupling block for this undirected pair
                     global_edge_idx = graph_edge_indices[local_edge_idx]
                     coupling_block = coupling_blocks[global_edge_idx]
-                    
-                    # Set coupling: H[i,j] = coupling_block
-                    H_matrix[batch_idx, src_orb_start:src_orb_end, dst_orb_start:dst_orb_end] = coupling_block
-                    # Hermiticity: H[j,i] = coupling_block.conj().T
-                    H_matrix[batch_idx, dst_orb_start:dst_orb_end, src_orb_start:src_orb_end] = coupling_block.conj().T
+
+                    # Set symmetric coupling blocks
+                    H_matrix[batch_idx, u_orb_start:u_orb_end, v_orb_start:v_orb_end] = coupling_block
+                    H_matrix[batch_idx, v_orb_start:v_orb_end, u_orb_start:u_orb_end] = coupling_block.conj().T
         
         # Ensure H is positive definite by adding a diagonal shift
         shift = 1e-6  # Small positive value
@@ -405,12 +431,22 @@ class DNATransportHamiltonianGNN(nn.Module):
         if batch is None:
             batch = torch.zeros(x.size(0), dtype=torch.long, device=device)
         
-        batch_size = batch.max().item() + 1
+        batch_size = int(batch.max().item() + 1)
         
-        # Calculate nodes per graph and H_size
-        nodes_per_graph = x.size(0) // batch_size if batch_size > 1 else x.size(0)
-        # Subtract 2 contacts (node 0 and node 1) from each graph  
-        num_dna_nodes = nodes_per_graph - 2
+        # Calculate nodes per graph and H_size from batch vector
+        node_counts = torch.bincount(batch, minlength=batch_size)
+        dna_counts = []
+        for b_idx in range(batch_size):
+            count = int(node_counts[b_idx].item())
+            # Two contacts per graph
+            dna_counts.append(max(0, count - 2))
+        
+        if batch_size > 1 and not all(dc == dna_counts[0] for dc in dna_counts):
+            raise ValueError(
+                f"All graphs in a batch must have the same number of DNA nodes (nodes-2). Got {dna_counts}. "
+                "Enable length-bucketing DataLoader for the hamiltonian model."
+            )
+        num_dna_nodes = dna_counts[0]
         H_size = num_dna_nodes * self.n_orb
         
         # Initialize output tensors
@@ -419,13 +455,10 @@ class DNATransportHamiltonianGNN(nn.Module):
         
         # Process each graph in the batch
         for batch_idx in range(batch_size):
-            # Get node range for this graph
-            if batch_size > 1:
-                start_node = batch_idx * nodes_per_graph
-                end_node = start_node + nodes_per_graph
-                graph_nodes = torch.arange(start_node, end_node, device=device)
-            else:
-                graph_nodes = torch.arange(x.size(0), device=device)
+            # Get node range for this graph using counts rather than average
+            start_node = int(torch.sum(node_counts[:batch_idx]).item())
+            end_node = start_node + int(node_counts[batch_idx].item())
+            graph_nodes = torch.arange(start_node, end_node, device=device)
             
             # Left contact is node 0, right contact is node 1
             left_contact_idx = graph_nodes[0]

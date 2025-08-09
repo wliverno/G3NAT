@@ -240,7 +240,13 @@ def sequence_to_graph(primary_sequence: str,
     edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
     edge_attr = torch.tensor(edge_attr, dtype=torch.float)
     
-    return Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
+    data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
+    # Annotate with number of DNA nodes (total nodes minus 2 contacts)
+    try:
+        data.num_dna_nodes = int(x.size(0) - 2)
+    except Exception:
+        pass
+    return data
 
 
 class DNATransportDataset(torch.utils.data.Dataset):
