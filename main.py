@@ -348,6 +348,19 @@ def main():
     # Setup checkpoint directory
     os.makedirs(args.checkpoint_dir, exist_ok=True)
     
+    # Enforce recommended dropout defaults per model type unless explicitly overridden
+    # If user supplied a non-default dropout, respect it. Otherwise, set better defaults.
+    if 'dropout' in vars(args):
+        user_supplied_dropout = args.dropout != 0.1  # parser default
+    else:
+        user_supplied_dropout = False
+
+    if not user_supplied_dropout:
+        if args.model_type == 'standard':
+            args.dropout = 0.2
+        elif args.model_type == 'hamiltonian':
+            args.dropout = 0.0
+
     print("Starting DNA Transport GNN training")
     print(f"Arguments: {vars(args)}")
     

@@ -21,7 +21,7 @@ class DNATransportGNN(nn.Module):
                  num_layers: int = 4,
                  num_heads: int = 4,
                  output_dim: int = 100,  # Number of energy points
-                 dropout: float = 0.1):
+                 dropout: float = 0.2):
         super().__init__()
         # Use features specified in dataset.py
         node_features = 4  # 4 one-hot features (A, T, G, C)
@@ -31,6 +31,7 @@ class DNATransportGNN(nn.Module):
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
         self.output_dim = output_dim
+        self.dropout = dropout
         
         # Input projections
         self.node_proj = nn.Linear(node_features, hidden_dim)
@@ -89,7 +90,7 @@ class DNATransportGNN(nn.Module):
             x = self.convs[i](x, edge_index, edge_attr)
             x = self.norms[i](x)
             x = F.relu(x)
-            x = F.dropout(x, p=0.1, training=self.training)
+            x = F.dropout(x, p=self.dropout, training=self.training)
         
         # Global pooling
         x = self.global_pool(x, batch)
