@@ -144,8 +144,8 @@ def calculate_NEGF(H: np.ndarray,
             # Fallback for singular matrices (match models.py)
             Gr = np.linalg.pinv(A + 1e-8j * np.eye(H_size))
         
-        # Calculate DOS: -Im(Tr(Gr)) (match models.py)
-        dos_data[n] = -np.trace(np.imag(Gr))
+        # Calculate DOS: -Im(Tr(Gr))/pi (match models.py)
+        dos_data[n] = -np.trace(np.imag(Gr))/np.pi
         
         # Calculate transmission: Tr(ΓL * Gr * ΓR * Ga) (match models.py)
         Ga = Gr.conj().T

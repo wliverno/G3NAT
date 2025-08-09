@@ -16,6 +16,7 @@ import json
 import time
 from typing import Tuple, List, Dict, Optional
 from torch_geometric.loader import DataLoader
+from torch.utils.data import Sampler
 
 from models import DNATransportGNN, DNATransportHamiltonianGNN, train_model
 from data_generator import create_sample_data
@@ -48,7 +49,9 @@ def parse_args():
                        help='Number of attention heads')
     parser.add_argument('--dropout', type=float, default=0.1,
                        help='Dropout rate')
-    
+    parser.add_argument('--n_orb', type=int, default=1,
+                       help='Number of orbitals per DNA base (for hamiltonian model)')
+                       
     # Training parameters
     parser.add_argument('--batch_size', type=int, default=32,
                        help='Batch size for training')
@@ -227,6 +230,49 @@ def split_dataset(dataset, train_split: float = 0.8):
     return train_dataset, val_dataset
 
 
+class LengthBucketBatchSampler(Sampler[List[int]]):
+    """BatchSampler that groups indices by number of DNA nodes to create uniform-size batches."""
+    def __init__(self, dataset, batch_size: int, shuffle: bool = True):
+        self.dataset = dataset
+        self.batch_size = max(1, int(batch_size))
+        self.shuffle = shuffle
+        # Build buckets: num_dna_nodes -> list of indices
+        buckets = {}
+        for idx in range(len(dataset)):
+            data = dataset[idx]
+            # For Subset, dataset[idx] yields underlying Data object
+            num_dna = int(getattr(data, 'num_dna_nodes', data.x.size(0) - 2))
+            buckets.setdefault(num_dna, []).append(idx)
+        self.buckets = buckets
+        # Precompute batches
+        self._batches = self._build_batches()
+
+    def _build_batches(self):
+        batches = []
+        for _, indices in self.buckets.items():
+            if self.shuffle:
+                rng = np.random.default_rng()
+                rng.shuffle(indices)
+            # chunk into batches
+            for i in range(0, len(indices), self.batch_size):
+                batch = indices[i:i + self.batch_size]
+                batches.append(batch)
+        if self.shuffle:
+            rng = np.random.default_rng()
+            rng.shuffle(batches)
+        return batches
+
+    def __iter__(self):
+        # Rebuild each epoch if shuffling
+        if self.shuffle:
+            self._batches = self._build_batches()
+        for b in self._batches:
+            yield b
+
+    def __len__(self):
+        return len(self._batches)
+
+
 def initialize_model(args, energy_grid=None):
     """Initialize the DNA Transport GNN model."""
     
@@ -247,7 +293,7 @@ def initialize_model(args, energy_grid=None):
             num_heads=args.num_heads,
             energy_grid=energy_grid,
             dropout=args.dropout,
-            n_orb=1  # Number of orbitals per DNA base
+            n_orb=args.n_orb  # Number of orbitals per DNA base
         )
     else:
         raise ValueError(f"Unknown model type: {args.model_type}")
@@ -349,9 +395,16 @@ def main():
     # Split into train/validation sets
     train_dataset, val_dataset = split_dataset(dataset)
     
-    # Create data loaders
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
+    # Create data loaders with length bucketing for Hamiltonian model; standard loader otherwise
+    if args.model_type == 'hamiltonian':
+        # Use our custom batch sampler over the Subset wrapper
+        train_sampler = LengthBucketBatchSampler(train_dataset, batch_size=args.batch_size, shuffle=True)
+        val_sampler = LengthBucketBatchSampler(val_dataset, batch_size=args.batch_size, shuffle=False)
+        train_loader = DataLoader(train_dataset, batch_sampler=train_sampler)
+        val_loader = DataLoader(val_dataset, batch_sampler=val_sampler)
+    else:
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
     
     # Initialize model
     print("Initializing model...")
