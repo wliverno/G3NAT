@@ -49,6 +49,8 @@ def parse_args():
                        help='Number of attention heads')
     parser.add_argument('--dropout', type=float, default=0.1,
                        help='Dropout rate')
+    parser.add_argument('--conv_type', type=str, default='transformer', choices=['transformer', 'gat'],
+                       help='Convolution type for message passing layers')
     parser.add_argument('--n_orb', type=int, default=1,
                        help='Number of orbitals per DNA base (for hamiltonian model)')
                        
@@ -282,7 +284,8 @@ def initialize_model(args, energy_grid=None):
             num_layers=args.num_layers,
             num_heads=args.num_heads,
             output_dim=args.num_energy_points,
-            dropout=args.dropout
+            dropout=args.dropout,
+            conv_type=args.conv_type,
         )
     elif args.model_type == 'hamiltonian':
         if energy_grid is None:
@@ -293,7 +296,8 @@ def initialize_model(args, energy_grid=None):
             num_heads=args.num_heads,
             energy_grid=energy_grid,
             dropout=args.dropout,
-            n_orb=args.n_orb  # Number of orbitals per DNA base
+            n_orb=args.n_orb,  # Number of orbitals per DNA base
+            conv_type=args.conv_type,
         )
     else:
         raise ValueError(f"Unknown model type: {args.model_type}")

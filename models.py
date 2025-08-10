@@ -21,7 +21,8 @@ class DNATransportGNN(nn.Module):
                  num_layers: int = 4,
                  num_heads: int = 4,
                  output_dim: int = 100,  # Number of energy points
-                 dropout: float = 0.2):
+                 dropout: float = 0.2,
+                 conv_type: str = 'transformer'):
         super().__init__()
         # Use features specified in dataset.py
         node_features = 4  # 4 one-hot features (A, T, G, C)
@@ -32,6 +33,7 @@ class DNATransportGNN(nn.Module):
         self.num_layers = num_layers
         self.output_dim = output_dim
         self.dropout = dropout
+        self.conv_type = conv_type.lower()
         
         # Input projections
         self.node_proj = nn.Linear(node_features, hidden_dim)
@@ -42,8 +44,16 @@ class DNATransportGNN(nn.Module):
         self.norms = nn.ModuleList()
         
         for i in range(num_layers):
-            conv = GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, 
-                          dropout=dropout, add_self_loops=True, edge_dim=hidden_dim)
+            if self.conv_type == 'gat':
+                conv = GATConv(
+                    hidden_dim, hidden_dim // num_heads, heads=num_heads,
+                    dropout=dropout, add_self_loops=True, edge_dim=hidden_dim
+                )
+            else:
+                conv = TransformerConv(
+                    hidden_dim, hidden_dim // num_heads, heads=num_heads,
+                    dropout=dropout, edge_dim=hidden_dim
+                )
             self.convs.append(conv)
             self.norms.append(nn.LayerNorm(hidden_dim))
         
@@ -117,7 +127,8 @@ class DNATransportHamiltonianGNN(nn.Module):
                  solver_type: str = "frobenius",  # "frobenius" | "complex"
                  use_log_outputs: bool = True,
                  log_floor: float = 1e-16,
-                 complex_eta: float = 1e-12):
+                 complex_eta: float = 1e-12,
+                 conv_type: str = 'gat'):
         super().__init__()
         # Use features specified in dataset.py
         node_features = 4  # 4 one-hot features (A, T, G, C)
@@ -135,6 +146,7 @@ class DNATransportHamiltonianGNN(nn.Module):
         self.use_log_outputs = use_log_outputs
         self.log_floor = float(log_floor)
         self.complex_eta = float(complex_eta)
+        self.conv_type = conv_type.lower()
 
         # Size-agnostic: Hamiltonian constructed from graph structure
         # H_size = num_dna_nodes * n_orb (total number of orbitals)
@@ -148,8 +160,16 @@ class DNATransportHamiltonianGNN(nn.Module):
         self.norms = nn.ModuleList()
         
         for i in range(num_layers):
-            conv = GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, 
-                          dropout=dropout, add_self_loops=True, edge_dim=hidden_dim)
+            if self.conv_type == 'gat':
+                conv = GATConv(
+                    hidden_dim, hidden_dim // num_heads, heads=num_heads,
+                    dropout=dropout, add_self_loops=True, edge_dim=hidden_dim
+                )
+            else:
+                conv = TransformerConv(
+                    hidden_dim, hidden_dim // num_heads, heads=num_heads,
+                    dropout=dropout, edge_dim=hidden_dim
+                )
             self.convs.append(conv)
             self.norms.append(nn.LayerNorm(hidden_dim))
         
@@ -710,7 +730,8 @@ class DNAHamiltonianGNN(nn.Module):
                  num_heads: int = 4,
                  energy_grid: np.ndarray = np.linspace(-3, 3, 100),
                  max_len_dna: int = 10,
-                 dropout: float = 0.1):
+                 dropout: float = 0.1,
+                 conv_type: str = 'transformer'):
         super().__init__()
         # Use features specified in dataset.py
         node_features = 4  # 4 one-hot features (A, T, G, C)
@@ -722,6 +743,7 @@ class DNAHamiltonianGNN(nn.Module):
         self.energy_grid = energy_grid
         self.dropout = dropout
         self.output_dim = len(energy_grid)
+        self.conv_type = conv_type.lower()
 
         # Hamiltonian size specification
         self.H_size = max_len_dna*2
@@ -737,8 +759,16 @@ class DNAHamiltonianGNN(nn.Module):
         self.norms = nn.ModuleList()
         
         for i in range(num_layers):
-            conv = GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, 
-                          dropout=dropout, add_self_loops=True, edge_dim=hidden_dim)
+            if self.conv_type == 'gat':
+                conv = GATConv(
+                    hidden_dim, hidden_dim // num_heads, heads=num_heads,
+                    dropout=dropout, add_self_loops=True, edge_dim=hidden_dim
+                )
+            else:
+                conv = TransformerConv(
+                    hidden_dim, hidden_dim // num_heads, heads=num_heads,
+                    dropout=dropout, edge_dim=hidden_dim
+                )
             self.convs.append(conv)
             self.norms.append(nn.LayerNorm(hidden_dim))
         
@@ -1135,7 +1165,8 @@ def load_trained_model(model_path: str, device: str = 'auto'):
             num_heads=args.get('num_heads', 4),
             energy_grid=energy_grid,
             max_len_dna=args.get('max_len_dna', 10),
-            dropout=args.get('dropout', 0.1)
+            dropout=args.get('dropout', 0.1),
+            conv_type=args.get('conv_type', 'gat')
         )
         print("DNATransportHamiltonianGNN initialized successfully")
     elif model_type == 'simple_hamiltonian':
@@ -1145,7 +1176,8 @@ def load_trained_model(model_path: str, device: str = 'auto'):
             num_heads=args.get('num_heads', 4),
             energy_grid=energy_grid,
             max_len_dna=args.get('max_len_dna', 10),
-            dropout=args.get('dropout', 0.1)
+            dropout=args.get('dropout', 0.1),
+            conv_type=args.get('conv_type', 'transformer')
         )
         print("DNAHamiltonianGNN initialized successfully")
     else:  # standard
@@ -1154,7 +1186,8 @@ def load_trained_model(model_path: str, device: str = 'auto'):
             num_layers=args.get('num_layers', 4),
             num_heads=args.get('num_heads', 4),
             output_dim=args.get('num_energy_points', 100),
-            dropout=args.get('dropout', 0.1)
+            dropout=args.get('dropout', 0.1),
+            conv_type=args.get('conv_type', 'transformer')
         )
         print("DNATransportGNN initialized successfully")
     

@@ -90,6 +90,7 @@ def build_model(variant: Variant, energy_grid: np.ndarray) -> torch.nn.Module:
             num_heads=variant.params.get("num_heads", 4),
             output_dim=len(energy_grid),
             dropout=variant.params.get("dropout", 0.1),
+            conv_type=variant.params.get("conv_type", "transformer"),
         )
     elif variant.model == "hamiltonian":
         return DNATransportHamiltonianGNN(
@@ -104,6 +105,7 @@ def build_model(variant: Variant, energy_grid: np.ndarray) -> torch.nn.Module:
             use_log_outputs=variant.params.get("use_log_outputs", True),
             log_floor=variant.params.get("log_floor", 1e-16),
             complex_eta=variant.params.get("complex_eta", 1e-12),
+            conv_type=variant.params.get("conv_type", "gat"),
         )
     else:
         raise ValueError(f"Unknown model type: {variant.model}")
