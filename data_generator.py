@@ -82,31 +82,85 @@ def create_hamiltonian(seq: str,
     
     # Build tight-binding Hamiltonian
     H = np.zeros((num_dna_nodes, num_dna_nodes))
+
+    # From Roche et al, 2003 10.1103/PhysRevLett.91.228101
+    onsite_energies = {
+        'A': -0.49,
+        'T': -1.39,
+        'G': 0.00,
+        'C': -1.12,
+        '_': 0.00,
+    }
+
+    # From Voityuk et al, 2001 (10.1063/1.1352035)
+    HBond_energies = {
+        'AA': 0.0,
+        'CC': 0.0,
+        'GG': 0.0,
+        'TT': 0.0,
+        'AT': 0.034,
+        'AG': 0.0,
+        'AC': 0.0,
+        'CT': 0.0,
+        'CG': 0.050,
+        'CA': 0.0, 
+        'GT': 0.0,
+        'GC': 0.050,
+        'GA': 0.0,
+        'TA': 0.034,
+        'TC': 0.0,
+        'TG': 0.0,
+    }
+    nn_energies = {
+        'AA': 0.030,
+        'CC': 0.041,
+        'GG': 0.084,
+        'TT': 0.158,
+        'AT': 0.105,
+        'AG': 0.049,
+        'AC': 0.061,
+        'CT': 0.100,
+        'CG': 0.042,
+        'CA': 0.029, 
+        'GT': 0.137,
+        'GC': 0.110,
+        'GA': 0.089,
+        'TA': 0.086,
+        'TC': 0.076,
+        'TG': 0.085,
+    }
+
+    # Fill in the Hamiltonian
+    full_seq = seq + seq_complementary[::-1]
+    for i in range(len(full_seq)):
+        for j in range(len(full_seq)):
+            base_1 = full_seq[i]
+            base_2 = full_seq[j]
+            if i == j:
+                H[i, j] = onsite_energies[base_1]
+            elif base_1 == '_' or base_2 == '_':
+                continue
+            elif i%len(seq) == j%len(seq):
+                H[i, j] = HBond_energies[base_1 + base_2]
+            elif i == j+1 and i//len(seq) == j//len(seq):
+                BP = base_1 + base_2
+                H[i, j] = nn_energies[BP]
+            elif i == j-1 and i//len(seq) == j//len(seq):
+                BP = base_2 + base_1
+                H[i, j] = nn_energies[BP]
     
-    # Diagonal terms (onsite energies)
-    for i, base in enumerate(dna_bases):
-        H[i, i] = onsite_energies[base]
-    
-    # Off-diagonal terms (nearest neighbor coupling)
-    coupling_strength = 0.1  # Simple uniform coupling
-    for i in range(num_dna_nodes - 1):
-        H[i, i+1] = coupling_strength
-        H[i+1, i] = coupling_strength  # Hermitian
     
     # Default gamma vectors (Option A semantics):
     # - Left contact couples to the first PRIMARY base
     # - Right contact couples to the LAST PRIMARY base
     # Fallback: if no primary bases exist, couple to the first/last available DNA node respectively
     GammaL = np.zeros(num_dna_nodes)
-    if primary_nodes > 0:
-        GammaL[0] = 0.1
-    elif num_dna_nodes > 0:
-        GammaL[0] = 0.1
+    GammaL[0] = 0.1
     
     GammaR = np.zeros(num_dna_nodes)
-    if primary_nodes > 0:
+    if primary_nodes > 1:
         GammaR[primary_nodes - 1] = 0.1
-    elif num_dna_nodes > 0:
+    else:
         GammaR[-1] = 0.1
     
     return H, GammaL, GammaR
