@@ -1140,8 +1140,8 @@ def load_trained_model(model_path: str, device: str = 'auto'):
     state_dict = checkpoint['model_state_dict']
     model_type = None
     
-    # Check for Hamiltonian model (has H_proj layers)
-    if any('H_proj' in key for key in state_dict.keys()):
+    # Check for Hamiltonian model (new DNATransportHamiltonianGNN has onsite_proj/coupling_proj)
+    if any('onsite_proj' in key for key in state_dict.keys()) and any('coupling_proj' in key for key in state_dict.keys()):
         model_type = 'hamiltonian'
         print("Detected DNATransportHamiltonianGNN model")
     # Check for standard model (has dos_proj and transmission_proj layers)
@@ -1164,8 +1164,13 @@ def load_trained_model(model_path: str, device: str = 'auto'):
             num_layers=args.get('num_layers', 4),
             num_heads=args.get('num_heads', 4),
             energy_grid=energy_grid,
-            max_len_dna=args.get('max_len_dna', 10),
             dropout=args.get('dropout', 0.1),
+            n_orb=args.get('n_orb', 1),
+            enforce_hermiticity=args.get('enforce_hermiticity', True),
+            solver_type=args.get('solver_type', 'frobenius'),
+            use_log_outputs=args.get('use_log_outputs', True),
+            log_floor=args.get('log_floor', 1e-16),
+            complex_eta=args.get('complex_eta', 1e-12),
             conv_type=args.get('conv_type', 'gat')
         )
         print("DNATransportHamiltonianGNN initialized successfully")
