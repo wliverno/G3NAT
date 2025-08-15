@@ -252,8 +252,11 @@ def sequence_to_graph(primary_sequence: str,
 class DNATransportDataset(torch.utils.data.Dataset):
     """Dataset for DNA transport property prediction."""
     
-    def __init__(self, sequences: List[str], dos_data: np.ndarray, 
-                 transmission_data: np.ndarray, energy_grid: np.ndarray, 
+    def __init__(self, sequences: List[str], 
+                 dos_data: np.ndarray, 
+                 transmission_data: np.ndarray, 
+                 energy_grid: np.ndarray, 
+                 complementary_sequences: Optional[List[str]] = None,
                  gamma_l: Optional[np.ndarray] = None, gamma_r: Optional[np.ndarray] = None,
                  graphs: Optional[List] = None):
         """
@@ -264,11 +267,13 @@ class DNATransportDataset(torch.utils.data.Dataset):
             dos_data: Density of states data [num_samples, num_energy_points]
             transmission_data: Transmission data [num_samples, num_energy_points]
             energy_grid: Energy grid [num_energy_points]
+            complementary_sequences: List of complementary DNA sequences (optional)
             gamma_l: Left contact coupling strengths as vectors [num_samples, seq_length * 2] (optional, for debugging)
             gamma_r: Right contact coupling strengths as vectors [num_samples, seq_length * 2] (optional, for debugging)
             graphs: Pre-converted graphs (optional)
         """
         self.sequences = sequences
+        self.complementary_sequences = complementary_sequences
         self.dos_data = dos_data
         self.transmission_data = transmission_data
         self.energy_grid = energy_grid
@@ -303,6 +308,8 @@ class DNATransportDataset(torch.utils.data.Dataset):
         if self.graphs is not None:
             graph = self.graphs[idx]
             dos = self.dos_tensor[idx]
+            seq = self.sequences[idx]
+            comp_seq = self.complementary_sequences[idx]
             transmission = self.transmission_tensor[idx]
             
             # Create the base Data object
@@ -312,7 +319,9 @@ class DNATransportDataset(torch.utils.data.Dataset):
                 edge_attr=graph.edge_attr,
                 dos=dos,
                 transmission=transmission,
-                energy_grid=self.energy_tensor
+                energy_grid=self.energy_tensor,
+                seq=seq,
+                comp_seq=comp_seq
             )
             
             # Add gamma values if available
@@ -430,4 +439,4 @@ def create_dna_dataset(sequences: List[str], dos_data: np.ndarray,
         graphs.append(graph)
     
     # Create and return the dataset with pre-converted graphs
-    return DNATransportDataset(sequences, dos_data, transmission_data, energy_grid, gamma_l, gamma_r, graphs) 
+    return DNATransportDataset(sequences, dos_data, transmission_data, energy_grid, complementary_sequences, gamma_l, gamma_r, graphs) 

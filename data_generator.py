@@ -61,28 +61,10 @@ def create_hamiltonian(seq: str,
     if seq_complementary is None:
         seq_complementary = '_' * len(seq)
     
-    # Calculate number of DNA nodes (excluding contacts)
-    primary_nodes = len([b for b in seq if b != '_'])
-    comp_nodes = len([b for b in seq_complementary if b != '_'])
-    num_dna_nodes = primary_nodes + comp_nodes
-    
-    # Simple Hamiltonian using literature values
-    onsite_energies = {
-        'A': -0.49, 'T': -1.39, 'G': 0.00, 'C': -1.12, '_': 0.00
-    }
-    
-    # Create DNA node list (primary + complementary, excluding '_')
-    dna_bases = []
-    for base in seq:
-        if base != '_':
-            dna_bases.append(base)
-    for base in seq_complementary:
-        if base != '_':
-            dna_bases.append(base)
-    
-    # Build tight-binding Hamiltonian
-    H = np.zeros((num_dna_nodes, num_dna_nodes))
+    assert len(seq) == len(seq_complementary), "Sequence and complementary sequence must have the same length"
+    assert '_' not in seq, "Primary sequence cannot contain \'_\'"
 
+    # Build tight-binding Hamiltonian parameters
     # From Roche et al, 2003 10.1103/PhysRevLett.91.228101
     onsite_energies = {
         'A': -0.49,
@@ -132,6 +114,8 @@ def create_hamiltonian(seq: str,
 
     # Fill in the Hamiltonian
     full_seq = seq + seq_complementary[::-1]
+    
+    H = np.zeros((len(full_seq), len(full_seq)))
     for i in range(len(full_seq)):
         for j in range(len(full_seq)):
             base_1 = full_seq[i]
@@ -149,19 +133,21 @@ def create_hamiltonian(seq: str,
                 BP = base_2 + base_1
                 H[i, j] = nn_energies[BP]
     
-    
-    # Default gamma vectors (Option A semantics):
+    ind = 0
+    for i in range(len(full_seq)):
+        if full_seq[i] == '_':
+            H = np.delete(H, ind, axis=0)
+            H = np.delete(H, ind, axis=1)
+        else:
+            ind += 1
+            
     # - Left contact couples to the first PRIMARY base
     # - Right contact couples to the LAST PRIMARY base
-    # Fallback: if no primary bases exist, couple to the first/last available DNA node respectively
-    GammaL = np.zeros(num_dna_nodes)
+    GammaL = np.zeros(ind)
     GammaL[0] = 0.1
     
-    GammaR = np.zeros(num_dna_nodes)
-    if primary_nodes > 1:
-        GammaR[primary_nodes - 1] = 0.1
-    else:
-        GammaR[-1] = 0.1
+    GammaR = np.zeros(ind)
+    GammaR[len(seq)-1] = 0.1
     
     return H, GammaL, GammaR
 
