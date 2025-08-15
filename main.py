@@ -406,7 +406,7 @@ def main():
         left_contact_positions=0,  # Left contact connects to first DNA base
         right_contact_positions=None,  # Will be automatically set to len(sequence)-1 for each sequence
         left_contact_coupling=0.1,
-        right_contact_coupling=0.2
+        right_contact_coupling=0.1
     )
     
     # Split into train/validation sets
@@ -531,6 +531,12 @@ def main():
             batch = batch.to(device)
             
             dos_pred, trans_pred = model(batch)
+
+            seq = batch.seq[0]
+            comp_seq = batch.comp_seq[0]
+            
+            print(f"Sequence: {seq}")
+            print(f"Complementary sequence: {comp_seq}")
             
             # Extract targets from batch
             batch_size = dos_pred.size(0)
