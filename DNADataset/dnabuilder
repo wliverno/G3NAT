@@ -1,7 +1,7 @@
 #!/bin/bash
 
-#INPUT: Set dnabuilder directory
-export BUILDDIR="/gscratch/stf/willll/DNADataGen"
+#INPUT: Set dnabuilder script and compiled nab (in /nab/ subfolder)
+export BUILDDIR="/path/to/dnabuilder"
 
 # Help text
 Help()
@@ -22,7 +22,7 @@ Help()
 }
 
 
-# Set variables
+# Set variable defaults
 seq="GGCCGG"
 typ="B"
 dnacmd="abdna"
