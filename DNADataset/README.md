@@ -1,0 +1,124 @@
+# DNA Dataset Generation and Transport Calculation Tools
+
+Tools for generating DNA structures, running DFT calculations, and computing electronic transmission properties.
+
+## Prerequisites
+
+- **NAB** (Nucleic Acid Builder) from Amber Classic: https://github.com/dacase/nabc
+- Python 3 with NumPy
+- Gaussian 16
+- MATLAB
+- SLURM
+
+## Tools
+
+### `dnabuilder` - Generate DNA structures
+
+Generates PDB and Gaussian input files from DNA sequences using NAB.
+
+**Usage:**
+```bash
+./dnabuilder -s "SEQUENCE" -t TYPE
+```
+
+**Options:**
+- `-s`: DNA sequence (e.g., "ATCGATCG")
+- `-t`: DNA type (`A` or `B`, default: B)
+
+**Setup:** Edit `BUILDDIR` in the script to point to your NAB installation.
+
+**Example:**
+```bash
+./dnabuilder -s "GGCCGG" -t B
+# Creates: ggccgg.pdb and ggccgg.gjf
+```
+
+### `TransportSetup.py` - Generate parameter files
+
+Parses PDB files and generates `Parameters.txt` for transmission calculations. Automatically finds HOMO-LUMO from Gaussian log and eigen files to set energy range.
+
+**Usage:**
+```bash
+python TransportSetup.py PDB_FILE --mode {same,cross} --gamma VALUE
+```
+
+**Options:**
+- `--mode`: `same` (5'→3' same strand) or `cross` (5'→5' cross-strand), default: `same`
+- `--gamma`: Coupling strength (eV), default: 0.1
+
+**Example:**
+```bash
+python TransportSetup.py ggccgg.pdb --mode cross --gamma 0.6
+# Creates: Parameters_ggccgg.txt
+# Requires: ggccgg.log and ggccgg_eigen.mat in same directory
+```
+
+### MATLAB Functions
+
+MATLAB functions for processing DFT outputs and computing transmission properties. Developed by Hashem Mohammad, Jianqing Qi, and Yiren Wang in the [Quantum Devices Lab](https://sites.uw.edu/anantmp/) at the University of Washington.
+
+**`readMAT.m`**: Extracts Fock and Overlap matrices from Gaussian MAT files and computes Hamiltonian
+- Converts Fock matrix to orthogonalized Hamiltonian
+- Generates `{strand}_eigen.mat` with orbital energies
+- Generates `{strand}.mat` with Hamiltonian matrix
+
+**`DNATransmission_Ballistic.m`**: Computes ballistic transmission through DNA
+- Uses non-equilibrium Green's function method
+- Calculates transmission between left and right contacts
+- Outputs `Tran_{strand}_gammaL_{gammaL}_gammaR_{gammaR}.mat`
+
+**`DOS_calc.m`**: Computes density of states (DOS) for the molecule
+- Calculates total DOS and per-atom DOS contributions
+- Uses Green's function method with broadening parameter
+- Outputs `DOS_{strand}_gammaL_{gammaL}_gammaR_{gammaR}.mat` with `Energy`, `DOS`, and `DOSAtom` arrays
+
+### SLURM Scripts
+
+**`combined_script.slurm`**: Runs structure generation → DFT → Hamiltonian matrix
+- Edit `file` variable (line 16) before running
+- Set `DNA_TYPE` environment variable
+
+**`TransportScript.slurm`**: Sets up multiple transmission runs
+- Edit `PDB_FILE` (line 17) and `CASES` array (lines 44-49)
+- Requires `.mat` Hamiltonian file in current directory
+
+**`run_transmission.slurm`**: Runs MATLAB transmission/DOS calculations
+- Called automatically by `TransportScript.slurm`
+- Manual: `sbatch run_transmission.slurm RUN_NUMBER DESCRIPTION`
+
+## Workflow
+
+```bash
+# 1. Generate structure
+./dnabuilder -s "GGCCGG" -t B
+# Creates: ggccgg.pdb and ggccgg.gjf
+
+# 2. Run DFT calculation (edit combined_script.slurm first)
+sbatch combined_script.slurm
+# Generates: ggccgg.log, ggccgg.txt, ggccgg.mat
+
+# 3. Process DFT output to get Hamiltonian
+# In MATLAB:
+readMAT('ggccgg')
+# Generates: ggccgg_eigen.mat, ggccgg.mat (Hamiltonian)
+
+# 4. Generate parameter files
+python TransportSetup.py ggccgg.pdb --mode cross --gamma 0.1
+# Creates: Parameters_ggccgg.txt (with HOMO-based energy range)
+
+# 5. Set up transmission runs (edit TransportScript.slurm first)
+sbatch TransportScript.slurm
+# Creates run directories and submits transmission calculations
+```
+
+## Credits
+
+- **MATLAB transmission functions**: Developed by Hashem Mohammad and Yiren Wang in the [Quantum Devices Lab](https://sites.uw.edu/anantmp/) at the University of Washington (Prof. M. P. Anantram's group)
+- **NAB**: Nucleic Acid Builder from Amber Classic (https://github.com/dacase/nabc)
+
+## Notes
+
+- NAB installation: Install from https://github.com/dacase/nabc and set `BUILDDIR` in `dnabuilder`
+- PDB files must have TER records separating strands
+- `TransportSetup.py` automatically finds HOMO-LUMO from `.log` and `_eigen.mat` files to set energy range (HOMO±1eV, 200 points)
+- MATLAB functions must be in MATLAB path or same directory as scripts
