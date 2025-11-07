@@ -1,6 +1,12 @@
 import numpy as np
 import os
+import re
 from collections import defaultdict, OrderedDict
+try:
+    import scipy.io
+    SCIPY_AVAILABLE = True
+except ImportError:
+    SCIPY_AVAILABLE = False
 
 class DNAPDBParser:
     def __init__(self, pdb_file):
@@ -211,6 +217,59 @@ class DNAPDBParser:
             # Show first base info (5' end)
             print(f"  5' end (first base, residue {first_res}): atoms {strand[first_res][0]['atom_num']}-{strand[first_res][-1]['atom_num']} ({len(strand[first_res])} atoms)")
             print(f"  3' end (last base, residue {last_res}): atoms {strand[last_res][0]['atom_num']}-{strand[last_res][-1]['atom_num']} ({len(strand[last_res])} atoms)")
+    
+    def find_homo_lumo(self, log_file, eigen_mat_file):
+        """
+        Find HOMO and LUMO orbitals from Gaussian log file and eigen.mat file.
+        Assumes restricted/closed-shell case (alpha = beta electrons).
+        
+        Args:
+            log_file: Path to Gaussian log file (e.g., 'ttaa.log')
+            eigen_mat_file: Path to eigen.mat file containing orbital energies in hartrees
+        
+        Returns:
+            Tuple of (homo_energy_eV, lumo_energy_eV)
+        """
+        if not SCIPY_AVAILABLE:
+            raise ImportError("scipy is required for this method. Install with: pip install scipy")
+        
+        # Find electrons in log file
+        if not os.path.exists(log_file):
+            raise FileNotFoundError(f"Log file not found: {log_file}")
+        
+        num_electrons = None
+        with open(log_file, 'r') as f:
+            for line in f:
+                if 'electrons' in line:
+                    match = re.search(r'(\d+)\s+alpha electrons', line)
+                    if match:
+                        num_electrons = 2 * int(match.group(1))
+                        break
+        
+        if num_electrons is None:
+            raise ValueError(f"Could not find electron count in {log_file}")
+        
+        # Load eigen.mat file
+        if not os.path.exists(eigen_mat_file):
+            raise FileNotFoundError(f"Eigen file not found: {eigen_mat_file}")
+        
+        eigen_data = scipy.io.loadmat(eigen_mat_file)
+        energies_eV = np.array(eigen_data['EV']).flatten() * 27.211396
+        
+        # Sort and split by index
+        sorted_energies = np.sort(energies_eV)
+        n_occupied = num_electrons // 2
+        occupied = sorted_energies[:n_occupied]
+        valence = sorted_energies[n_occupied:]
+        
+        # Save files
+        base_name = os.path.splitext(os.path.basename(eigen_mat_file))[0].replace('_eigen', '')
+        output_dir = os.path.dirname(eigen_mat_file) or '.'
+        scipy.io.savemat(os.path.join(output_dir, f"{base_name}_occ.mat"), {'EV': occupied})
+        scipy.io.savemat(os.path.join(output_dir, f"{base_name}_val.mat"), {'EV': valence})
+        
+        # Return HOMO and LUMO energies in eV
+        return (occupied[-1], valence[0])
 
 
 # Example usage
@@ -253,6 +312,10 @@ if __name__ == "__main__":
     base_filename = os.path.splitext(os.path.basename(args.filename))[0]
     output_filename = f"Parameters_{base_filename}.txt"
     
+    # Determine log and eigen file paths
+    log_file =  f"{base_filename}.log"
+    eigen_file =  f"{base_filename}_eigen.mat"
+    
     # Initialize parser
     parser = DNAPDBParser(args.filename)
     
@@ -260,13 +323,22 @@ if __name__ == "__main__":
     print("=== DNA Structure Information ===")
     parser.print_structure_info()
     
+    # Get HOMO energy and create energy range
+    print(f"\n=== Finding HOMO-LUMO ===")
+    homo, lumo = parser.find_homo_lumo(log_file, eigen_file)
+    print(f"HOMO: {homo:.4f} eV, LUMO: {lumo:.4f} eV")
+    # Create energy range: HOMO-1eV to HOMO+1eV with 200 points (0.01eV spacing)
+    # Using np.arange gives exactly 200 points with 0.01eV spacing
+    energy_range = (homo - 1.0, homo + 1.01, 0.01)
+    num_points = int((homo + 1.0 - (homo - 1.0)) / 0.01)
+    print(f"Energy range: {homo - 1.0:.2f} to {homo + 1.0:.2f} eV ({num_points} points, 0.01 eV spacing)")
     print(f"\n=== Generating Parameters File ===\n")
     
     try:
         contacts, total_atoms = parser.generate_parameters_file(
             output_file=output_filename,
             strand_selection=strand_selection,
-            energy_range=(-7, 0.01, 0.01),
+            energy_range=energy_range,
             gamma_l=args.gamma,
             gamma_r=args.gamma
         )
