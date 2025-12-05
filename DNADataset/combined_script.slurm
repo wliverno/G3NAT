@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=tagca_job
+#SBATCH --job-name=catt_job
 #SBATCH --account=stf
-#SBATCH --partition=cpu-g2
+#SBATCH --partition=ckpt-all
 ## Nodes
 #SBATCH --nodes=1
 #SBATCH --time=100:00:00
@@ -13,12 +13,56 @@
 
 set -e
 
-file="tagca"
+# --- Generate random DNA sequence ---
+bases=("a" "t" "c" "g")
 
+# pick a random length between 4 and 8
+length=$((RANDOM % 5 + 4))
+
+while true; do
+    sequence=""
+    for ((i=0; i<length; i++)); do
+        base=${bases[$((RANDOM % 4))]}
+        sequence+=$base
+    done
+
+    file="$sequence"
+
+    if [ ! -d "$file" ]; then
+        break
+    fi
+
+    echo "Folder $file already exists, generating a new sequence..."
+done
+
+echo "Random DNA sequence: $file"
+echo "Sequence length: $length"
+
+if [ -n "${SLURM_JOB_ID:-}" ]; then
+    NEW_NAME="${file}_job"
+    scontrol update JobId=$SLURM_JOB_ID JobName=$NEW_NAME
+    echo "Job name updated to: $NEW_NAME"
+fi
+
+WORKDIR="/gscratch/stf/asyed4/DNADataSet/$file"
+mkdir -p "$WORKDIR"
+cd "$WORKDIR"
+
+echo "Working directory: $(pwd)"
 echo "Starting..."
 
 echo "Generating PDB and GJF files for $file ..."
-../willll/DNADataGen/dnabuilder -s "$file" -t "$DNA_TYPE"
+/gscratch/stf/willll/DNADataGen/dnabuilder -s "$file" -t "$DNA_TYPE"
+
+# Make a first-pass gjf for SCF (no matrix dump flags, no trailer)
+cp "$file.gjf" "${file}_scf.gjf"
+
+# Remove the matrix dump flags from the route line in the first-pass version
+# This deletes "guess=(read,only) pop=minimal output=(matrix,i4lab)" from that copy
+sed -i 's/guess=(read,only)//I; s/pop=minimal//I; s/output=(matrix,i4lab)//I' "${file}_scf.gjf"
+
+# Remove the trailer line ("$file.mat") from the first-pass version
+sed -i "/${file}\.mat/Id" "${file}_scf.gjf"
 
 echo "PDB and GJF generation complete."
 
@@ -29,7 +73,20 @@ export GAUSS_SCRDIR='/tmp'
 export GAUSS_PDEF=$SLURM_NTASKS
 export GAUSS_MEMDEF=${SLURM_MEM_PER_NODE}MB
 
-g16 $file.gjf && echo "Finished DFT Calc, writing to LOG file..."
+echo "Running SCF / checkpoint build (first pass) on ${file}_scf.gjf ..."
+g16 "${file}_scf.gjf" && echo "First Gaussian run complete."
+
+echo "Running matrix dump for $file.gjf ..."
+g16 "$file.gjf" && echo "$file.mat should now exist."
+
+# g16 $file.gjf && echo "Finished DFT Calc, writing to LOG file..."
+
+if [ ! -f "${file}.mat" ]; then
+    echo "ERROR: ${file}.mat not found. Gaussian second pass failed."
+    exit 1
+fi
+
+echo ".mat file successfully generated."
 
 # --- dftMatProcess section ---
 
@@ -49,7 +106,7 @@ echo "Converting outputs..."
 
 # CONVERT GAUSSIAN MAT TO PLAINTEXT
 module load gcc
-scripts/readmat $file.mat > $file.txt && echo "TXT file written, converting to matlab matrix..."
+../scripts/readmat $file.mat > $file.txt && echo "TXT file written, converting to matlab matrix..."
 
 cp "$file.mat" "$file"_gaussian.mat
 
@@ -57,20 +114,98 @@ cp "$file.mat" "$file"_gaussian.mat
 ulimit -s unlimited
 module load matlab
 
-matlab -nojvm -r "addpath('scripts'); readMAT('$file'); quit" > output.out && echo "Hamiltonian written to $file.mat!"
+matlab -nojvm -r "addpath('../scripts'); readMAT('$file'); quit" > output.out && echo "Hamiltonian written to $file.mat!"
 
-# --- collect all outputs into a folder named after the file (keep .gjf/.pdb here) ---
-OUTDIR="$PWD/$file"
-mkdir -p "$OUTDIR"
+rm $file.txt
+# Master script to set up DNA transmission calculations
+# Creates 4 run directories with different parameters and submits child jobs
 
-# move everything that starts with the file name
-mv -f ${file}* "$OUTDIR"/ 2>/dev/null || true
+module load cesg/python/3.8.10
 
-# copy the slurm log as well
-if [[ -n "${SLURM_JOB_ID:-}" && -f "slurm-${SLURM_JOB_ID}.out" ]]; then
-  cp "slurm-${SLURM_JOB_ID}.out" "$OUTDIR/"
+# Configuration
+PDB_FILE="${file}.pdb"
+PYTHON_SCRIPT="../scripts/TransportSetup.py"  # Your Python script name
+
+# Check if required files exist
+if [ ! -f "$PDB_FILE" ]; then
+    echo "Error: PDB file $PDB_FILE not found!"
+    exit 20
 fi
 
-echo "Saved outputs to: $OUTDIR"
+if [ ! -f "$PYTHON_SCRIPT" ]; then
+    echo "Error: Python script $PYTHON_SCRIPT not found!"
+    exit 21
+fi
 
-exit 0
+# Check if Hamiltonian .mat file exists
+BASE_NAME=$(basename "$PDB_FILE" .pdb)
+if [ ! -f "${BASE_NAME}.mat" ]; then
+    echo "Warning: Hamiltonian file ${BASE_NAME}.mat not found in current directory!"
+    echo "Make sure this file exists before running the transmission calculations."
+fi
+echo "Setting up DNA transmission calculations..."
+echo "PDB file: $PDB_FILE"
+echo "Base name: $BASE_NAME"
+echo ""
+
+# Define the 4 cases: gamma value, mode (same/cross), description
+declare -a CASES=(
+    "0.1:same:gamma0.1_same"
+    "0.1:cross:gamma0.1_cross"
+    "0.6:same:gamma0.6_same"
+    "0.6:cross:gamma0.6_cross"
+)
+
+# Create run directories and generate Parameters.txt files
+for i in {1..4}; do
+    RUN_DIR="run${i}"
+
+    # Parse case parameters
+    IFS=':' read -r GAMMA MODE DESC <<< "${CASES[$((i-1))]}"
+
+    echo "Creating ${RUN_DIR}/ (gamma=${GAMMA} eV, mode=${MODE})"
+
+    # Create directory
+    mkdir -p "$RUN_DIR"
+
+    # Generate Parameters.txt using Python script
+    python3 "$PYTHON_SCRIPT" "$PDB_FILE" --mode "$MODE" --gamma "$GAMMA"
+
+    # Move generated Parameters file to run directory
+    PARAM_FILE="Parameters_${BASE_NAME}.txt"
+    if [ -f "$PARAM_FILE" ]; then
+        mv "$PARAM_FILE" "${RUN_DIR}/Parameters.txt"
+        echo "   ^|^s Generated ${RUN_DIR}/Parameters.txt"
+    else
+        echo "   ^|^w Failed to generate ${PARAM_FILE}"
+        continue
+    fi
+
+    # Copy Hamiltonian file to parent directory if not already there
+    # (MATLAB script looks for it in parent directory of run folders)
+
+    echo ""
+done
+
+echo "Setup complete!"
+echo ""
+echo "Submitting child jobs for transmission calculations..."
+echo ""
+
+# Submit child jobs for each run directory
+for i in {1..4}; do
+    RUN_DIR="run${i}"
+    IFS=':' read -r GAMMA MODE DESC <<< "${CASES[$((i-1))]}"
+
+    if [ -d "$RUN_DIR" ] && [ -f "${RUN_DIR}/Parameters.txt" ]; then
+        # Submit transmission calculation job
+        JOB_ID=$(sbatch --parsable ../run_transmission.slurm "$i" "$DESC")
+        echo "Submitted transmission job for ${RUN_DIR}: Job ID ${JOB_ID}"
+    else
+        echo "Skipping ${RUN_DIR} - directory or Parameters.txt not found"
+    fi
+done
+
+echo ""
+echo "All jobs submitted!"
+echo "Monitor jobs with: squeue -u \$USER"
