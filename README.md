@@ -2,6 +2,12 @@
 
 A compact Graph Neural Network project for predicting DNA transport properties (Density of States and Transmission) using PyTorch Geometric.
 
+![DNA graph example](DNAGraphExample.png)
+
+**Demo:** [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/13gInyEBZVMuL1ma-jB5U1pHU917bT9U8?usp=sharing)
+
+Full DNA DFT dataset status: _In Progress_
+
 ### Core modules
 - `models.py`: GNN models (standard and Hamiltonian), NEGF projection, training utilities, loading and inference helpers
 - `dataset.py`: DNA sequence to graph conversion and dataset creation utilities
@@ -14,9 +20,10 @@ A compact Graph Neural Network project for predicting DNA transport properties (
 pip install -r requirements.txt
 ```
 
-### Train (quick start)
+### Quick start
+To use synthetic data from an approximate tight-binding hamiltonian, use the `train_from_TB.py` method:
 ```bash
-python main.py \
+python train_from_TB.py \
   --num_samples 2000 \
   --seq_length 8 \
   --num_energy_points 100 \
@@ -29,16 +36,9 @@ Outputs (model checkpoint, curves, sample prediction plots) are saved under `./o
 
 To resume training, pass `--resume_from path/to/checkpoint_latest.pth`.
 
-### Generate synthetic data only
-Use helpers in `data_generator.py`:
-```python
-from data_generator import create_sample_data
-sequences, sequences_complement, dos_data, trans_data, energy_grid = create_sample_data(
-    num_samples=1000, seq_length=8, num_energy_points=100
-)
-```
 
 ### Inference with a trained model
+You can create and load trained models to use for transport prediction, and the access the tight binding hamiltonian direcly from the model:
 ```python
 from models import load_trained_model, predict_sequence
 
@@ -52,6 +52,7 @@ dos_pred, trans_pred = predict_sequence(
     left_contact_coupling=0.1,
     right_contact_coupling=0.2,
 )
+H_TB = model.H[0]
 ```
 
 ### Visualize graphs
@@ -63,14 +64,31 @@ G = sequence_to_graph("ACGTACGT", "TGCATGCA", left_contact_positions=0, right_co
 fig, ax = visualize_dna_graph(G, "ACGTACGT", "TGCATGCA")
 ```
 
-### Tests
-All compatible tests are consolidated in `tests/test_all.py` (pytest-style smoke tests):
+
+### Training from dataset (pickle format)
+
+For this work, we have generated a dataset of 500 structures with 4 contact positions for a total of 2000 data points **(NOTE: in progress, link to be uploaded when complete)*
+
+To use this data set, ensure that all pickle files are in the correct directory, and use the `train_from_pickles.py` script. This can be used specifying traing parameters like so:
+
 ```bash
-# optional: install dev deps
-pip install -e .[dev]
-# run tests
-pytest -q
+python train_from_pickles.py \
+    --data_dir /path/to/pickle/files \
+    --train_ratio 0.70 \
+    --val_ratio 0.15 \
+    --test_ratio 0.15 \
+    --hidden_dim 128 \
+    --num_layers 4 \
+    --num_heads 4 \
+    --n_orb 1 \
+    --batch_size 32 \
+    --num_epochs 100 \
+    --learning_rate 1e-3 \
+    --output_dir ./my_results \
+    --checkpoint_dir ./my_checkpoints \
+    --model_name my_dna_model
 ```
+
 
 ### Notes
 - Node features: 4 one-hot features (A, T, G, C)
