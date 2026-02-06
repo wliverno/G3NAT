@@ -52,7 +52,7 @@ dos_pred, trans_pred = predict_sequence(
     left_contact_coupling=0.1,
     right_contact_coupling=0.2,
 )
-H_TB = model.H[0]
+H_TB = model.H[0].detach().cpu().numpy()  # Converts PyTorch tensor to NumPy array
 ```
 
 ### Visualize graphs
