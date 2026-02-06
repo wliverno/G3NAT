@@ -131,8 +131,6 @@ dmypy.json
 # Project-specific
 outputs/
 logs/
-*.pth
-*.png
 *.jpg
 *.jpeg
 *.pdf
