@@ -34,16 +34,17 @@ def load_single_pickle(pickle_path: str) -> Optional[Dict]:
             print(f"Warning: {pickle_path} missing 'sequence' field, skipping")
             return None
 
-        sequence = data['sequence']
+        sequence = data['sequence'].upper()
 
         # Extract complementary sequence if available, otherwise generate it using complementary_bases
         complementary_sequence = data.get('complementary_sequence',
                                           ''.join(complementary_bases[base] for base in sequence)[::-1])
 
-        # Extract DOS and Transmission
-        dos = np.array(data['DOS'])
-        transmission = np.array(data['T'])
+        # Extract DOS and Transmission log10 transformed
+        dos = np.log10(np.array(data['DOS']))
+        transmission = np.log10(np.array(data['T']))
         energy_grid = np.array(data['Egrid'])
+        energy_grid = energy_grid - np.mean(energy_grid)
 
         # Extract contact information
         contacts = data.get('contacts', {})
