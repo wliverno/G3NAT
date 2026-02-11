@@ -21,7 +21,7 @@ from torch.utils.data import Subset
 from models import DNATransportHamiltonianGNN, train_model
 from dataset import create_dna_dataset
 from load_pickle_data import load_pickle_directory
-from main import LengthBucketBatchSampler, setup_device, save_checkpoint, create_checkpoint_callback, create_progress_callback
+from train_from_TB import LengthBucketBatchSampler, setup_device, save_checkpoint, create_checkpoint_callback, create_progress_callback
 
 
 def parse_args():
@@ -49,7 +49,7 @@ def parse_args():
                        help='Number of attention heads')
     parser.add_argument('--dropout', type=float, default=0.0,
                        help='Dropout rate (default: 0.0 for Hamiltonian model)')
-    parser.add_argument('--conv_type', type=str, default='gat', choices=['transformer', 'gat'],
+    parser.add_argument('--conv_type', type=str, default='transformer', choices=['transformer', 'gat'],
                        help='Convolution type for message passing layers')
     parser.add_argument('--n_orb', type=int, default=1,
                        help='Number of orbitals per DNA base')
@@ -270,24 +270,32 @@ def main():
     print(f"  Validation samples: {len(val_indices)}")
     print(f"  Test samples: {len(test_indices)}")
 
-    # Create full dataset with graphs
-    print("\nCreating datasets and converting to graphs...")
+    # Extract contact configurations from pickle files
+    print("\nExtracting contact configurations from pickle files...")
+    left_contact_positions_list = [config['left_contact_pos'] for config in contact_configs]
+    right_contact_positions_list = [config['right_contact_pos'] for config in contact_configs]
+    left_contact_coupling_list = [config['coupling'] for config in contact_configs]
+    right_contact_coupling_list = [config['coupling'] for config in contact_configs]
+
+    print(f"  Sample configurations:")
+    for i in range(min(3, len(contact_configs))):
+        config = contact_configs[i]
+        print(f"    {i}: {config['contact_type']} type, coupling={config['coupling']:.1f} eV, "
+              f"left={config['left_contact_pos']}, right={config['right_contact_pos']}")
+
+    # Create full dataset with graphs, passing contact configurations
+    print("\nCreating datasets and converting to graphs with contact configurations...")
     full_dataset = create_dna_dataset(
         sequences=sequences,
         dos_data=dos_data,
         transmission_data=transmission_data,
         energy_grid=energy_grid,
         complementary_sequences=complementary_sequences,
-        # Apply contact configurations from pickle files
+        left_contact_positions_list=left_contact_positions_list,
+        right_contact_positions_list=right_contact_positions_list,
+        left_contact_coupling_list=left_contact_coupling_list,
+        right_contact_coupling_list=right_contact_coupling_list,
     )
-
-    # Override contact positions from pickle data
-    print("Applying contact configurations from pickle files...")
-    for i, config in enumerate(contact_configs):
-        graph = full_dataset.graphs[i]
-        # The graph was already created with default contact positions
-        # We need to update based on the config
-        # For now, the loader creates correct positions based on contact_type
 
     # Create train/val/test subsets
     train_dataset = Subset(full_dataset, train_indices)
