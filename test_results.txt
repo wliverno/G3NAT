@@ -1,0 +1,51 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.3, pytest-8.4.1, pluggy-1.6.0 -- C:\Python313\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\trollium\Documents\Code\G3NAT\.worktrees\refactor-modules
+plugins: anyio-4.9.0
+collecting ... collected 19 items
+
+tests/baseline/test_baseline_data.py::test_capture_dataset_creation PASSED [  5%]
+tests/baseline/test_baseline_graph.py::test_capture_sequence_to_graph_simple PASSED [ 10%]
+tests/baseline/test_baseline_graph.py::test_capture_sequence_to_graph_cross_contacts PASSED [ 15%]
+tests/baseline/test_baseline_models.py::test_capture_standard_model PASSED [ 21%]
+tests/baseline/test_baseline_models.py::test_capture_hamiltonian_model PASSED [ 26%]
+tests/integration/test_end_to_end.py::test_full_pipeline PASSED          [ 31%]
+tests/test_all.py::test_sequence_to_graph_single_strand PASSED           [ 36%]
+tests/test_all.py::test_sequence_to_graph_double_strand_with_blanks PASSED [ 42%]
+tests/test_all.py::test_dna_transport_gnn_forward PASSED                 [ 47%]
+tests/test_all.py::test_hamiltonian_gnn_forward PASSED                   [ 52%]
+tests/test_all.py::test_negf_consistency_with_generator PASSED           [ 57%]
+tests/test_all.py::test_visualization_smoke PASSED                       [ 63%]
+tests/test_data/test_datasets.py::test_create_dna_dataset_matches_baseline PASSED [ 68%]
+tests/test_graph/test_construction.py::test_sequence_to_graph_simple PASSED [ 73%]
+tests/test_graph/test_construction.py::test_sequence_to_graph_cross_contacts PASSED [ 78%]
+tests/test_models/test_forward.py::test_standard_model_unchanged PASSED  [ 84%]
+tests/test_models/test_forward.py::test_hamiltonian_model_unchanged PASSED [ 89%]
+tests/test_utils/test_device.py::test_setup_device_auto PASSED           [ 94%]
+tests/test_utils/test_device.py::test_setup_device_explicit PASSED       [100%]
+
+============================== warnings summary ===============================
+tests/baseline/test_baseline_models.py: 70 warnings
+tests/integration/test_end_to_end.py: 32 warnings
+tests/test_all.py: 78 warnings
+tests/test_models/test_forward.py: 62 warnings
+  C:\Users\trollium\AppData\Roaming\Python\Python313\site-packages\torch_geometric\inspector.py:433: DeprecationWarning: Failing to pass a value to the 'type_params' parameter of 'typing._eval_type' is deprecated, as it leads to incorrect behaviour when calling typing._eval_type on a stringified annotation that references a PEP 695 type parameter. It will be disallowed in Python 3.15.
+    return typing._eval_type(value, _globals, None)  # type: ignore
+
+tests/integration/test_end_to_end.py::test_full_pipeline
+  C:\Users\trollium\Documents\Code\G3NAT\.worktrees\refactor-modules\g3nat\data\datasets.py:44: UserWarning: Creating a tensor from a list of numpy.ndarrays is extremely slow. Please consider converting the list to a single numpy.ndarray with numpy.array() before converting to a tensor. (Triggered internally at C:\actions-runner\_work\pytorch\pytorch\pytorch\torch\csrc\utils\tensor_new.cpp:257.)
+    self.dos_tensor = torch.tensor(dos_data, dtype=torch.float)
+
+tests/test_all.py::test_visualization_smoke
+tests/test_all.py::test_visualization_smoke
+tests/test_all.py::test_visualization_smoke
+tests/test_all.py::test_visualization_smoke
+tests/test_all.py::test_visualization_smoke
+tests/test_all.py::test_visualization_smoke
+tests/test_all.py::test_visualization_smoke
+  C:\Users\trollium\AppData\Roaming\Python\Python313\site-packages\matplotlib\backends\_backend_tk.py:778: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+    return Image.fromarray(image_data, mode="RGBA")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+====================== 19 passed, 250 warnings in 7.11s =======================
