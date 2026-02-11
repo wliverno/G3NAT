@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
 from torch_geometric.utils import to_networkx
-from dataset import sequence_to_graph
+from g3nat.graph import sequence_to_graph
 import numpy as np
 
 def visualize_dna_graph(graph, primary_sequence=None, complementary_sequence=None,
