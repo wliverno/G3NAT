@@ -9,11 +9,14 @@ A compact Graph Neural Network project for predicting DNA transport properties (
 Full DNA DFT dataset status: _In Progress_
 
 ### Core modules
-- `models.py`: GNN models (standard and Hamiltonian), NEGF projection, training utilities, loading and inference helpers
-- `dataset.py`: DNA sequence to graph conversion and dataset creation utilities
-- `data_generator.py`: Synthetic data generation via a simple tight-binding DNA model + NEGF
-- `main.py`: End-to-end training pipeline and sample prediction/plotting
-- `visualize_dna_graph.py`: NetworkX-based visualization of DNA graphs
+- `g3nat/models/`: GNN models (standard and Hamiltonian), NEGF projection
+- `g3nat/graph/`: DNA sequence to graph conversion (core innovation)
+- `g3nat/data/`: Dataset creation, synthetic data generation, pickle loading
+- `g3nat/training/`: Training loop, configuration, callbacks
+- `g3nat/utils/`: Device setup, physics utilities (Hamiltonian, NEGF)
+- `g3nat/visualization/`: NetworkX-based visualization of DNA graphs
+- `g3nat/evaluation/`: Model loading and inference helpers
+- `scripts/train.py`: Unified training script for both synthetic and pickle data
 
 ### Install
 ```bash
@@ -21,13 +24,14 @@ pip install -r requirements.txt
 ```
 
 ### Quick start
-To use synthetic data from an approximate tight-binding hamiltonian, use the `train_from_TB.py` method:
+To use synthetic data from an approximate tight-binding hamiltonian:
 ```bash
-python train_from_TB.py \
+python scripts/train.py \
+  --data_source tb \
   --num_samples 2000 \
   --seq_length 8 \
   --num_energy_points 100 \
-  --model_type standard \
+  --model_type hamiltonian \
   --batch_size 32 \
   --num_epochs 100 \
   --learning_rate 1e-3
@@ -58,7 +62,7 @@ H_TB = model.H[0].detach().cpu().numpy()  # Converts PyTorch tensor to NumPy arr
 ### Visualize graphs
 ```python
 from g3nat.graph import sequence_to_graph
-from g3nat.visualize import visualize_dna_graph
+from g3nat.visualization import visualize_dna_graph
 
 G = sequence_to_graph("ACGTACGT", "TGCATGCA", left_contact_positions=0, right_contact_positions=7)
 fig, ax = visualize_dna_graph(G, "ACGTACGT", "TGCATGCA")
@@ -67,16 +71,15 @@ fig, ax = visualize_dna_graph(G, "ACGTACGT", "TGCATGCA")
 
 ### Training from dataset (pickle format)
 
-For this work, we have generated a dataset of 500 structures with 4 contact positions for a total of 2000 data points **(NOTE: in progress, link to be uploaded when complete)*
+For this work, we have generated a dataset of 500 structures with 4 contact positions for a total of 2000 data points **(NOTE: in progress, link to be uploaded when complete)**
 
-To use this data set, ensure that all pickle files are in the correct directory, and use the `train_from_pickles.py` script. This can be used specifying traing parameters like so:
+To use this data set, ensure that all pickle files are in the correct directory, and use the unified training script:
 
 ```bash
-python train_from_pickles.py \
+python scripts/train.py \
+    --data_source pickle \
     --data_dir /path/to/pickle/files \
-    --train_ratio 0.70 \
-    --val_ratio 0.15 \
-    --test_ratio 0.15 \
+    --model_type hamiltonian \
     --hidden_dim 128 \
     --num_layers 4 \
     --num_heads 4 \
@@ -85,8 +88,7 @@ python train_from_pickles.py \
     --num_epochs 100 \
     --learning_rate 1e-3 \
     --output_dir ./my_results \
-    --checkpoint_dir ./my_checkpoints \
-    --model_name my_dna_model
+    --checkpoint_dir ./my_checkpoints
 ```
 
 
@@ -112,7 +114,7 @@ python train_from_pickles.py \
     )
     ```
 - **Complementary indexing**: positions for the complementary strand are 0-indexed into the provided `complementary_sequence` string.
-- **Consistency**: the simple physics generator in `data_generator.create_hamiltonian` follows the same default (primary-end) policy. Dataset helpers will not override explicitly provided contact positions.
+- **Consistency**: the simple physics generator in `g3nat.utils.create_hamiltonian` follows the same default (primary-end) policy. Dataset helpers will not override explicitly provided contact positions.
 
 ### Hamiltonian construction semantics
 - In `DNATransportHamiltonianGNN`, the Hamiltonian is constructed directly from the graph:
