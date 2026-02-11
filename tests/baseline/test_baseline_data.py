@@ -1,13 +1,11 @@
 # tests/baseline/test_baseline_data.py
-import sys
-sys.path.insert(0, '.')
-
 import pickle
 import numpy as np
 from pathlib import Path
-from dataset import create_dna_dataset
+from g3nat.data import create_dna_dataset
 
-BASELINE_DIR = Path("tests/baseline/outputs")
+BASELINE_DIR = Path(__file__).parent / "outputs"
+BASELINE_DIR.mkdir(exist_ok=True)
 
 def test_capture_dataset_creation():
     """Capture current dataset creation behavior."""
