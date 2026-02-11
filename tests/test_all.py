@@ -2,10 +2,10 @@ import numpy as np
 import torch
 from torch_geometric.data import Batch
 
-from dataset import sequence_to_graph
-from models import DNATransportGNN, DNATransportHamiltonianGNN
-from visualize_dna_graph import visualize_dna_graph
-from data_generator import calculate_NEGF
+from g3nat.graph import sequence_to_graph
+from g3nat.models import DNATransportGNN, DNATransportHamiltonianGNN
+from g3nat.visualization import visualize_dna_graph
+from g3nat.utils.physics import calculate_NEGF
 
 
 def test_sequence_to_graph_single_strand():
@@ -86,8 +86,8 @@ def test_hamiltonian_gnn_forward():
 
 
 def test_negf_consistency_with_generator():
-    """Ensure the model's NEGFProjection matches data_generator.calculate_NEGF math.
-    Compares log10-transformed DOS and Transmission for the same H, ΓL, ΓR, and energy grid.
+    """Ensure the model's NEGFProjection matches calculate_NEGF math.
+    Compares log10-transformed DOS and Transmission for the same H, GammaL, GammaR, and energy grid.
     """
     # Define a small, well-conditioned Hamiltonian and gamma vectors
     H = np.array([
@@ -99,12 +99,12 @@ def test_negf_consistency_with_generator():
     GammaR = np.array([0.0, 0.0, 0.1], dtype=np.float64)
     energy_grid = np.linspace(-2.0, 2.0, 40)
 
-    # Reference using numpy generator (raw, not log10)
+    # Reference using numpy (returns transmission, dos)
     T_np, DOS_np = calculate_NEGF(H, GammaL, GammaR, energy_grid)
     T_np_log = np.log10(np.clip(T_np, 1e-16, None))
     DOS_np_log = np.log10(np.clip(DOS_np, 1e-16, None))
 
-    # Model's NEGFProjection (returns log10 already)
+    # Model's NEGFProjection (returns T, DOS, H in log10)
     model = DNATransportHamiltonianGNN(hidden_dim=8, num_layers=1, num_heads=1,
                                        energy_grid=energy_grid, dropout=0.0, n_orb=1)
     H_t = torch.tensor(H, dtype=torch.float64)

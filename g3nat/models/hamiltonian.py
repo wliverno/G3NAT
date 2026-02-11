@@ -614,8 +614,8 @@ class DNATransportHamiltonianGNN(nn.Module):
         else:
             out1, out2, H = self.NEGFProjection(H_matrix, GammaL, GammaR)
 
-        # Preserve existing variable order for backward compatibility
-        dos_pred, transmission_pred = out1, out2
+        # NEGFProjection returns (T, DOS, H), match correctly
+        transmission_pred, dos_pred = out1, out2
 
         self.H = H
 
