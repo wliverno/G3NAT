@@ -19,6 +19,7 @@ import argparse
 import json
 import math
 import os
+import sys
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
@@ -28,28 +29,13 @@ import pandas as pd
 import torch
 from torch_geometric.loader import DataLoader
 
-from models import (
-    DNATransportGNN,
-    DNATransportHamiltonianGNN,
-    train_model,
-)
-from data_generator import create_sample_data
-from dataset import create_dna_dataset
+# Add parent directory to path to import g3nat
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Import helpers from main without side effects
-try:
-    from main import split_dataset, LengthBucketBatchSampler
-except Exception:
-    # Fallbacks if import path changes; define minimal split
-    from sklearn.model_selection import train_test_split
-    def split_dataset(dataset, train_split: float = 0.8):
-        from torch.utils.data import Subset
-        dataset_size = len(dataset)
-        train_indices, val_indices = train_test_split(
-            range(dataset_size), test_size=1-train_split, random_state=42
-        )
-        return Subset(dataset, train_indices), Subset(dataset, val_indices)
-    LengthBucketBatchSampler = None  # Not strictly required if sequence lengths are constant
+import g3nat
+from g3nat.models import DNATransportGNN, DNATransportHamiltonianGNN
+from g3nat.training import train_model, LengthBucketBatchSampler, split_dataset
+from g3nat.data import generate_tight_binding_data, create_dna_dataset
 
 
 def set_seed(seed: int):
@@ -199,7 +185,7 @@ def run_variant(
 
     # Data generation (train)
     train_min_length = data_spec.min_length if data_spec.min_length != -1 else data_spec.train_seq_length
-    seqs, seqs_comp, dos_list, trans_list, energy_grid = create_sample_data(
+    seqs, seqs_comp, dos_list, trans_list, energy_grid = generate_tight_binding_data(
         num_samples=data_spec.num_samples,
         seq_length=data_spec.train_seq_length,
         num_energy_points=data_spec.num_energy_points,
@@ -211,7 +197,7 @@ def run_variant(
     eval_min_length = train_min_length if data_spec.eval_seq_length is None else (
         data_spec.eval_seq_length if data_spec.min_length == -1 else data_spec.min_length
     )
-    seqs_eval, seqs_comp_eval, dos_list_eval, trans_list_eval, _ = create_sample_data(
+    seqs_eval, seqs_comp_eval, dos_list_eval, trans_list_eval, _ = generate_tight_binding_data(
         num_samples=max(200, data_spec.num_samples // 5),
         seq_length=eval_seq_length,
         num_energy_points=data_spec.num_energy_points,
