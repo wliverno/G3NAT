@@ -40,7 +40,7 @@ To resume training, pass `--resume_from path/to/checkpoint_latest.pth`.
 ### Inference with a trained model
 You can create and load trained models to use for transport prediction, and the access the tight binding hamiltonian direcly from the model:
 ```python
-from models import load_trained_model, predict_sequence
+from g3nat.models import load_trained_model, predict_sequence
 
 model, energy_grid, device = load_trained_model('outputs/dna_transport_standard_model.pth')
 dos_pred, trans_pred = predict_sequence(
@@ -57,8 +57,8 @@ H_TB = model.H[0].detach().cpu().numpy()  # Converts PyTorch tensor to NumPy arr
 
 ### Visualize graphs
 ```python
-from dataset import sequence_to_graph
-from visualize_dna_graph import visualize_dna_graph
+from g3nat.graph import sequence_to_graph
+from g3nat.visualize import visualize_dna_graph
 
 G = sequence_to_graph("ACGTACGT", "TGCATGCA", left_contact_positions=0, right_contact_positions=7)
 fig, ax = visualize_dna_graph(G, "ACGTACGT", "TGCATGCA")
@@ -100,7 +100,7 @@ python train_from_pickles.py \
 - **Specifying contacts**: pass `int`, `List[int]`, or `Tuple[str, Union[int, List[int]]]` where the first element of the tuple is `'primary'` or `'complementary'` to target a specific strand.
   - Example:
     ```python
-    from dataset import sequence_to_graph
+    from g3nat.graph import sequence_to_graph
 
     G = sequence_to_graph(
         primary_sequence="ACGTACGT",
