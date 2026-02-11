@@ -1,22 +1,19 @@
 # tests/baseline/test_baseline_models.py
-import sys
-sys.path.insert(0, '.')
-
 import torch
 import pickle
 import numpy as np
 from pathlib import Path
-from models import DNATransportGNN, DNATransportHamiltonianGNN
-from dataset import sequence_to_graph
+from g3nat.models import DNATransportGNN, DNATransportHamiltonianGNN
+from g3nat.graph import sequence_to_graph
 
-BASELINE_DIR = Path("tests/baseline/outputs")
+BASELINE_DIR = Path(__file__).parent / "outputs"
+BASELINE_DIR.mkdir(exist_ok=True)
 
 def test_capture_standard_model():
     """Capture DNATransportGNN predictions."""
     torch.manual_seed(42)
 
     # Create model
-    energy_grid = np.linspace(-3, 3, 100)
     model = DNATransportGNN(
         hidden_dim=64,
         num_layers=2,

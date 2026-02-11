@@ -38,7 +38,7 @@ def generate_tight_binding_data(num_samples: int = 1000, seq_length: int = 10,
     # Generate synthetic DOS and transmission data
     dos_data, transmission_data = [], []
     for seq, seq_complementary in zip(primary_sequences, complementary_sequences):
-        dos, trans = getTransmissionDOS(
+        trans, dos = getTransmissionDOS(
             seq=seq,
             seq_complementary=seq_complementary,
             energy_grid=energy_grid

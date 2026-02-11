@@ -1,13 +1,10 @@
 # tests/baseline/test_baseline_graph.py
-import sys
-sys.path.insert(0, '.')
-
 import torch
 import pickle
 from pathlib import Path
-from dataset import sequence_to_graph
+from g3nat.graph import sequence_to_graph
 
-BASELINE_DIR = Path("tests/baseline/outputs")
+BASELINE_DIR = Path(__file__).parent / "outputs"
 BASELINE_DIR.mkdir(exist_ok=True)
 
 def test_capture_sequence_to_graph_simple():
