@@ -50,11 +50,11 @@ model, energy_grid, device = load_trained_model('outputs/dna_transport_standard_
 dos_pred, trans_pred = predict_sequence(
     model,
     sequence="ACGTACGT",
-    complementary_sequence="TGCATGCA",  # or omit to treat as single strand with blanks
-    left_contact_positions=0,
+    complementary_sequence="__GTAC__"       # or omit to use complementary strand
+    left_contact_positions=0,               # Defaults to index on primary strand
     right_contact_positions=7,
     left_contact_coupling=0.1,
-    right_contact_coupling=0.2,
+    right_contact_coupling=0.1,
 )
 H_TB = model.H[0].detach().cpu().numpy()  # Converts PyTorch tensor to NumPy array
 ```
