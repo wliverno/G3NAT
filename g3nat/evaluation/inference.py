@@ -134,7 +134,7 @@ def predict_sequence(
         right_contact_coupling: Coupling strength for right contact
 
     Returns:
-        Tuple of (transmission_pred, dos_pred) arrays
+        Tuple of (dos_pred, transmission_pred) arrays
     """
     if right_contact_positions is None:
         right_contact_positions = len(sequence) - 1
@@ -173,4 +173,4 @@ def predict_sequence(
     print(f"DOS range: [{dos_pred.min():.4f}, {dos_pred.max():.4f}]")
     print(f"Transmission range: [{transmission_pred.min():.4f}, {transmission_pred.max():.4f}]")
 
-    return transmission_pred, dos_pred
+    return dos_pred, transmission_pred
