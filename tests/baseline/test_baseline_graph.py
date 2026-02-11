@@ -11,7 +11,7 @@ BASELINE_DIR = Path("tests/baseline/outputs")
 BASELINE_DIR.mkdir(exist_ok=True)
 
 def test_capture_sequence_to_graph_simple():
-    """Capture current sequence_to_graph behavior for simple sequence."""
+    """Simple sequence case."""
     graph = sequence_to_graph(
         primary_sequence="ACGT",
         complementary_sequence="ACGT",
@@ -35,7 +35,7 @@ def test_capture_sequence_to_graph_simple():
     print(f"Captured baseline: {graph.x.size(0)} nodes, {graph.edge_index.size(1)} edges")
 
 def test_capture_sequence_to_graph_cross_contacts():
-    """Capture behavior with cross contacts (complementary strand)."""
+    """Cross-strand contacts."""
     graph = sequence_to_graph(
         primary_sequence="ACGTACGT",
         complementary_sequence="ACGTACGT",
@@ -48,11 +48,15 @@ def test_capture_sequence_to_graph_cross_contacts():
     baseline = {
         'x': graph.x.clone(),
         'edge_index': graph.edge_index.clone(),
-        'edge_attr': graph.edge_attr.clone()
+        'edge_attr': graph.edge_attr.clone(),
+        'num_nodes': graph.x.size(0),
+        'num_edges': graph.edge_index.size(1)
     }
 
     with open(BASELINE_DIR / "graph_cross.pkl", "wb") as f:
         pickle.dump(baseline, f)
+
+    print(f"Captured baseline: {graph.x.size(0)} nodes, {graph.edge_index.size(1)} edges")
 
 if __name__ == "__main__":
     test_capture_sequence_to_graph_simple()
