@@ -36,6 +36,8 @@ def parse_args():
                        help='Number of samples (for TB source)')
     parser.add_argument('--seq_length', type=int, default=8,
                        help='Sequence length (for TB source)')
+    parser.add_argument('--min_length', type=int, default=-1,
+                       help='Minimum sequence length for TB source (-1 = same as seq_length)')
     parser.add_argument('--num_energy_points', type=int, default=100,
                        help='Number of energy points')
 
@@ -79,7 +81,8 @@ def main():
         seqs, comp_seqs, dos_data, trans_data, energy_grid = generate_tight_binding_data(
             num_samples=args.num_samples,
             seq_length=args.seq_length,
-            num_energy_points=args.num_energy_points
+            num_energy_points=args.num_energy_points,
+            min_length=args.min_length
         )
     else:  # pickle
         if args.data_dir is None:
