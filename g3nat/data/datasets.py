@@ -40,19 +40,19 @@ class DNATransportDataset(torch.utils.data.Dataset):
         self.energy_grid = energy_grid
         self.graphs = graphs
 
-        # Convert to tensors
-        self.dos_tensor = torch.tensor(dos_data, dtype=torch.float)
-        self.transmission_tensor = torch.tensor(transmission_data, dtype=torch.float)
-        self.energy_tensor = torch.tensor(energy_grid, dtype=torch.float)
+        # Convert to tensors (use np.asarray to avoid slow list-of-ndarrays path)
+        self.dos_tensor = torch.as_tensor(np.asarray(dos_data), dtype=torch.float)
+        self.transmission_tensor = torch.as_tensor(np.asarray(transmission_data), dtype=torch.float)
+        self.energy_tensor = torch.as_tensor(np.asarray(energy_grid), dtype=torch.float)
 
         # Store gamma values as vectors for debugging
         if gamma_l is not None:
-            self.gamma_l = torch.tensor(gamma_l, dtype=torch.float)
+            self.gamma_l = torch.as_tensor(np.asarray(gamma_l), dtype=torch.float)
         else:
             self.gamma_l = None
 
         if gamma_r is not None:
-            self.gamma_r = torch.tensor(gamma_r, dtype=torch.float)
+            self.gamma_r = torch.as_tensor(np.asarray(gamma_r), dtype=torch.float)
         else:
             self.gamma_r = None
 
