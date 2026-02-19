@@ -7,7 +7,7 @@
 #SBATCH --output=setup_%j.out
 #SBATCH --error=setup_%j.err
 #SBATCH --mail-type=END,FAIL
-#SBATCH --mail-user=willll@uw.edu
+#SBATCH --mail-user=asyed4@uw.edu
 ##
 
 # Master script to set up DNA transmission calculations

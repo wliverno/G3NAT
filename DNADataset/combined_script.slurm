@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=catt_job
+#SBATCH --job-name=job
 #SBATCH --account=stf
 #SBATCH --partition=ckpt-all
 ## Nodes
@@ -44,7 +44,7 @@ if [ -n "${SLURM_JOB_ID:-}" ]; then
     echo "Job name updated to: $NEW_NAME"
 fi
 
-WORKDIR="/gscratch/stf/asyed4/DNADataSet/$file"
+WORKDIR="/gscratch/anantram/asyed4/DNADataSet/$file"
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 
@@ -52,7 +52,7 @@ echo "Working directory: $(pwd)"
 echo "Starting..."
 
 echo "Generating PDB and GJF files for $file ..."
-/gscratch/stf/willll/DNADataGen/dnabuilder -s "$file" -t "$DNA_TYPE"
+/gscratch/anantram/asyed4/DNADataGen/dnabuilder -s "$file" -t "$DNA_TYPE"
 
 # Make a first-pass gjf for SCF (no matrix dump flags, no trailer)
 cp "$file.gjf" "${file}_scf.gjf"
@@ -193,19 +193,54 @@ echo "Submitting child jobs for transmission calculations..."
 echo ""
 
 # Submit child jobs for each run directory
+JOB_IDS=()
+
 for i in {1..4}; do
     RUN_DIR="run${i}"
     IFS=':' read -r GAMMA MODE DESC <<< "${CASES[$((i-1))]}"
 
     if [ -d "$RUN_DIR" ] && [ -f "${RUN_DIR}/Parameters.txt" ]; then
-        # Submit transmission calculation job
         JOB_ID=$(sbatch --parsable ../run_transmission.slurm "$i" "$DESC")
         echo "Submitted transmission job for ${RUN_DIR}: Job ID ${JOB_ID}"
+        JOB_IDS+=("$JOB_ID")
     else
         echo "Skipping ${RUN_DIR} - directory or Parameters.txt not found"
     fi
 done
 
+# Wait for child jobs to finish before pickling
+echo "Waiting for transmission jobs to finish: ${JOB_IDS[*]}"
+
+while true; do
+    still_running=0
+    for jid in "${JOB_IDS[@]}"; do
+        if squeue -j "$jid" -h 2>/dev/null | grep -q .; then
+            still_running=1
+            break
+        fi
+    done
+    [ "$still_running" -eq 0 ] && break
+    sleep 30
+done
+
+echo "All transmission jobs left the queue. Checking status..."
+
+any_fail=0
+for jid in "${JOB_IDS[@]}"; do
+    state=$(sacct -j "$jid" --format=State -n | head -n 1 | awk '{print $1}')
+    echo "Job $jid state: $state"
+    [[ "$state" != "COMPLETED" ]] && any_fail=1
+done
+
+if [ "$any_fail" -ne 0 ]; then
+    echo "ERROR: One or more transmission jobs failed. Skipping pickle."
+    exit 2
+fi
+
 echo ""
 echo "All jobs submitted!"
 echo "Monitor jobs with: squeue -u \$USER"
+echo ""
+echo "Generating pickle files for $file ..."
+python ../convert_to_pickle.py "$WORKDIR"
+echo "Pickle generation complete."
