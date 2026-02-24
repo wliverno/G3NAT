@@ -1,25 +1,3 @@
-########################################################
-# combined_script.slurm 
-
-Description
-#    Master pipeline script for automated DNA transmission dataset generation
-
-What the script does
-#   1) Generates a DNA sequence between 4-8 units.
-#   2) Builds the molecular structure and Gaussian input files using NAB tools.
-#   3) Runs a first Gaussian calculation to produce checkpoint and log files.
-#   4) Modifies the Gaussian input to enable matrix output and inserts the
-#      required trailer for matrix dumping.
-#   5) Runs a second Gaussian calculation to produce the Hamiltonian and
-#      overlap matrices in .mat format.
-#   6) Converts Gaussian matrix output using readmat and MATLAB processing.
-#   7) Runs transmission simulations (ballistic or decoherence) using MATLAB
-#      transport scripts.
-#   8) Organizes outputs into structured run folders.
-#   9) Converts results into pickle files for machine learning
-#      training within the G3NAT framework.
-
-
 #!/bin/bash
 #SBATCH --job-name=job
 #SBATCH --account=stf
