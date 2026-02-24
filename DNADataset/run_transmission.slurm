@@ -8,7 +8,7 @@
 #SBATCH --mem=20GB
 #SBATCH --output=transmission_%j.out
 #SBATCH --error=transmission_%j.err
-#SBATCH --mail-type=END
+#SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=asyed4@uw.edu
 ##
 

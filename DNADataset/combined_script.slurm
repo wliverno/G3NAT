@@ -178,7 +178,6 @@ for i in {1..4}; do
         echo "   ^|^s Generated ${RUN_DIR}/Parameters.txt"
     else
         echo "   ^|^w Failed to generate ${PARAM_FILE}"
-        continue
     fi
 
     # Copy Hamiltonian file to parent directory if not already there
@@ -208,39 +207,26 @@ for i in {1..4}; do
     fi
 done
 
-# Wait for child jobs to finish before pickling
-echo "Waiting for transmission jobs to finish: ${JOB_IDS[*]}"
-
-while true; do
-    still_running=0
-    for jid in "${JOB_IDS[@]}"; do
-        if squeue -j "$jid" -h 2>/dev/null | grep -q .; then
-            still_running=1
-            break
-        fi
-    done
-    [ "$still_running" -eq 0 ] && break
-    sleep 30
-done
-
-echo "All transmission jobs left the queue. Checking status..."
-
-any_fail=0
-for jid in "${JOB_IDS[@]}"; do
-    state=$(sacct -j "$jid" --format=State -n | head -n 1 | awk '{print $1}')
-    echo "Job $jid state: $state"
-    [[ "$state" != "COMPLETED" ]] && any_fail=1
-done
-
-if [ "$any_fail" -ne 0 ]; then
-    echo "ERROR: One or more transmission jobs failed. Skipping pickle."
-    exit 2
+# Guard: abort if no transmission jobs were submitted
+if [ "${#JOB_IDS[@]}" -eq 0 ]; then
+    echo "ERROR: No transmission jobs were submitted (all run dirs missing or incomplete)."
+    exit 3
 fi
+
+# Build colon-separated dependency string for afterok
+DEP_STR=$(IFS=:; echo "${JOB_IDS[*]}")
+echo "Dependency string: afterok:${DEP_STR}"
+
+# Submit pickle job — SLURM will release it only when all transmission jobs complete successfully
+PICKLE_JOB_ID=$(sbatch --parsable \
+    --dependency=afterok:"${DEP_STR}" \
+    --export=ALL,WORKDIR="$WORKDIR" \
+    ../convert_to_pickle.slurm)
+echo "Submitted pickle job: Job ID ${PICKLE_JOB_ID}"
+echo "  will run after: ${JOB_IDS[*]}"
 
 echo ""
 echo "All jobs submitted!"
+echo "Transmission jobs: ${JOB_IDS[*]}"
+echo "Pickle job:        ${PICKLE_JOB_ID} (runs after all transmission jobs complete)"
 echo "Monitor jobs with: squeue -u \$USER"
-echo ""
-echo "Generating pickle files for $file ..."
-python ../convert_to_pickle.py "$WORKDIR"
-echo "Pickle generation complete."
