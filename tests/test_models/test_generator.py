@@ -270,3 +270,51 @@ def test_train_step_predictor_frozen():
 
     for p in predictor.parameters():
         assert not p.requires_grad, "Predictor params should be frozen"
+
+
+def test_train_loop_loss_changes():
+    """Training for multiple steps should change the loss."""
+    from g3nat.models.generator import DNASequenceGenerator, GeneratorTrainer
+    from g3nat.models import DNATransportGNN
+
+    torch.manual_seed(42)
+    gen = DNASequenceGenerator(seq_length=4, latent_dim=8, hidden_dim=16)
+    predictor = DNATransportGNN(hidden_dim=16, num_layers=1, num_heads=1, output_dim=10)
+    trainer = GeneratorTrainer(gen, predictor, lr=1e-2)
+
+    losses = trainer.train(num_steps=20, log_every=10)
+
+    assert len(losses) == 20, f"Expected 20 loss values, got {len(losses)}"
+    # Loss should change over training (not stuck)
+    assert losses[0] != losses[-1], "Loss should change during training"
+
+
+def test_train_loop_sequences_change():
+    """Generated sequences should evolve during training."""
+    from g3nat.models.generator import DNASequenceGenerator, GeneratorTrainer
+    from g3nat.models import DNATransportGNN
+
+    torch.manual_seed(0)
+    gen = DNASequenceGenerator(seq_length=4, latent_dim=8, hidden_dim=16, tau=0.5)
+    predictor = DNATransportGNN(hidden_dim=16, num_layers=1, num_heads=1, output_dim=10)
+    trainer = GeneratorTrainer(gen, predictor, lr=1e-2)
+
+    # Get sequence before training
+    gen.eval()
+    with torch.no_grad():
+        soft_before, _ = gen(batch_size=1)
+    seq_before = gen.decode_sequences(soft_before)[0]
+
+    # Train
+    trainer.train(num_steps=50, log_every=50)
+
+    # Get sequence after training
+    gen.eval()
+    with torch.no_grad():
+        soft_after, _ = gen(batch_size=1)
+    seq_after = gen.decode_sequences(soft_after)[0]
+
+    # Sequences may or may not change (depends on optimization landscape)
+    # But the soft bases should definitely be different
+    assert not torch.allclose(soft_before, soft_after, atol=1e-3), \
+        "Soft bases should change after training"
