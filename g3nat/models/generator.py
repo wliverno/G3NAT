@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from g3nat.graph.construction import sequence_to_graph
+
 
 class DNASequenceGenerator(nn.Module):
     """Generates soft DNA sequence representations via an MLP + Gumbel-Softmax."""
@@ -52,3 +54,39 @@ class DNASequenceGenerator(nn.Module):
     def get_complement(self, sequence):
         """Return Watson-Crick complement of a DNA sequence."""
         return ''.join(self.COMPLEMENT[b] for b in sequence)
+
+
+class GeneratorTrainer:
+    """Trains a DNASequenceGenerator against a frozen predictor model."""
+
+    def __init__(self, generator, predictor, mode='maximize_difference',
+                 lr=1e-3, energy_mask=None):
+        self.generator = generator
+        self.predictor = predictor
+        self.predictor.requires_grad_(False)
+        self.predictor.eval()
+        self.mode = mode
+        self.energy_mask = energy_mask
+        self.optimizer = torch.optim.Adam(generator.parameters(), lr=lr)
+
+    def build_graph_with_soft_features(self, soft_bases, complementary_sequence=None):
+        """Build a graph using sequence_to_graph topology but with soft node features.
+
+        Args:
+            soft_bases: Tensor [seq_length, 4] - soft Gumbel-Softmax output for primary strand.
+            complementary_sequence: Optional complement string. None means single-stranded.
+        """
+        seq_length = soft_bases.shape[0]
+        dummy_primary = 'A' * seq_length
+
+        if complementary_sequence is None:
+            data = sequence_to_graph(dummy_primary)
+        else:
+            data = sequence_to_graph(dummy_primary, complementary_sequence)
+
+        # Replace primary strand node features with soft bases
+        # Nodes: 0=left_contact, 1=right_contact, 2..2+N-1=primary strand
+        new_x = data.x.clone()
+        new_x[2:2 + seq_length, :4] = soft_bases
+        data.x = new_x
+        return data
