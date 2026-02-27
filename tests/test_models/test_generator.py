@@ -108,7 +108,7 @@ def test_build_single_stranded_graph_preserves_topology():
     assert soft_graph.edge_index.shape == hard_graph.edge_index.shape, \
         f"Edge shape mismatch: {soft_graph.edge_index.shape} vs {hard_graph.edge_index.shape}"
     assert torch.equal(soft_graph.edge_index, hard_graph.edge_index), \
-        "Edge topology should match"
+        "Edge topology should match between soft and hard single-stranded graphs"
     assert torch.equal(soft_graph.edge_attr, hard_graph.edge_attr), \
         "Edge attributes should match"
     assert soft_graph.x.shape == hard_graph.x.shape, \
@@ -163,3 +163,58 @@ def test_build_double_stranded_graph_topology():
         f"Edge shape mismatch: {soft_graph.edge_index.shape} vs {hard_graph.edge_index.shape}"
     assert torch.equal(soft_graph.edge_index, hard_graph.edge_index), \
         "Edge topology should match"
+
+
+def test_compute_loss_returns_negative_diff():
+    """Loss is negative L2 norm of transmission difference."""
+    from g3nat.models.generator import GeneratorTrainer, DNASequenceGenerator
+    from g3nat.models import DNATransportGNN
+
+    gen = DNASequenceGenerator(seq_length=4)
+    predictor = DNATransportGNN(hidden_dim=16, num_layers=1, num_heads=1, output_dim=10)
+    trainer = GeneratorTrainer(gen, predictor)
+
+    t_single = torch.tensor([[1.0, 2.0, 3.0]])
+    t_double = torch.tensor([[0.0, 0.0, 0.0]])
+
+    loss = trainer.compute_loss(t_single, t_double)
+
+    expected_diff = torch.norm(t_single - t_double, p=2)
+    assert torch.allclose(loss, -expected_diff, atol=1e-5), \
+        f"Expected {-expected_diff}, got {loss}"
+
+
+def test_compute_loss_identical_transmissions():
+    """Loss is zero when transmissions are identical."""
+    from g3nat.models.generator import GeneratorTrainer, DNASequenceGenerator
+    from g3nat.models import DNATransportGNN
+
+    gen = DNASequenceGenerator(seq_length=4)
+    predictor = DNATransportGNN(hidden_dim=16, num_layers=1, num_heads=1, output_dim=10)
+    trainer = GeneratorTrainer(gen, predictor)
+
+    t = torch.tensor([[1.0, 2.0, 3.0]])
+    loss = trainer.compute_loss(t, t)
+
+    assert torch.allclose(loss, torch.tensor(0.0), atol=1e-6), \
+        f"Expected 0.0 for identical transmissions, got {loss}"
+
+
+def test_compute_loss_with_energy_mask():
+    """Energy mask restricts loss to selected energy points."""
+    from g3nat.models.generator import GeneratorTrainer, DNASequenceGenerator
+    from g3nat.models import DNATransportGNN
+
+    gen = DNASequenceGenerator(seq_length=4)
+    predictor = DNATransportGNN(hidden_dim=16, num_layers=1, num_heads=1, output_dim=10)
+    trainer = GeneratorTrainer(gen, predictor)
+
+    t_single = torch.tensor([[1.0, 2.0, 3.0, 4.0]])
+    t_double = torch.tensor([[0.0, 0.0, 0.0, 0.0]])
+    mask = torch.tensor([1.0, 0.0, 0.0, 1.0])  # Only first and last energy points
+
+    loss = trainer.compute_loss(t_single, t_double, energy_mask=mask)
+
+    masked_diff = torch.norm((t_single - t_double) * mask, p=2)
+    assert torch.allclose(loss, -masked_diff, atol=1e-5), \
+        f"Expected {-masked_diff}, got {loss}"
