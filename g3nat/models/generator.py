@@ -79,6 +79,39 @@ class GeneratorTrainer:
             diff = diff * energy_mask
         return -torch.norm(diff, p=2)
 
+    def train_step(self):
+        """Run one generator training step.
+
+        Returns:
+            (loss_value, sequences): float loss and list of decoded sequence strings.
+        """
+        self.generator.train()
+        self.optimizer.zero_grad()
+
+        # Generate soft bases
+        soft_bases, logits = self.generator(batch_size=1)
+
+        # Decode to get discrete sequence for complement / logging
+        sequences = self.generator.decode_sequences(soft_bases)
+
+        # Build single-stranded graph (no complement)
+        graph_single = self.build_graph_with_soft_features(soft_bases[0])
+
+        # Build double-stranded graph (with complement)
+        complement = self.generator.get_complement(sequences[0])
+        graph_double = self.build_graph_with_soft_features(soft_bases[0], complement)
+
+        # Forward through frozen predictor
+        _, trans_single = self.predictor(graph_single)
+        _, trans_double = self.predictor(graph_double)
+
+        # Compute loss and backprop
+        loss = self.compute_loss(trans_single, trans_double, self.energy_mask)
+        loss.backward()
+        self.optimizer.step()
+
+        return loss.item(), sequences
+
     def build_graph_with_soft_features(self, soft_bases, complementary_sequence=None):
         """Build a graph using sequence_to_graph topology but with soft node features.
 
