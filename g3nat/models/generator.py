@@ -112,6 +112,24 @@ class GeneratorTrainer:
 
         return loss.item(), sequences
 
+    def train(self, num_steps, log_every=100):
+        """Full training loop.
+
+        Args:
+            num_steps: Number of training steps.
+            log_every: Print loss every N steps.
+
+        Returns:
+            List of loss values per step.
+        """
+        losses = []
+        for step in range(num_steps):
+            loss_val, sequences = self.train_step()
+            losses.append(loss_val)
+            if (step + 1) % log_every == 0:
+                print(f"Step {step + 1}/{num_steps} | Loss: {loss_val:.4f} | Seq: {sequences[0]}")
+        return losses
+
     def build_graph_with_soft_features(self, soft_bases, complementary_sequence=None):
         """Build a graph using sequence_to_graph topology but with soft node features.
 
