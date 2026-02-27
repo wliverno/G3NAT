@@ -52,8 +52,12 @@ class DNASequenceGenerator(nn.Module):
         return sequences
 
     def get_complement(self, sequence):
-        """Return Watson-Crick complement of a DNA sequence."""
-        return ''.join(self.COMPLEMENT[b] for b in sequence)
+        """Return Watson-Crick reverse complement of a DNA sequence.
+
+        DNA strands are antiparallel, so the complement is reversed to match
+        the 5'-to-3' convention expected by sequence_to_graph().
+        """
+        return ''.join(self.COMPLEMENT[b] for b in reversed(sequence))
 
 
 class GeneratorTrainer:

@@ -69,18 +69,21 @@ def test_decode_sequences_returns_valid_dna():
 
 
 def test_get_complement():
-    """get_complement returns correct Watson-Crick complement."""
+    """get_complement returns correct Watson-Crick reverse complement."""
     from g3nat.models.generator import DNASequenceGenerator
 
     gen = DNASequenceGenerator(seq_length=4)
 
-    assert gen.get_complement("ATGC") == "TACG"
+    # Reverse complement: complement each base, then reverse
+    # ATGC -> complement: TACG -> reverse: GCAT
+    assert gen.get_complement("ATGC") == "GCAT"
     assert gen.get_complement("AAAA") == "TTTT"
-    assert gen.get_complement("GCGC") == "CGCG"
+    # GCGC -> complement: CGCG -> reverse: GCGC (palindrome)
+    assert gen.get_complement("GCGC") == "GCGC"
 
 
 def test_get_complement_inverse():
-    """Complement of complement is the original sequence."""
+    """Reverse complement of reverse complement is the original sequence."""
     from g3nat.models.generator import DNASequenceGenerator
 
     gen = DNASequenceGenerator(seq_length=4)
