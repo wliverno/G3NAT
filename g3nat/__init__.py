@@ -7,7 +7,7 @@ of DNA using graph neural networks and tight-binding methods.
 
 __version__ = "0.2.0"
 
-from g3nat.models import DNATransportGNN, DNATransportHamiltonianGNN, DNASequenceGenerator, GeneratorTrainer
+from g3nat.models import DNATransportGNN, DNATransportHamiltonianGNN, SequenceOptimizer
 from g3nat.graph import sequence_to_graph
 from g3nat.training import train_model, Trainer
 from g3nat.data import DNATransportDataset, create_dna_dataset, generate_tight_binding_data
@@ -17,8 +17,7 @@ from g3nat.visualization import visualize_dna_graph
 __all__ = [
     "DNATransportGNN",
     "DNATransportHamiltonianGNN",
-    "DNASequenceGenerator",
-    "GeneratorTrainer",
+    "SequenceOptimizer",
     "sequence_to_graph",
     "train_model",
     "Trainer",
