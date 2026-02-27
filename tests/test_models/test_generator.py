@@ -218,3 +218,55 @@ def test_compute_loss_with_energy_mask():
     masked_diff = torch.norm((t_single - t_double) * mask, p=2)
     assert torch.allclose(loss, -masked_diff, atol=1e-5), \
         f"Expected {-masked_diff}, got {loss}"
+
+
+def test_train_step_returns_loss_and_sequences():
+    """train_step returns a loss value and generated sequences."""
+    from g3nat.models.generator import DNASequenceGenerator, GeneratorTrainer
+    from g3nat.models import DNATransportGNN
+
+    gen = DNASequenceGenerator(seq_length=4, latent_dim=8, hidden_dim=16)
+    predictor = DNATransportGNN(hidden_dim=16, num_layers=1, num_heads=1, output_dim=10)
+    trainer = GeneratorTrainer(gen, predictor, lr=1e-3)
+
+    loss_val, sequences = trainer.train_step()
+
+    assert isinstance(loss_val, float), f"Expected float loss, got {type(loss_val)}"
+    assert isinstance(sequences, list), f"Expected list of sequences, got {type(sequences)}"
+    assert len(sequences) == 1, f"Expected 1 sequence, got {len(sequences)}"
+    assert len(sequences[0]) == 4, f"Expected length 4, got {len(sequences[0])}"
+    assert all(b in 'ATGC' for b in sequences[0])
+
+
+def test_train_step_generator_has_gradients():
+    """After train_step, generator parameters should have received gradients."""
+    from g3nat.models.generator import DNASequenceGenerator, GeneratorTrainer
+    from g3nat.models import DNATransportGNN
+
+    gen = DNASequenceGenerator(seq_length=4, latent_dim=8, hidden_dim=16)
+    predictor = DNATransportGNN(hidden_dim=16, num_layers=1, num_heads=1, output_dim=10)
+    trainer = GeneratorTrainer(gen, predictor, lr=1e-3)
+
+    trainer.train_step()
+
+    has_grad = False
+    for p in gen.parameters():
+        if p.grad is not None and p.grad.abs().sum() > 0:
+            has_grad = True
+            break
+    assert has_grad, "Generator should have non-zero gradients after train_step"
+
+
+def test_train_step_predictor_frozen():
+    """Predictor parameters should not have gradients after train_step."""
+    from g3nat.models.generator import DNASequenceGenerator, GeneratorTrainer
+    from g3nat.models import DNATransportGNN
+
+    gen = DNASequenceGenerator(seq_length=4, latent_dim=8, hidden_dim=16)
+    predictor = DNATransportGNN(hidden_dim=16, num_layers=1, num_heads=1, output_dim=10)
+    trainer = GeneratorTrainer(gen, predictor, lr=1e-3)
+
+    trainer.train_step()
+
+    for p in predictor.parameters():
+        assert not p.requires_grad, "Predictor params should be frozen"
