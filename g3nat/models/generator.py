@@ -1,4 +1,14 @@
-"""DNA sequence generator using Gumbel-Softmax for differentiable sequence generation."""
+"""Direct sequence optimizer using straight-through Gumbel-Softmax.
+
+Based on Fast SeqProp:
+    Linder, J., & Seelig, G. (2020). Fast activation maximization for molecular
+    sequence design. BMC Bioinformatics, 21, 510.
+    https://doi.org/10.1186/s12859-020-03846-2
+
+Gumbel-Softmax straight-through estimator:
+    Jang, E., Gu, S., & Poole, B. (2017). Categorical Reparameterization with
+    Gumbel-Softmax. ICLR 2017. https://arxiv.org/abs/1611.01144
+"""
 
 import torch
 import torch.nn as nn
@@ -7,132 +17,59 @@ import torch.nn.functional as F
 from g3nat.graph.construction import sequence_to_graph
 
 
-class DNASequenceGenerator(nn.Module):
-    """Generates soft DNA sequence representations via an MLP + Gumbel-Softmax."""
+class SequenceOptimizer(nn.Module):
+    """Optimizes DNA sequence logits directly via straight-through Gumbel-Softmax.
+
+    Instead of an MLP mapping random z vectors to sequences, this class
+    maintains learnable per-position logits and optimizes them directly
+    against a frozen predictor model.
+    """
 
     COMPLEMENT = {'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G'}
     IDX_TO_BASE = {0: 'A', 1: 'T', 2: 'G', 3: 'C'}
 
-    def __init__(self, seq_length: int, latent_dim: int = 32,
-                 hidden_dim: int = 128, num_hidden_layers: int = 2,
-                 tau: float = 1.0):
+    def __init__(self, seq_length: int):
         super().__init__()
         self.seq_length = seq_length
-        self.latent_dim = latent_dim
-        self.tau = tau
+        self.logits = nn.Parameter(torch.randn(seq_length, 4))
 
-        layers = [nn.Linear(latent_dim, hidden_dim), nn.ReLU()]
-        for _ in range(num_hidden_layers - 1):
-            layers.extend([nn.Linear(hidden_dim, hidden_dim), nn.ReLU()])
-        layers.append(nn.Linear(hidden_dim, seq_length * 4))
-
-        self.mlp = nn.Sequential(*layers)
-
-    def forward(self, z=None, batch_size=1):
-        if z is None:
-            z = torch.randn(batch_size, self.latent_dim, device=next(self.parameters()).device)
-
-        logits = self.mlp(z).view(-1, self.seq_length, 4)
-        if self.training:
-            soft_bases = F.gumbel_softmax(logits, tau=self.tau, hard=False, dim=-1)
-        else:
-            # Deterministic: use one-hot of argmax for eval
-            soft = F.softmax(logits / self.tau, dim=-1)
-            idx = soft.argmax(dim=-1)
-            soft_bases = F.one_hot(idx, num_classes=4).float()
-        return soft_bases, logits
-
-    def decode_sequences(self, soft_bases):
-        """Convert soft base tensor to list of DNA sequence strings via argmax."""
-        indices = soft_bases.argmax(dim=-1)  # [batch, seq_length]
-        sequences = []
-        for i in range(indices.shape[0]):
-            seq = ''.join(self.IDX_TO_BASE[idx.item()] for idx in indices[i])
-            sequences.append(seq)
-        return sequences
-
-    def get_complement(self, sequence):
-        """Return Watson-Crick reverse complement of a DNA sequence.
-
-        DNA strands are antiparallel, so the complement is reversed to match
-        the 5'-to-3' convention expected by sequence_to_graph().
-        """
-        return ''.join(self.COMPLEMENT[b] for b in reversed(sequence))
-
-
-class GeneratorTrainer:
-    """Trains a DNASequenceGenerator against a frozen predictor model."""
-
-    def __init__(self, generator, predictor, mode='maximize_difference',
-                 lr=1e-3, energy_mask=None):
-        self.generator = generator
-        self.predictor = predictor
-        self.predictor.requires_grad_(False)
-        self.predictor.eval()
-        self.mode = mode
-        self.energy_mask = energy_mask
-        self.optimizer = torch.optim.Adam(generator.parameters(), lr=lr)
-
-    def compute_loss(self, transmission_single, transmission_double, energy_mask=None):
-        """Compute loss as negative L2 norm of transmission difference.
-
-        Returns negative because we maximize difference by minimizing loss.
-        """
-        diff = transmission_single - transmission_double
-        if energy_mask is not None:
-            diff = diff * energy_mask
-        return -torch.norm(diff, p=2)
-
-    def train_step(self):
-        """Run one generator training step.
-
-        Returns:
-            (loss_value, sequences): float loss and list of decoded sequence strings.
-        """
-        self.generator.train()
-        self.optimizer.zero_grad()
-
-        # Generate soft bases
-        soft_bases, logits = self.generator(batch_size=1)
-
-        # Decode to get discrete sequence for complement / logging
-        sequences = self.generator.decode_sequences(soft_bases)
-
-        # Build single-stranded graph (no complement)
-        graph_single = self.build_graph_with_soft_features(soft_bases[0])
-
-        # Build double-stranded graph (with complement)
-        complement = self.generator.get_complement(sequences[0])
-        graph_double = self.build_graph_with_soft_features(soft_bases[0], complement)
-
-        # Forward through frozen predictor
-        _, trans_single = self.predictor(graph_single)
-        _, trans_double = self.predictor(graph_double)
-
-        # Compute loss and backprop
-        loss = self.compute_loss(trans_single, trans_double, self.energy_mask)
-        loss.backward()
-        self.optimizer.step()
-
-        return loss.item(), sequences
-
-    def train(self, num_steps, log_every=100):
-        """Full training loop.
+    def forward(self, tau: float = 1.0):
+        """Produce one-hot DNA bases via straight-through Gumbel-Softmax.
 
         Args:
-            num_steps: Number of training steps.
-            log_every: Print loss every N steps.
+            tau: Temperature for Gumbel-Softmax. Lower = sharper.
 
         Returns:
-            List of loss values per step.
+            (one_hot, normalized_logits): one_hot is [seq_length, 4],
+                normalized_logits is [seq_length, 4].
         """
-        losses = []
-        for step in range(num_steps):
-            loss_val, sequences = self.train_step()
-            losses.append(loss_val)
-            if (step + 1) % log_every == 0:
-                print(f"Step {step + 1}/{num_steps} | Loss: {loss_val:.4f} | Seq: {sequences[0]}")
-        return losses
+        # Normalize logits by subtracting per-position mean
+        normalized = self.logits - self.logits.mean(dim=-1, keepdim=True)
+
+        if self.training:
+            one_hot = F.gumbel_softmax(normalized, tau=tau, hard=True, dim=-1)
+        else:
+            # Deterministic: argmax one-hot
+            idx = normalized.argmax(dim=-1)
+            one_hot = F.one_hot(idx, num_classes=4).float()
+
+        return one_hot, normalized
+
+    def decode_sequence(self, one_hot):
+        """Convert one-hot tensor to DNA string via argmax.
+
+        Args:
+            one_hot: Tensor [seq_length, 4].
+
+        Returns:
+            DNA sequence string.
+        """
+        indices = one_hot.argmax(dim=-1)
+        return ''.join(self.IDX_TO_BASE[idx.item()] for idx in indices)
+
+    def get_complement(self, sequence):
+        """Return Watson-Crick reverse complement of a DNA sequence."""
+        return ''.join(self.COMPLEMENT[b] for b in reversed(sequence))
 
     def build_graph_with_soft_features(self, soft_bases, complementary_sequence=None):
         """Build a graph using sequence_to_graph topology but with soft node features.
@@ -155,3 +92,78 @@ class GeneratorTrainer:
         new_x[2:2 + seq_length, :4] = soft_bases
         data.x = new_x
         return data
+
+    def compute_loss(self, transmission_single, transmission_double, energy_mask=None):
+        """Compute loss as negative L2 norm of transmission difference.
+
+        Returns negative because we maximize difference by minimizing loss.
+        """
+        diff = transmission_single - transmission_double
+        if energy_mask is not None:
+            diff = diff * energy_mask
+        return -torch.norm(diff, p=2)
+
+    def optimize(self, predictor, num_steps, tau_start=2.0, tau_end=0.1,
+                 lr=0.1, energy_mask=None, log_every=100):
+        """Full optimization loop with tau annealing.
+
+        Args:
+            predictor: Frozen predictor model (GNN).
+            num_steps: Number of optimization steps.
+            tau_start: Initial Gumbel-Softmax temperature.
+            tau_end: Final Gumbel-Softmax temperature.
+            lr: Learning rate for Adam optimizer.
+            energy_mask: Optional mask for energy sub-window optimization.
+            log_every: Print loss every N steps.
+
+        Returns:
+            List of loss values per step.
+        """
+        # Freeze predictor
+        predictor.requires_grad_(False)
+        predictor.eval()
+
+        # Optimizer for logits only
+        optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+        self.train()
+
+        losses = []
+        for step in range(num_steps):
+            optimizer.zero_grad()
+
+            # Linear tau annealing
+            if num_steps > 1:
+                tau = tau_start + (tau_end - tau_start) * step / (num_steps - 1)
+            else:
+                tau = tau_start
+
+            # Forward pass
+            one_hot, normalized_logits = self.forward(tau)
+
+            # Decode discrete sequence for complement
+            sequence = self.decode_sequence(one_hot)
+
+            # Build single-stranded graph
+            graph_single = self.build_graph_with_soft_features(one_hot)
+
+            # Build double-stranded graph
+            complement = self.get_complement(sequence)
+            graph_double = self.build_graph_with_soft_features(one_hot, complement)
+
+            # Forward through frozen predictor
+            _, trans_single = predictor(graph_single)
+            _, trans_double = predictor(graph_double)
+
+            # Compute loss and backprop
+            loss = self.compute_loss(trans_single, trans_double, energy_mask)
+            loss.backward()
+            optimizer.step()
+
+            loss_val = loss.item()
+            losses.append(loss_val)
+
+            if (step + 1) % log_every == 0:
+                print(f"Step {step + 1}/{num_steps} | Loss: {loss_val:.4f} | "
+                      f"Seq: {sequence} | tau: {tau:.3f}")
+
+        return losses
