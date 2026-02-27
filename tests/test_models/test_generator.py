@@ -318,3 +318,12 @@ def test_train_loop_sequences_change():
     # But the soft bases should definitely be different
     assert not torch.allclose(soft_before, soft_after, atol=1e-3), \
         "Soft bases should change after training"
+
+
+def test_generator_importable_from_top_level():
+    """Generator classes should be importable from g3nat package."""
+    from g3nat import DNASequenceGenerator
+    from g3nat.models import DNASequenceGenerator as Gen2
+    from g3nat.models.generator import GeneratorTrainer
+
+    assert DNASequenceGenerator is Gen2
