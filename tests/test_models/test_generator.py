@@ -49,3 +49,40 @@ def test_generator_deterministic_with_same_z():
         out2, _ = gen(z=z)
 
     assert torch.allclose(out1, out2), "Same z should produce same output in eval mode"
+
+
+def test_decode_sequences_returns_valid_dna():
+    """decode_sequences returns strings of valid DNA bases with correct length."""
+    from g3nat.models.generator import DNASequenceGenerator
+
+    gen = DNASequenceGenerator(seq_length=6, latent_dim=8, hidden_dim=16)
+    gen.eval()
+    with torch.no_grad():
+        soft_bases, _ = gen(batch_size=3)
+
+    sequences = gen.decode_sequences(soft_bases)
+
+    assert len(sequences) == 3
+    for seq in sequences:
+        assert len(seq) == 6, f"Expected length 6, got {len(seq)}"
+        assert all(b in 'ATGC' for b in seq), f"Invalid base in: {seq}"
+
+
+def test_get_complement():
+    """get_complement returns correct Watson-Crick complement."""
+    from g3nat.models.generator import DNASequenceGenerator
+
+    gen = DNASequenceGenerator(seq_length=4)
+
+    assert gen.get_complement("ATGC") == "TACG"
+    assert gen.get_complement("AAAA") == "TTTT"
+    assert gen.get_complement("GCGC") == "CGCG"
+
+
+def test_get_complement_inverse():
+    """Complement of complement is the original sequence."""
+    from g3nat.models.generator import DNASequenceGenerator
+
+    gen = DNASequenceGenerator(seq_length=4)
+    original = "ATCG"
+    assert gen.get_complement(gen.get_complement(original)) == original
