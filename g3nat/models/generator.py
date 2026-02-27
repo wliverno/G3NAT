@@ -69,6 +69,16 @@ class GeneratorTrainer:
         self.energy_mask = energy_mask
         self.optimizer = torch.optim.Adam(generator.parameters(), lr=lr)
 
+    def compute_loss(self, transmission_single, transmission_double, energy_mask=None):
+        """Compute loss as negative L2 norm of transmission difference.
+
+        Returns negative because we maximize difference by minimizing loss.
+        """
+        diff = transmission_single - transmission_double
+        if energy_mask is not None:
+            diff = diff * energy_mask
+        return -torch.norm(diff, p=2)
+
     def build_graph_with_soft_features(self, soft_bases, complementary_sequence=None):
         """Build a graph using sequence_to_graph topology but with soft node features.
 
