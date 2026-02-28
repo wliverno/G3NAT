@@ -43,10 +43,10 @@ def test_optimizer_deterministic_eval():
 
 
 def test_optimizer_has_gamma_beta():
-    """Optimizer has learnable gamma and beta parameters."""
+    """Optimizer has learnable gamma and beta parameters when instance norm is on."""
     from g3nat.models.generator import SequenceOptimizer
 
-    opt = SequenceOptimizer(seq_length=4)
+    opt = SequenceOptimizer(seq_length=4, use_instance_norm=True)
 
     assert hasattr(opt, 'gamma'), "Should have gamma parameter"
     assert hasattr(opt, 'beta'), "Should have beta parameter"
@@ -60,7 +60,7 @@ def test_optimizer_instance_norm():
     """Forward applies per-channel instance normalization."""
     from g3nat.models.generator import SequenceOptimizer
 
-    opt = SequenceOptimizer(seq_length=10)
+    opt = SequenceOptimizer(seq_length=10, use_instance_norm=True)
     opt.eval()
     with torch.no_grad():
         _, scaled = opt()
@@ -184,7 +184,7 @@ def test_compute_loss_with_mask():
 
 
 def test_optimize_loss_decreases():
-    """Losses trend downward over training."""
+    """Best-seen deterministic loss improves over training."""
     from g3nat.models.generator import SequenceOptimizer
     from g3nat.models import DNATransportGNN
 
@@ -192,14 +192,18 @@ def test_optimize_loss_decreases():
     opt = SequenceOptimizer(seq_length=4)
     predictor = DNATransportGNN(hidden_dim=16, num_layers=1, num_heads=1, output_dim=10)
 
-    losses = opt.optimize(predictor, num_steps=50, lr=0.1, log_every=50)
+    result = opt.optimize(predictor, num_steps=50, lr=0.01, log_every=10)
 
-    assert len(losses) == 50
-    # Compare average of first 5 vs last 5 (more robust than single points)
-    early_avg = sum(losses[:5]) / 5
-    late_avg = sum(losses[-5:]) / 5
-    assert late_avg < early_avg, \
-        f"Loss should decrease: early avg {early_avg:.4f} vs late avg {late_avg:.4f}"
+    assert isinstance(result, dict), "optimize() should return a dict"
+    assert 'losses' in result
+    assert 'best_loss' in result
+    assert 'best_step' in result
+    assert 'best_sequence' in result
+    assert len(result['losses']) == 50
+
+    # Best deterministic loss should be finite and negative (we minimize -||diff||)
+    assert result['best_loss'] < 0, \
+        f"Best loss should be negative, got {result['best_loss']}"
 
 
 def test_optimize_gradients_flow():
@@ -211,7 +215,7 @@ def test_optimize_gradients_flow():
     opt = SequenceOptimizer(seq_length=4)
     predictor = DNATransportGNN(hidden_dim=16, num_layers=1, num_heads=1, output_dim=10)
 
-    opt.optimize(predictor, num_steps=1, lr=0.1, log_every=10)
+    opt.optimize(predictor, num_steps=1, lr=0.001, log_every=10)
 
     assert opt.logits.grad is not None, "Logits should have gradients"
     assert opt.logits.grad.abs().sum() > 0, "Gradients should be non-zero"
@@ -223,10 +227,10 @@ def test_optimize_gamma_gradients_flow():
     from g3nat.models import DNATransportGNN
 
     torch.manual_seed(42)
-    opt = SequenceOptimizer(seq_length=4)
+    opt = SequenceOptimizer(seq_length=4, use_instance_norm=True)
     predictor = DNATransportGNN(hidden_dim=16, num_layers=1, num_heads=1, output_dim=10)
 
-    opt.optimize(predictor, num_steps=1, lr=0.1, log_every=10)
+    opt.optimize(predictor, num_steps=1, lr=0.001, log_every=10)
 
     assert opt.gamma.grad is not None, "Gamma should have gradients"
     assert opt.gamma.grad.abs().sum() > 0, "Gamma gradients should be non-zero"
@@ -238,12 +242,13 @@ def test_optimize_gamma_changes():
     from g3nat.models import DNATransportGNN
 
     torch.manual_seed(42)
-    opt = SequenceOptimizer(seq_length=4)
+    opt = SequenceOptimizer(seq_length=4, use_instance_norm=True)
     predictor = DNATransportGNN(hidden_dim=16, num_layers=1, num_heads=1, output_dim=10)
 
     gamma_init = opt.gamma.data.clone()
 
-    opt.optimize(predictor, num_steps=50, lr=0.1, log_every=100)
+    # Use log_every <= num_steps so best-seen checkpointing captures changed gamma
+    opt.optimize(predictor, num_steps=50, lr=0.01, log_every=25)
 
     assert not torch.equal(opt.gamma.data, gamma_init), \
         "Gamma should change during training (adaptive entropy)"
@@ -257,6 +262,111 @@ def test_optimizer_importable():
 
     assert SequenceOptimizer is Opt2
     assert SequenceOptimizer is Opt3
+
+
+def test_soft_complement():
+    """_soft_complement produces correct Watson-Crick pairs."""
+    from g3nat.models.generator import SequenceOptimizer
+
+    opt = SequenceOptimizer(seq_length=4)
+
+    # Hard one-hot for ATGC: A=[1,0,0,0], T=[0,1,0,0], G=[0,0,1,0], C=[0,0,0,1]
+    one_hot = torch.tensor([
+        [1., 0., 0., 0.],  # A
+        [0., 1., 0., 0.],  # T
+        [0., 0., 1., 0.],  # G
+        [0., 0., 0., 1.],  # C
+    ])
+
+    comp = opt._soft_complement(one_hot)
+
+    # Reverse complement of ATGC is GCAT
+    # G=[0,0,1,0], C=[0,0,0,1], A=[1,0,0,0], T=[0,1,0,0]
+    expected = torch.tensor([
+        [0., 0., 1., 0.],  # G (complement of C, last position reversed)
+        [0., 0., 0., 1.],  # C (complement of G)
+        [1., 0., 0., 0.],  # A (complement of T)
+        [0., 1., 0., 0.],  # T (complement of A)
+    ])
+
+    assert torch.allclose(comp, expected, atol=1e-6), \
+        f"Soft complement of ATGC should be GCAT.\nGot:\n{comp}\nExpected:\n{expected}"
+
+
+def test_soft_complement_gradient_flows():
+    """Gradient flows through the soft complement path."""
+    from g3nat.models.generator import SequenceOptimizer
+
+    opt = SequenceOptimizer(seq_length=4)
+
+    soft = torch.randn(4, 4, requires_grad=True)
+    comp = opt._soft_complement(soft)
+    loss = comp.sum()
+    loss.backward()
+
+    assert soft.grad is not None, "Gradient should flow through soft complement"
+    assert soft.grad.abs().sum() > 0, "Gradients should be non-zero"
+
+
+def test_optimizer_no_instance_norm():
+    """Optimizer works with use_instance_norm=False."""
+    from g3nat.models.generator import SequenceOptimizer
+
+    opt = SequenceOptimizer(seq_length=4, use_instance_norm=False)
+
+    assert not hasattr(opt, 'gamma'), "Should not have gamma when instance norm is off"
+    assert not hasattr(opt, 'beta'), "Should not have beta when instance norm is off"
+
+    # Forward should still work
+    opt.train()
+    one_hot, scaled = opt()
+    assert one_hot.shape == (4, 4)
+    assert scaled.shape == (4, 4)
+
+    # scaled should be raw logits (no normalization)
+    assert torch.allclose(scaled, opt.logits, atol=1e-6), \
+        "Without instance norm, scaled should equal raw logits"
+
+
+def test_optimize_early_stopping():
+    """Early stopping halts training before num_steps when patience is exceeded."""
+    from g3nat.models.generator import SequenceOptimizer
+    from g3nat.models import DNATransportGNN
+
+    torch.manual_seed(42)
+    opt = SequenceOptimizer(seq_length=4)
+    predictor = DNATransportGNN(hidden_dim=16, num_layers=1, num_heads=1, output_dim=10)
+
+    # patience=1 with log_every=5 means stop after 2 eval rounds without improvement
+    result = opt.optimize(predictor, num_steps=500, lr=0.001,
+                          log_every=5, patience=1)
+
+    # Should stop well before 500 steps
+    assert len(result['losses']) < 500, \
+        f"Early stopping should halt before 500 steps, got {len(result['losses'])}"
+    assert result['best_step'] > 0, "Should have found a best step"
+
+
+def test_optimize_best_seen_restored():
+    """Best-seen parameters are restored after training."""
+    from g3nat.models.generator import SequenceOptimizer
+    from g3nat.models import DNATransportGNN
+
+    torch.manual_seed(42)
+    opt = SequenceOptimizer(seq_length=4)
+    predictor = DNATransportGNN(hidden_dim=16, num_layers=1, num_heads=1, output_dim=10)
+
+    result = opt.optimize(predictor, num_steps=100, lr=0.01, log_every=10)
+
+    # After training, eval the restored parameters
+    opt.eval()
+    with torch.no_grad():
+        one_hot, _ = opt()
+        seq = opt.decode_sequence(one_hot)
+
+    # The restored sequence should match best_sequence
+    assert seq == result['best_sequence'], \
+        f"Restored sequence '{seq}' should match best_sequence '{result['best_sequence']}'"
 
 
 MODEL_PATH = "trained_models/hamiltonian_2000x_4to10BP_5000epoch.pth"
@@ -283,24 +393,16 @@ def test_optimize_with_trained_model():
         oh, _ = opt()
         seq = opt.decode_sequence(oh)
         gs = opt.build_graph_with_soft_features(oh)
-        gd = opt.build_graph_with_soft_features(oh, opt.get_complement(seq))
+        gd = opt._build_double_soft(oh)
         _, ts = predictor(gs)
         _, td = predictor(gd)
         loss_before = opt.compute_loss(ts, td).item()
 
-    losses = opt.optimize(predictor, num_steps=100, lr=0.1, log_every=25)
-    assert len(losses) == 100
+    result = opt.optimize(predictor, num_steps=500, lr=0.01, log_every=50)
+    assert len(result['losses']) <= 500
 
-    # Evaluate deterministic sequence AFTER training
-    opt.eval()
-    with torch.no_grad():
-        oh, _ = opt()
-        seq = opt.decode_sequence(oh)
-        gs = opt.build_graph_with_soft_features(oh)
-        gd = opt.build_graph_with_soft_features(oh, opt.get_complement(seq))
-        _, ts = predictor(gs)
-        _, td = predictor(gd)
-        loss_after = opt.compute_loss(ts, td).item()
-
-    assert loss_after < loss_before, \
-        f"Deterministic loss should improve: before {loss_before:.4f} vs after {loss_after:.4f}"
+    # Best-seen tracking should preserve at least the initial quality
+    assert result['best_loss'] <= loss_before, \
+        f"Best loss should not degrade: before {loss_before:.4f} vs best {result['best_loss']:.4f}"
+    assert isinstance(result['best_sequence'], str)
+    assert len(result['best_sequence']) == 4

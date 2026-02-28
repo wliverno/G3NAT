@@ -6,20 +6,12 @@ The generator module (`g3nat/models/generator.py`) contains **`SequenceOptimizer
 
 For ground-truth physics evaluation, use `create_hamiltonian()` and `calculate_NEGF()` from `g3nat.utils.physics` directly.
 
-```
-                        GOAL
-    ┌─────────────────────────────────────────────┐
-    │  Find sequence S such that:                 │
-    │                                             │
-    │  T(single-stranded S) ≠ T(double-stranded S)│
-    │                                             │
-    │  Maximize: ||T_single - T_double||₁         │
-    └─────────────────────────────────────────────┘
-```
+**Goal**: Find sequence S such that `||T_single(S) - T_double(S)||₁` is maximized.
 
 ### References
 
 - Linder, J., & Seelig, G. (2021). Fast activation maximization for molecular sequence design. *BMC Bioinformatics*, 22, 510. https://doi.org/10.1186/s12859-021-04437-5
+- Reference implementation: https://github.com/johli/seqprop
 
 ---
 
@@ -27,316 +19,211 @@ For ground-truth physics evaluation, use `create_hamiltonian()` and `calculate_N
 
 ### How It Works
 
-The optimizer maintains three sets of **learnable parameters** optimized jointly via Adam against a frozen GNN predictor:
+The optimizer maintains **learnable parameters** optimized jointly via Adam against a frozen GNN predictor:
 
 - **Logits** `[N, 4]` — per-position nucleotide preferences
-- **Gamma** `[4]` — per-channel scale (controls sampling entropy adaptively)
-- **Beta** `[4]` — per-channel offset
+- **Gamma** `[4]` — per-channel scale (controls sampling entropy adaptively) *(when instance norm is enabled)*
+- **Beta** `[4]` — per-channel offset *(when instance norm is enabled)*
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                      SequenceOptimizer                           │
-│                                                                  │
-│  ┌──────────────────┐     ┌────────────────────────────────┐    │
-│  │  Learnable Params │     │  Frozen Predictor               │    │
-│  │                   │     │  (DNATransportGNN or            │    │
-│  │  logits [N, 4]   │     │   DNATransportHamiltonianGNN)   │    │
-│  │  gamma  [4]      │     │                                 │    │
-│  │  beta   [4]      │     │  Graph ──► GNN ──► T(E)        │    │
-│  │                   │     │                                 │    │
-│  │  Instance Norm    │     │                                 │    │
-│  │  ──► Softmax ST   │     │                                 │    │
-│  │  ──► one-hot      │     │                                 │    │
-│  └──────────────────┘     └────────────────────────────────┘    │
-│           │                          ▲                           │
-│           ▼                          │                           │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │              Graph Construction                          │    │
-│  │  one-hot ──► sequence_to_graph() topology                │    │
-│  │           ──► replace node features with ST one-hot      │    │
-│  │           ──► build single-stranded & double-stranded    │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│           │                                                      │
-│           ▼                                                      │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │  Loss = -||T_single(E) - T_double(E)||₁                 │    │
-│  │  (minimize negative = maximize difference)               │    │
-│  └─────────────────────────────────────────────────────────┘    │
-└──────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph SequenceOptimizer
+        LP["Learnable Params<br/>logits [N,4]<br/>gamma [4]<br/>beta [4]"]
+        IN["Instance Norm<br/>+ Softmax ST<br/>→ one_hot"]
+        LP --> IN
+    end
+
+    subgraph GraphConstruction["Graph Construction"]
+        GS["Single-stranded graph<br/>(soft primary features)"]
+        GD["Double-stranded graph<br/>(soft primary + soft complement)"]
+    end
+
+    subgraph FrozenPredictor["Frozen Predictor (GNN)"]
+        TS["T_single(E)"]
+        TD["T_double(E)"]
+    end
+
+    IN --> GS
+    IN --> GD
+    GS --> TS
+    GD --> TD
+    TS --> LOSS["Loss = -||T_single - T_double||₁"]
+    TD --> LOSS
+    LOSS -->|"backprop"| LP
 ```
 
 ### Instance Normalization + Softmax ST
 
-The key innovation from Fast SeqProp: per-channel instance normalization with learnable scale (γ) prevents logit drift, while γ adaptively controls sampling entropy — replacing manual temperature schedules.
+**Default: off.** Logits feed directly to Softmax. This matches the paper's default (`batch_normalize_pwm=False`) and works for any sequence length including homopolymers.
 
-```
-    Learnable Params                          Output
+When `use_instance_norm=True`, per-channel instance normalization with learnable gamma/beta is applied before Softmax. Gamma adaptively controls sampling entropy — replacing manual temperature schedules. **Caution: mathematically cannot represent homopolymers** (poly-C, poly-T, etc.) because a uniform column has zero variance and normalizes to zero.
 
-    logits [N, 4]                         ┌──────────────┐
-         │                                │              │
-         ▼                                │  Instance    │
-    Instance Norm                         │  Norm + γ,β  │
-    per-channel across positions          │      │       │
-    μ_j = mean(logits[:, j])              │      ▼       │
-    σ_j = std(logits[:, j])               │  Softmax     │
-         │                                │      │       │
-         ▼                                │      ▼       │
-    (logits - μ) / σ                      │  Categorical │
-         │                                │  sample      │
-         ▼                                │      │       │
-    * gamma + beta                        │      ▼       │
-    (γ controls entropy)                  │  one-hot     │
-                                          │  [N, 4]      │
-    gamma [4] ─── learnable               └──────────────┘
-    beta  [4] ─── learnable
-
-    N = sequence length
-    4 channels = [A, T, G, C]
+```mermaid
+graph LR
+    L["logits [N,4]"] --> MU["μ_j = mean(logits[:,j])"]
+    L --> VAR["σ_j = std(logits[:,j])"]
+    MU --> NORM["(logits - μ) / σ"]
+    VAR --> NORM
+    NORM --> SCALE["× gamma + beta"]
+    SCALE --> SM["Softmax"]
+    SM --> CAT["Categorical sample"]
+    CAT --> OH["one_hot [N,4]"]
 ```
 
 ### Softmax Straight-Through Estimator
 
 The forward pass samples **discrete one-hot** vectors from the categorical distribution (keeping the predictor in-distribution). The backward pass substitutes the **softmax gradient** for the non-differentiable sampling step.
 
-```
-    FORWARD PASS                       BACKWARD PASS
-    ┌──────────────────────┐          ┌──────────────────────┐
-    │ scaled_logits        │          │ Gradients flow through│
-    │        │             │          │ continuous softmax     │
-    │        ▼             │          │                        │
-    │   softmax(scaled)    │          │ ∂L/∂logits computed   │
-    │        │             │          │ via softmax Jacobian   │
-    │        ▼             │          │                        │
-    │   Categorical sample │          │ ∂L/∂γ adapts entropy  │
-    │        │             │          │ ∂L/∂β shifts channels │
-    │        ▼             │          │                        │
-    │   [1, 0, 0, 0]      │          │ All updated by Adam   │
-    │   (discrete one-hot) │          └──────────────────────┘
-    │                      │
-    │ Predictor sees hard  │
-    │ one-hot (in-distrib.)│
-    └──────────────────────┘
+```mermaid
+graph TD
+    subgraph Forward["Forward Pass"]
+        F1["scaled_logits"] --> F2["softmax(scaled)"]
+        F2 --> F3["Categorical sample"]
+        F3 --> F4["[1, 0, 0, 0]<br/>discrete one-hot"]
+        F4 --> F5["Predictor sees hard<br/>one-hot (in-distribution)"]
+    end
+
+    subgraph Backward["Backward Pass"]
+        B1["Gradients flow through<br/>continuous softmax"]
+        B2["∂L/∂logits via<br/>softmax Jacobian"]
+        B3["∂L/∂γ adapts entropy<br/>∂L/∂β shifts channels"]
+        B4["All updated by Adam"]
+        B1 --> B2 --> B3 --> B4
+    end
 ```
 
-### Adaptive Entropy (γ)
+### Adaptive Entropy (gamma)
 
-Instead of a fixed temperature schedule, the learnable scale parameter γ controls sampling entropy per channel. Adam optimizes γ alongside logits:
+Instead of a fixed temperature schedule, the learnable scale parameter gamma controls sampling entropy per channel. Adam optimizes gamma alongside logits:
 
+- **gamma large** → scaled logits spread out → sharper softmax → lower entropy (exploitation)
+- **gamma small** → scaled logits compressed → flatter softmax → higher entropy (exploration)
+
+### Soft Complement (Differentiable Gradient Flow)
+
+**Problem**: The original implementation decoded the one-hot to a string, computed the reverse complement string, and built the complement graph from hard one-hot features. This breaks gradient flow through the double-stranded path — the optimizer has no signal about how changing the primary sequence changes the complement.
+
+**Solution**: `_soft_complement()` computes the Watson-Crick reverse complement directly on soft one-hot tensors:
+
+```python
+soft_bases.flip(0)[:, [1, 0, 3, 2]]
 ```
-    γ_j large  →  scaled logits spread out  →  sharper softmax  →  lower entropy
-    γ_j small  →  scaled logits compressed  →  flatter softmax  →  higher entropy
 
-    Adaptive behavior:
-    - When gradient signals are consistent: γ grows (exploitation)
-    - When gradient signals are inconsistent: γ shrinks (exploration)
+This does two operations:
+1. `flip(0)` — reverse positions (antiparallel strand orientation)
+2. `[:, [1, 0, 3, 2]]` — swap A↔T (columns 0↔1) and G↔C (columns 2↔3)
+
+```mermaid
+graph LR
+    subgraph Primary["Primary 5'→3'"]
+        A["A [1,0,0,0]"]
+        T["T [0,1,0,0]"]
+        G["G [0,0,1,0]"]
+        C["C [0,0,0,1]"]
+    end
+
+    subgraph FlipSwap["flip + swap"]
+        FS["Reverse positions<br/>Swap A↔T, G↔C"]
+    end
+
+    subgraph Complement["Complement 5'→3'"]
+        CG["G [0,0,1,0]"]
+        CC["C [0,0,0,1]"]
+        CA["A [1,0,0,0]"]
+        CT["T [0,1,0,0]"]
+    end
+
+    Primary --> FlipSwap --> Complement
+```
+
+Both strands now carry gradients, enabling correct optimization of the double-stranded path.
+
+```mermaid
+graph TD
+    OH["one_hot (ST output)"] --> SINGLE["Single-stranded graph<br/>(soft primary features)"]
+    OH --> SC["_soft_complement()"]
+    SC --> COMP["Soft complement features"]
+    OH --> DOUBLE["Double-stranded graph"]
+    COMP --> DOUBLE
+
+    SINGLE --> P1["Predictor → T_single"]
+    DOUBLE --> P2["Predictor → T_double"]
+
+    P1 --> LOSS["Loss = -||diff||₁"]
+    P2 --> LOSS
+
+    LOSS -->|"∂L/∂one_hot<br/>(gradient flows through<br/>BOTH strands)"| OH
+
+    style SC fill:#e8f5e9
+    style COMP fill:#e8f5e9
 ```
 
 ### Training vs Eval Mode
 
-```
-    TRAINING MODE                          EVAL MODE
-    ┌──────────────────────┐              ┌──────────────────────┐
-    │ Instance Norm logits │              │ Instance Norm logits │
-    │        │             │              │        │             │
-    │        ▼             │              │        ▼             │
-    │   softmax ──►        │              │   argmax ──► one_hot │
-    │   categorical sample │              │   [1, 0, 0, 0]      │
-    │        │             │              │                      │
-    │        ▼             │              │ Deterministic:       │
-    │   [1, 0, 0, 0]      │              │ always same output   │
-    │                      │              │ for given logits     │
-    │ Stochastic sample    │              │                      │
-    │ with ST gradient     │              │ No sampling noise    │
-    └──────────────────────┘              └──────────────────────┘
-```
+| | Training Mode | Eval Mode |
+|---|---|---|
+| **Sampling** | Categorical sample (stochastic) | Argmax (deterministic) |
+| **Gradient** | Straight-through estimator | No gradient needed |
+| **Use** | During `optimize()` loop | For evaluation/best-seen tracking |
 
-### Graph Construction with Soft Features
+### Optimization Loop with Best-Seen Tracking
 
-`sequence_to_graph()` converts a DNA string into a graph with hard one-hot node features. Hard one-hot values have **no gradient**, so the optimizer can't learn through them.
-
-**Solution:** Use `sequence_to_graph()` for the graph **topology** only (edges, contacts), then swap in the straight-through one-hot features for the primary strand:
-
-```
-    Step 1: Get topology from dummy sequence
-    ┌─────────────────────────────────────────┐
-    │  sequence_to_graph("AAAA")              │
-    │                                         │
-    │  Returns:                               │
-    │    Nodes: [contact_L, contact_R,        │
-    │            A, A, A, A]                  │
-    │    Edges: backbone + contact edges      │
-    │    Features: HARD one-hot (no gradient) │
-    └─────────────────────────────────────────┘
-                        │
-                        ▼
-    Step 2: Replace primary strand features
-    ┌─────────────────────────────────────────┐
-    │  Node 0 (left contact):   [0,0,0,0]    │  ← keep (not optimized)
-    │  Node 1 (right contact):  [0,0,0,0]    │  ← keep (not optimized)
-    │  Node 2 (position 0):    one_hot[0]    │  ← REPLACE (has grad)
-    │  Node 3 (position 1):    one_hot[1]    │  ← REPLACE (has grad)
-    │  Node 4 (position 2):    one_hot[2]    │  ← REPLACE (has grad)
-    │  Node 5 (position 3):    one_hot[3]    │  ← REPLACE (has grad)
-    └─────────────────────────────────────────┘
-```
-
-### Single-Stranded vs Double-Stranded Graphs
-
-Both graphs are built per optimization step. The primary strand uses soft features (differentiable); the complement uses hard features (not optimized).
-
-```
-    SINGLE-STRANDED (no complement)         DOUBLE-STRANDED (with complement)
-    ┌───────────────────────────┐           ┌───────────────────────────────────┐
-    │                           │           │                                   │
-    │  [L]──A──T──G──C──[R]    │           │  [L]──A──T──G──C──[R]            │
-    │                           │           │       |  |  |  |                  │
-    │  6 nodes, ~10 edges       │           │       T──A──C──G                 │
-    │  (2 contacts + 4 bases)   │           │                                   │
-    │                           │           │  10 nodes, ~24 edges              │
-    │  Primary features:        │           │  (2 contacts + 4 primary + 4 comp)│
-    │  straight-through one-hot │           │                                   │
-    │  (differentiable via ST)  │           │  Primary features: ST one-hot     │
-    │                           │           │  Complement features: HARD        │
-    │                           │           │  (only primary is optimized)      │
-    └───────────────────────────┘           └───────────────────────────────────┘
-
-    [L] = left electrode contact       ── = backbone bond
-    [R] = right electrode contact       | = hydrogen bond
-```
-
-### Optimization Loop (Single Step)
-
-```
-               ┌─────────────────┐
-               │  Instance Norm  │
-               │  per-channel    │
-               │  * γ + β        │
-               └────────┬────────┘
-                        │
-                        ▼
-               ┌─────────────────┐
-               │  Softmax ST     │
-               │  categorical    │
-               │  sample         │
-               │  ──► one_hot    │
-               └────────┬────────┘
-                        │
-               ┌────────┴────────┐
-               │                 │
-               ▼                 ▼
-      ┌──────────────┐  ┌──────────────────┐
-      │  decode to   │  │  Keep one_hot     │
-      │  "ATGC"      │  │  (ST gradient)    │
-      │  (discrete)  │  │                    │
-      └──────┬───────┘  └────────┬───────────┘
-             │                   │
-             ▼                   │
-      ┌───────────────┐         │
-      │  reverse      │         │
-      │  complement   │         │
-      └──────┬────────┘         │
-             │                   │
-    ┌────────┴───────────────────┤
-    │                            │
-    ▼                            ▼
-┌──────────────────┐   ┌──────────────────┐
-│  Build Graph     │   │  Build Graph     │
-│  SINGLE-stranded │   │  DOUBLE-stranded │
-│  Soft primary    │   │  Soft primary    │
-│  No complement   │   │  Hard complement │
-└────────┬─────────┘   └────────┬─────────┘
-         │                      │
-         ▼                      ▼
-┌──────────────────┐   ┌──────────────────┐
-│  Frozen Predictor│   │  Frozen Predictor│
-│  ──► T_single(E) │   │  ──► T_double(E) │
-└────────┬─────────┘   └────────┬─────────┘
-         │                      │
-         └──────────┬───────────┘
-                    │
-                    ▼
-         ┌──────────────────────┐
-         │  Loss = -||diff||₁   │
-         │  loss.backward()     │
-         │  optimizer.step()    │
-         │  (updates logits,    │
-         │   gamma, and beta)   │
-         └──────────────────────┘
+```mermaid
+graph TD
+    START["Start: init best_state"] --> LOOP["Training step"]
+    LOOP --> FWD["Forward: Softmax ST → one_hot"]
+    FWD --> GRAPHS["Build single + double graphs<br/>(both with soft features)"]
+    GRAPHS --> PRED["Frozen predictor → T_single, T_double"]
+    PRED --> LOSS["Loss = -||diff||₁"]
+    LOSS --> BACK["loss.backward() + optimizer.step()"]
+    BACK --> CHECK{"step % log_every == 0?"}
+    CHECK -->|No| LOOP
+    CHECK -->|Yes| EVAL["Deterministic eval<br/>(argmax, no sampling)"]
+    EVAL --> BETTER{"det_loss < best_loss?"}
+    BETTER -->|Yes| SAVE["Save best_state, best_loss,<br/>best_step, best_sequence"]
+    BETTER -->|No| PATIENCE{"patience exceeded?"}
+    SAVE --> PATIENCE
+    PATIENCE -->|No| LOOP
+    PATIENCE -->|"Yes (early stop)"| RESTORE
+    CHECK -->|"step == num_steps"| RESTORE["Restore best_state"]
+    RESTORE --> RETURN["Return dict:<br/>losses, best_loss,<br/>best_step, best_sequence"]
 ```
 
 ### Gradient Flow Path
 
+```mermaid
+graph LR
+    LOGITS["logits<br/>γ, β"] -->|"∂L/∂θ"| INSTNORM["Instance Norm<br/>+ γ, β"]
+    INSTNORM -->|"∂L/∂γ,β"| SOFTMAX["Softmax ST"]
+    SOFTMAX -->|"ST estimator"| FEATURES["Graph<br/>Features"]
+    FEATURES -->|"∂L/∂x<br/>(both strands)"| GNN["Frozen GNN<br/>layers"]
+    GNN -->|"∂L/∂T(E)"| LOSS["Loss"]
+
+    style FEATURES fill:#e8f5e9
 ```
-    ┌──────────────────────────────────────────────────────────┐
-    │                   GRADIENT FLOW                          │
-    │                                                          │
-    │  Logits      Inst.Norm   Softmax   Graph    Frozen  Loss│
-    │  γ, β        + γ, β     ST        Features  Pred.      │
-    │                                                          │
-    │  θ           scaled     one_hot   data.x   GNN     L   │
-    │  │            │          │         │        layers   │   │
-    │  │            │          │         │        │        │   │
-    │  ◄────────────◄──────────◄─────────◄────────◄────────┘   │
-    │       ▲              ▲        ▲        ▲        ▲        │
-    │  ∂L/∂θ        ∂L/∂γ,β    ST est.  ∂L/∂x   ∂L/∂T(E)    │
-    │  ∂L/∂γ                                                   │
-    │  ∂L/∂β        γ adapts   straight- passes   passes      │
-    │               entropy    through   through  through      │
-    │  ALL updated             gradient          (frozen =     │
-    │  by Adam                                    no update,   │
-    │                                             but grads    │
-    │                                             still flow)  │
-    └──────────────────────────────────────────────────────────┘
-```
+
+Key: gradients flow through **both** the single-stranded and double-stranded paths because `_soft_complement()` is differentiable.
 
 ### Loss Function
 
-The loss uses **L1 norm** (sum of absolute differences) rather than L2, because L1 avoids over-weighting isolated resonance peaks in the transmission spectrum — a single sharp peak shouldn't dominate the optimization.
+The loss uses **L1 norm** (sum of absolute differences) rather than L2, because L1 avoids over-weighting isolated resonance peaks in the transmission spectrum.
 
 ```
-    T_single(E) ─────┐
-                     │    element-wise
-                     ├──► subtraction ──► diff(E)
-                     │
-    T_double(E) ─────┘
+Loss = -||T_single(E) - T_double(E)||₁
 
-                          diff(E) ──► ||·||₁ ──► negate ──► loss
-
-
-    With energy mask (optional):
-
-    diff(E) ──► × mask(E) ──► ||·||₁ ──► negate ──► loss
-
-    mask = [1, 1, 0, 0, ..., 0, 1, 1]
-            ▲                     ▲
-            only these energy     and these
-            points contribute     energy points
-            to the loss
+With energy mask (optional):
+Loss = -||(T_single(E) - T_double(E)) × mask(E)||₁
 ```
 
 ---
 
 ## Typical Workflow
 
-```
-    ┌─────────────────────────────────┐
-    │ 1. Optimize with GNN            │
-    │    (fast, differentiable)       │
-    │                                 │
-    │    SequenceOptimizer            │
-    │    + frozen DNATransportGNN     │
-    │    ──► optimized sequence       │
-    └──────────────┬──────────────────┘
-                   │
-                   ▼
-    ┌─────────────────────────────────┐
-    │ 2. Validate with exact physics  │
-    │    (slow, exact)                │
-    │                                 │
-    │    create_hamiltonian()         │
-    │    + calculate_NEGF()           │
-    │    ──► ground-truth T(E)        │
-    └─────────────────────────────────┘
+```mermaid
+graph TD
+    OPT["1. Optimize with GNN<br/>(fast, differentiable)<br/>SequenceOptimizer + frozen GNN<br/>→ optimized sequence"]
+    VAL["2. Validate with exact physics<br/>(slow, exact)<br/>create_hamiltonian() + calculate_NEGF()<br/>→ ground-truth T(E)"]
+    OPT --> VAL
 ```
 
 ### Example: Optimize and Validate
@@ -352,17 +239,17 @@ from g3nat.evaluation import load_trained_model
 opt = SequenceOptimizer(seq_length=4)
 predictor, energy_grid, device = load_trained_model("trained_models/model.pth")
 
-losses = opt.optimize(predictor, num_steps=500, lr=0.1, log_every=100)
+result = opt.optimize(predictor, num_steps=500, lr=0.001, log_every=100)
 
-# Get optimized sequence
+print(f"Best loss: {result['best_loss']:.4f} at step {result['best_step']}")
+print(f"Best sequence: 5'-{result['best_sequence']}-3'")
+
+# Get optimized sequence (best-seen params are already restored)
 opt.eval()
 with torch.no_grad():
     one_hot, _ = opt()
 sequence = opt.decode_sequence(one_hot)
 complement = opt.get_complement(sequence)
-
-print(f"Optimized: 5'-{sequence}-3'")
-print(f"Complement: 5'-{complement}-3'")
 
 # Step 2: Validate against exact physics
 energy_grid = np.linspace(-3, 3, 100)
@@ -377,6 +264,19 @@ score = np.sum(np.abs(np.log10(trans_single + 1e-30) - np.log10(trans_double + 1
 print(f"Ground-truth score: {score:.4f}")
 ```
 
+### With Early Stopping
+
+```python
+result = opt.optimize(
+    predictor,
+    num_steps=2000,
+    lr=0.001,
+    log_every=50,
+    patience=5,       # stop after 5 eval rounds without improvement
+)
+print(f"Stopped at step {len(result['losses'])} / 2000")
+```
+
 ### Using an Energy Mask
 
 ```python
@@ -384,8 +284,62 @@ print(f"Ground-truth score: {score:.4f}")
 energy_grid = torch.linspace(-3, 3, 100)
 mask = ((energy_grid >= -1) & (energy_grid <= 0)).float()
 
-losses = opt.optimize(predictor, num_steps=500, energy_mask=mask, log_every=100)
+result = opt.optimize(predictor, num_steps=500, energy_mask=mask, log_every=100)
 ```
+
+### Seeding from a Known Sequence
+
+```python
+# Start optimization from a known good sequence instead of random logits
+opt = SequenceOptimizer(seq_length=8, init_sequence='GAAAGCGA')
+result = opt.optimize(predictor, num_steps=500, lr=0.01, log_every=100)
+# Optimizer explores the neighborhood of GAAAGCGA
+```
+
+**Note:** `init_sequence` seeds the logits strongly toward the given sequence and the optimizer will hold it if it's already good. However, **gradient-based optimization cannot reliably navigate from one sequence to a nearby better one** when the GNN's local gradient disagrees with the global optimum — the GNN was trained on diverse sequences and its gradient landscape near homopolymers may be unreliable. If you know the target sequence, seed directly from it rather than from a "close" sequence. For exact initial fidelity with `use_instance_norm=True`, pass both:
+
+```python
+opt = SequenceOptimizer(seq_length=8, init_sequence='GAAAGCGA', use_instance_norm=False)
+```
+
+### Without Instance Normalization (Default)
+
+```python
+# Default behaviour — no instance norm, works for all sequence lengths
+opt = SequenceOptimizer(seq_length=8)
+result = opt.optimize(predictor, num_steps=500, lr=0.01, log_every=100)
+```
+
+---
+
+## Debugging & Convergence
+
+### Expected Behavior
+
+- **Per-step training loss**: Noisy (due to stochastic sampling). Not monotonically decreasing.
+- **Deterministic loss** (logged every `log_every` steps): Should generally improve. This is what best-seen tracking uses.
+- **Gamma adaptation**: Gamma values typically grow over training as the optimizer becomes more confident (exploitation). If gamma shrinks, the optimizer is exploring.
+
+### Signs of Problems
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| Loss stays flat | Learning rate too low | Increase `lr` |
+| Loss explodes | Learning rate too high | Decrease `lr` |
+| Sequence never changes | Gamma too large (frozen) | Restart with fresh init |
+| Very noisy, no trend | Instance norm unstable | Disable `use_instance_norm` (it's off by default) |
+| init_sequence ignored, drifts elsewhere | GNN gradient disagrees locally | Seed directly from the target, not from a nearby sequence |
+
+### Choosing Hyperparameters
+
+| Parameter | Guidance |
+|-----------|----------|
+| `lr` | Default 0.001 (paper's Adam config). Increase to 0.01 for faster convergence on short sequences. |
+| `patience` | 5 is a good default (matches paper). Use `None` for fixed-budget runs. |
+| `log_every` | 50-100 for normal runs. Smaller values = more frequent eval = slower training. |
+| `use_instance_norm` | `False` (default, matches paper). Instance norm can't represent homopolymers (poly-C, poly-T). Enable for long diverse sequences (50bp+) where it stabilizes training. |
+| `num_steps` | 500-2000 depending on sequence length. Longer sequences need more steps. |
+| `init_sequence` | Seed from a known good sequence to explore its neighborhood. Use with `use_instance_norm=False` for exact init fidelity. |
 
 ---
 
@@ -393,24 +347,40 @@ losses = opt.optimize(predictor, num_steps=500, energy_mask=mask, log_every=100)
 
 ### SequenceOptimizer
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
+| Constructor Parameter | Type | Default | Description |
+|---|---|---|---|
 | `seq_length` | int | required | Number of DNA bases to optimize |
+| `use_instance_norm` | bool | `False` | Enable instance normalization with gamma/beta. Caution: cannot represent homopolymers. |
+| `init_sequence` | str | `None` | DNA string to seed logits from (must match `seq_length`) |
 
-| Learnable Parameter | Shape | Init | Description |
-|---------------------|-------|------|-------------|
-| `logits` | `[N, 4]` | `randn` | Per-position nucleotide logits |
-| `gamma` | `[4]` | `ones` | Per-channel scale (adaptive entropy) |
-| `beta` | `[4]` | `zeros` | Per-channel offset |
+| Learnable Parameter | Shape | Init | Description | Condition |
+|---|---|---|---|---|
+| `logits` | `[N, 4]` | `randn` (or biased toward `init_sequence`) | Per-position nucleotide logits | Always |
+| `gamma` | `[4]` | `ones` | Per-channel scale (adaptive entropy) | `use_instance_norm=True` |
+| `beta` | `[4]` | `zeros` | Per-channel offset | `use_instance_norm=True` |
 
 | Method | Signature | Returns |
-|--------|-----------|---------|
+|---|---|---|
 | `forward` | `()` | `(one_hot [N,4], scaled_logits [N,4])` |
 | `decode_sequence` | `(one_hot)` | DNA sequence string |
 | `get_complement` | `(sequence: str)` | Watson-Crick reverse complement string |
+| `_soft_complement` | `(soft_bases)` | Differentiable reverse complement tensor `[N,4]` |
+| `_build_double_soft` | `(soft_bases)` | `Data` graph with soft features on both strands |
 | `build_graph_with_soft_features` | `(soft_bases, complementary_sequence=None)` | `Data` graph |
-| `compute_loss` | `(transmission_single, transmission_double, energy_mask=None)` | scalar loss tensor (negative L1 norm) |
-| `optimize` | `(predictor, num_steps, lr=0.1, energy_mask=None, log_every=100)` | `List[float]` of losses |
+| `compute_loss` | `(trans_single, trans_double, energy_mask=None)` | scalar loss tensor (negative L1 norm) |
+| `_eval_deterministic` | `(predictor, energy_mask=None)` | `(loss_value, sequence_string)` |
+| `optimize` | `(predictor, num_steps, lr=0.001, energy_mask=None, log_every=100, patience=None)` | `dict` (see below) |
+
+### `optimize()` Return Value
+
+```python
+{
+    'losses': [float, ...],      # Per-step training losses
+    'best_loss': float,          # Best deterministic loss seen
+    'best_step': int,            # Step at which best loss occurred
+    'best_sequence': str,        # DNA string at best step
+}
+```
 
 ---
 
@@ -419,17 +389,17 @@ losses = opt.optimize(predictor, num_steps=500, energy_mask=mask, log_every=100)
 ```
 g3nat/
   models/
-    generator.py          ← SequenceOptimizer
-    standard.py           ← DNATransportGNN (predictor option 1)
-    hamiltonian.py        ← DNATransportHamiltonianGNN (predictor option 2)
-    __init__.py           ← exports all model classes
+    generator.py          <- SequenceOptimizer
+    standard.py           <- DNATransportGNN (predictor option 1)
+    hamiltonian.py        <- DNATransportHamiltonianGNN (predictor option 2)
+    __init__.py           <- exports all model classes
   graph/
-    construction.py       ← sequence_to_graph() used for topology
+    construction.py       <- sequence_to_graph() used for topology
   utils/
-    physics.py            ← create_hamiltonian(), calculate_NEGF() (ground-truth physics)
-  __init__.py             ← top-level exports
+    physics.py            <- create_hamiltonian(), calculate_NEGF() (ground-truth physics)
+  __init__.py             <- top-level exports
 
 tests/
   test_models/
-    test_generator.py     ← tests for SequenceOptimizer
+    test_generator.py     <- tests for SequenceOptimizer
 ```
