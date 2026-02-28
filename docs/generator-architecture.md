@@ -1,10 +1,10 @@
-# Sequence Optimizer - Architecture & How It Works
+# Generator Module — Architecture & How It Works
 
 ## Overview
 
-The Sequence Optimizer learns DNA sequences optimal for **sensing applications**. It finds sequences where hybridization (binding of the complementary strand) produces the largest possible change in electrical transmission — making the sensor maximally sensitive.
+The generator module (`g3nat/models/generator.py`) contains **`SequenceOptimizer`** — learns DNA sequences that maximize the change in electrical transmission upon hybridization (complementary strand binding). Uses a differentiable GNN predictor with Softmax Straight-Through gradient flow and adaptive entropy. Based on Fast SeqProp (Linder & Seelig, 2021).
 
-This approach is based on **Fast SeqProp** (Linder & Seelig, 2020), which uses direct logit optimization with straight-through Gumbel-Softmax instead of training a generative neural network.
+For ground-truth physics evaluation, use `create_hamiltonian()` and `calculate_NEGF()` from `g3nat.utils.physics` directly.
 
 ```
                         GOAL
@@ -13,100 +13,104 @@ This approach is based on **Fast SeqProp** (Linder & Seelig, 2020), which uses d
     │                                             │
     │  T(single-stranded S) ≠ T(double-stranded S)│
     │                                             │
-    │  Maximize: ||T_single - T_double||₂         │
+    │  Maximize: ||T_single - T_double||₁         │
     └─────────────────────────────────────────────┘
 ```
 
 ### References
 
-- Linder, J., & Seelig, G. (2020). Fast activation maximization for molecular sequence design. *BMC Bioinformatics*, 21, 510. https://doi.org/10.1186/s12859-020-03846-2
-- Jang, E., Gu, S., & Poole, B. (2017). Categorical Reparameterization with Gumbel-Softmax. *ICLR 2017*. https://arxiv.org/abs/1611.01144
+- Linder, J., & Seelig, G. (2021). Fast activation maximization for molecular sequence design. *BMC Bioinformatics*, 22, 510. https://doi.org/10.1186/s12859-021-04437-5
 
-## System Architecture
+---
+
+## SequenceOptimizer
+
+### How It Works
+
+The optimizer maintains three sets of **learnable parameters** optimized jointly via Adam against a frozen GNN predictor:
+
+- **Logits** `[N, 4]` — per-position nucleotide preferences
+- **Gamma** `[4]` — per-channel scale (controls sampling entropy adaptively)
+- **Beta** `[4]` — per-channel offset
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                      SequenceOptimizer                           │
 │                                                                  │
 │  ┌──────────────────┐     ┌────────────────────────────────┐    │
-│  │  Learnable Logits │     │  Frozen Predictor               │    │
-│  │  [N, 4]           │     │  (DNATransportGNN or            │    │
-│  │                   │     │   DNATransportHamiltonianGNN)   │    │
-│  │  logits ──►       │     │                                 │    │
-│  │  Gumbel-Softmax   │     │  Graph ──► GNN ──► T(E)        │    │
-│  │  (hard=True)      │     │                                 │    │
+│  │  Learnable Params │     │  Frozen Predictor               │    │
+│  │                   │     │  (DNATransportGNN or            │    │
+│  │  logits [N, 4]   │     │   DNATransportHamiltonianGNN)   │    │
+│  │  gamma  [4]      │     │                                 │    │
+│  │  beta   [4]      │     │  Graph ──► GNN ──► T(E)        │    │
+│  │                   │     │                                 │    │
+│  │  Instance Norm    │     │                                 │    │
+│  │  ──► Softmax ST   │     │                                 │    │
 │  │  ──► one-hot      │     │                                 │    │
 │  └──────────────────┘     └────────────────────────────────┘    │
 │           │                          ▲                           │
-│           │                          │                           │
 │           ▼                          │                           │
 │  ┌─────────────────────────────────────────────────────────┐    │
 │  │              Graph Construction                          │    │
 │  │  one-hot ──► sequence_to_graph() topology                │    │
-│  │           ──► replace node features                      │    │
-│  │           ──► single-stranded & double-stranded          │    │
+│  │           ──► replace node features with ST one-hot      │    │
+│  │           ──► build single-stranded & double-stranded    │    │
 │  └─────────────────────────────────────────────────────────┘    │
 │           │                                                      │
 │           ▼                                                      │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │  Loss = -||T_single(E) - T_double(E)||₂                 │    │
+│  │  Loss = -||T_single(E) - T_double(E)||₁                 │    │
 │  │  (minimize negative = maximize difference)               │    │
 │  └─────────────────────────────────────────────────────────┘    │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
----
+### Instance Normalization + Softmax ST
 
-## Direct Logit Optimization
-
-Unlike a generative model that maps random latent vectors through an MLP, the `SequenceOptimizer` maintains **learnable logits directly** — one 4-dimensional vector per sequence position:
+The key innovation from Fast SeqProp: per-channel instance normalization with learnable scale (γ) prevents logit drift, while γ adaptively controls sampling entropy — replacing manual temperature schedules.
 
 ```
-    Learnable Logits                    Output
-    ┌─────────────────┐            ┌──────────────┐
-    │                 │            │              │
-    │  logits         │            │  Normalize   │
-    │  [N, 4]         │──────────► │  (subtract   │
-    │                 │            │   mean)      │
-    │  nn.Parameter   │            │      │       │
-    │  (directly      │            │      ▼       │
-    │   optimized)    │            │  Gumbel-     │
-    │                 │            │  Softmax     │
-    └─────────────────┘            │  (hard=True) │
-                                   │      │       │
-                                   │      ▼       │
-                                   │  one-hot     │
-                                   │  [N, 4]      │
-                                   └──────────────┘
+    Learnable Params                          Output
+
+    logits [N, 4]                         ┌──────────────┐
+         │                                │              │
+         ▼                                │  Instance    │
+    Instance Norm                         │  Norm + γ,β  │
+    per-channel across positions          │      │       │
+    μ_j = mean(logits[:, j])              │      ▼       │
+    σ_j = std(logits[:, j])               │  Softmax     │
+         │                                │      │       │
+         ▼                                │      ▼       │
+    (logits - μ) / σ                      │  Categorical │
+         │                                │  sample      │
+         ▼                                │      │       │
+    * gamma + beta                        │      ▼       │
+    (γ controls entropy)                  │  one-hot     │
+                                          │  [N, 4]      │
+    gamma [4] ─── learnable               └──────────────┘
+    beta  [4] ─── learnable
 
     N = sequence length
     4 channels = [A, T, G, C]
 ```
 
-### Why Direct Logits?
+### Softmax Straight-Through Estimator
 
-The previous MLP-based approach (`DNASequenceGenerator`) suffered from:
-1. **Random z sampling** — new random input each step created extreme variance
-2. **Gumbel noise compounding** with z noise at batch_size=1
-3. **Soft features out-of-distribution** for the predictor (trained on hard one-hot)
-
-Direct logit optimization eliminates all three issues.
-
-### Straight-Through Gumbel-Softmax
-
-The straight-through estimator (Jang et al., 2017) uses `hard=True`: the forward pass produces discrete one-hot vectors (keeping the predictor in-distribution), while the backward pass computes gradients through the continuous softmax approximation.
+The forward pass samples **discrete one-hot** vectors from the categorical distribution (keeping the predictor in-distribution). The backward pass substitutes the **softmax gradient** for the non-differentiable sampling step.
 
 ```
     FORWARD PASS                       BACKWARD PASS
     ┌──────────────────────┐          ┌──────────────────────┐
-    │ logits + Gumbel noise│          │ Gradients flow through│
+    │ scaled_logits        │          │ Gradients flow through│
     │        │             │          │ continuous softmax     │
-    │        ▼             │          │ (as if hard=False)     │
-    │   gumbel_softmax     │          │                        │
-    │   (hard=True)        │          │ ∂L/∂logits computed   │
-    │        │             │          │ via soft approximation │
     │        ▼             │          │                        │
-    │   [1, 0, 0, 0]      │          │ Logits updated by Adam │
+    │   softmax(scaled)    │          │ ∂L/∂logits computed   │
+    │        │             │          │ via softmax Jacobian   │
+    │        ▼             │          │                        │
+    │   Categorical sample │          │ ∂L/∂γ adapts entropy  │
+    │        │             │          │ ∂L/∂β shifts channels │
+    │        ▼             │          │                        │
+    │   [1, 0, 0, 0]      │          │ All updated by Adam   │
     │   (discrete one-hot) │          └──────────────────────┘
     │                      │
     │ Predictor sees hard  │
@@ -114,15 +118,17 @@ The straight-through estimator (Jang et al., 2017) uses `hard=True`: the forward
     └──────────────────────┘
 ```
 
-### Temperature Annealing
+### Adaptive Entropy (γ)
 
-Temperature (tau) controls the sharpness of the Gumbel-Softmax distribution and is linearly annealed during optimization:
+Instead of a fixed temperature schedule, the learnable scale parameter γ controls sampling entropy per channel. Adam optimizes γ alongside logits:
 
 ```
-    tau = 2.0 (start, exploratory):  gradients spread across bases
-    tau = 0.1 (end, near-discrete):  gradients concentrated on chosen base
+    γ_j large  →  scaled logits spread out  →  sharper softmax  →  lower entropy
+    γ_j small  →  scaled logits compressed  →  flatter softmax  →  higher entropy
 
-    Linear schedule: tau(t) = tau_start + (tau_end - tau_start) * t / (num_steps - 1)
+    Adaptive behavior:
+    - When gradient signals are consistent: γ grows (exploitation)
+    - When gradient signals are inconsistent: γ shrinks (exploration)
 ```
 
 ### Training vs Eval Mode
@@ -130,30 +136,25 @@ Temperature (tau) controls the sharpness of the Gumbel-Softmax distribution and 
 ```
     TRAINING MODE                          EVAL MODE
     ┌──────────────────────┐              ┌──────────────────────┐
-    │ logits + Gumbel noise│              │ logits               │
+    │ Instance Norm logits │              │ Instance Norm logits │
     │        │             │              │        │             │
     │        ▼             │              │        ▼             │
-    │   gumbel_softmax     │              │   argmax ──► one_hot │
-    │   (hard=True)        │              │   [1, 0, 0, 0]      │
+    │   softmax ──►        │              │   argmax ──► one_hot │
+    │   categorical sample │              │   [1, 0, 0, 0]      │
     │        │             │              │                      │
     │        ▼             │              │ Deterministic:       │
     │   [1, 0, 0, 0]      │              │ always same output   │
     │                      │              │ for given logits     │
-    │ Discrete but with    │              │                      │
-    │ Gumbel noise for     │              │ No Gumbel noise      │
-    │ exploration          │              │                      │
+    │ Stochastic sample    │              │                      │
+    │ with ST gradient     │              │ No sampling noise    │
     └──────────────────────┘              └──────────────────────┘
 ```
 
----
+### Graph Construction with Soft Features
 
-## Graph Construction with Soft Features
+`sequence_to_graph()` converts a DNA string into a graph with hard one-hot node features. Hard one-hot values have **no gradient**, so the optimizer can't learn through them.
 
-### The Gradient Flow Problem
-
-`sequence_to_graph()` converts a DNA string into a graph with hard one-hot node features. But hard one-hot values have **no gradient** — the optimizer can't learn.
-
-**Solution:** Use `sequence_to_graph()` only for the graph **topology** (edges, contacts), then swap in the straight-through one-hot features:
+**Solution:** Use `sequence_to_graph()` for the graph **topology** only (edges, contacts), then swap in the straight-through one-hot features for the primary strand:
 
 ```
     Step 1: Get topology from dummy sequence
@@ -177,12 +178,11 @@ Temperature (tau) controls the sharpness of the Gumbel-Softmax distribution and 
     │  Node 4 (position 2):    one_hot[2]    │  ← REPLACE (has grad)
     │  Node 5 (position 3):    one_hot[3]    │  ← REPLACE (has grad)
     └─────────────────────────────────────────┘
-
-    Straight-through: forward is hard one-hot,
-    backward computes gradients via soft approximation
 ```
 
 ### Single-Stranded vs Double-Stranded Graphs
+
+Both graphs are built per optimization step. The primary strand uses soft features (differentiable); the complement uses hard features (not optimized).
 
 ```
     SINGLE-STRANDED (no complement)         DOUBLE-STRANDED (with complement)
@@ -204,29 +204,20 @@ Temperature (tau) controls the sharpness of the Gumbel-Softmax distribution and 
     [R] = right electrode contact       | = hydrogen bond
 ```
 
----
-
-## Optimization Loop
-
-### Single Step
+### Optimization Loop (Single Step)
 
 ```
                ┌─────────────────┐
-               │  Anneal tau     │
-               │  tau(t) = ...   │
+               │  Instance Norm  │
+               │  per-channel    │
+               │  * γ + β        │
                └────────┬────────┘
                         │
                         ▼
                ┌─────────────────┐
-               │  Normalize      │
-               │  logits         │
-               │  (subtract mean)│
-               └────────┬────────┘
-                        │
-                        ▼
-               ┌─────────────────┐
-               │  Gumbel-Softmax │
-               │  (hard=True)    │
+               │  Softmax ST     │
+               │  categorical    │
+               │  sample         │
                │  ──► one_hot    │
                └────────┬────────┘
                         │
@@ -265,9 +256,11 @@ Temperature (tau) controls the sharpness of the Gumbel-Softmax distribution and 
                     │
                     ▼
          ┌──────────────────────┐
-         │  Loss = -||diff||₂   │
+         │  Loss = -||diff||₁   │
          │  loss.backward()     │
          │  optimizer.step()    │
+         │  (updates logits,    │
+         │   gamma, and beta)   │
          └──────────────────────┘
 ```
 
@@ -277,26 +270,28 @@ Temperature (tau) controls the sharpness of the Gumbel-Softmax distribution and 
     ┌──────────────────────────────────────────────────────────┐
     │                   GRADIENT FLOW                          │
     │                                                          │
-    │  Logits      ST Gumbel    Graph        Frozen     Loss  │
-    │  [N, 4]      Softmax      Features     Predictor        │
+    │  Logits      Inst.Norm   Softmax   Graph    Frozen  Loss│
+    │  γ, β        + γ, β     ST        Features  Pred.      │
     │                                                          │
-    │  θ           one_hot      data.x       GNN        L    │
-    │  │            │           │            layers      │    │
-    │  │            │           │            │           │    │
-    │  ◄────────────◄───────────◄────────────◄───────────┘    │
-    │       ▲              ▲          ▲            ▲           │
-    │  ∂L/∂θ         ST estimate  ∂L/∂x      ∂L/∂T(E)        │
-    │                                                          │
-    │  UPDATED        straight-   passes     passes           │
-    │  by Adam        through     through    through           │
-    │                 gradient              (frozen =          │
-    │                                       no update,        │
-    │                                       but gradients     │
-    │                                       still flow)       │
+    │  θ           scaled     one_hot   data.x   GNN     L   │
+    │  │            │          │         │        layers   │   │
+    │  │            │          │         │        │        │   │
+    │  ◄────────────◄──────────◄─────────◄────────◄────────┘   │
+    │       ▲              ▲        ▲        ▲        ▲        │
+    │  ∂L/∂θ        ∂L/∂γ,β    ST est.  ∂L/∂x   ∂L/∂T(E)    │
+    │  ∂L/∂γ                                                   │
+    │  ∂L/∂β        γ adapts   straight- passes   passes      │
+    │               entropy    through   through  through      │
+    │  ALL updated             gradient          (frozen =     │
+    │  by Adam                                    no update,   │
+    │                                             but grads    │
+    │                                             still flow)  │
     └──────────────────────────────────────────────────────────┘
 ```
 
 ### Loss Function
+
+The loss uses **L1 norm** (sum of absolute differences) rather than L2, because L1 avoids over-weighting isolated resonance peaks in the transmission spectrum — a single sharp peak shouldn't dominate the optimization.
 
 ```
     T_single(E) ─────┐
@@ -305,12 +300,12 @@ Temperature (tau) controls the sharpness of the Gumbel-Softmax distribution and 
                      │
     T_double(E) ─────┘
 
-                          diff(E) ──► ||·||₂ ──► negate ──► loss
+                          diff(E) ──► ||·||₁ ──► negate ──► loss
 
 
     With energy mask (optional):
 
-    diff(E) ──► × mask(E) ──► ||·||₂ ──► negate ──► loss
+    diff(E) ──► × mask(E) ──► ||·||₁ ──► negate ──► loss
 
     mask = [1, 1, 0, 0, ..., 0, 1, 1]
             ▲                     ▲
@@ -321,74 +316,75 @@ Temperature (tau) controls the sharpness of the Gumbel-Softmax distribution and 
 
 ---
 
-## Example: Optimizing a 4-Base Sensor Sequence
+## Typical Workflow
 
-### Setup
+```
+    ┌─────────────────────────────────┐
+    │ 1. Optimize with GNN            │
+    │    (fast, differentiable)       │
+    │                                 │
+    │    SequenceOptimizer            │
+    │    + frozen DNATransportGNN     │
+    │    ──► optimized sequence       │
+    └──────────────┬──────────────────┘
+                   │
+                   ▼
+    ┌─────────────────────────────────┐
+    │ 2. Validate with exact physics  │
+    │    (slow, exact)                │
+    │                                 │
+    │    create_hamiltonian()         │
+    │    + calculate_NEGF()           │
+    │    ──► ground-truth T(E)        │
+    └─────────────────────────────────┘
+```
+
+### Example: Optimize and Validate
 
 ```python
+import numpy as np
+import torch
 from g3nat.models.generator import SequenceOptimizer
+from g3nat.utils.physics import create_hamiltonian, calculate_NEGF
 from g3nat.evaluation import load_trained_model
 
-# Create optimizer for 4-base sequences
+# Step 1: Optimize with GNN
 opt = SequenceOptimizer(seq_length=4)
+predictor, energy_grid, device = load_trained_model("trained_models/model.pth")
 
-# Load a pre-trained predictor (will be frozen during optimization)
-predictor, energy_grid, device = load_trained_model("trained_models/hamiltonian_2000x_4to10BP_5000epoch.pth")
-```
+losses = opt.optimize(predictor, num_steps=500, lr=0.1, log_every=100)
 
-### Optimization
-
-```python
-# Optimize for 500 steps with tau annealing
-losses = opt.optimize(
-    predictor,
-    num_steps=500,
-    tau_start=2.0,    # start exploratory
-    tau_end=0.1,      # end near-discrete
-    lr=0.1,           # higher lr for direct logit optimization
-    log_every=100
-)
-
-# Output:
-# Step 100/500 | Loss: -0.3421 | Seq: ATCG | tau: 1.622
-# Step 200/500 | Loss: -0.5187 | Seq: GTCA | tau: 1.243
-# Step 300/500 | Loss: -0.6893 | Seq: GCTA | tau: 0.864
-# Step 400/500 | Loss: -0.7234 | Seq: GCTA | tau: 0.486
-# Step 500/500 | Loss: -0.7301 | Seq: GCTA | tau: 0.100
-#
-# Loss becomes more negative = difference is growing = better sensor
-```
-
-### Inference
-
-```python
 # Get optimized sequence
 opt.eval()
 with torch.no_grad():
-    one_hot, _ = opt(tau=0.1)
-
+    one_hot, _ = opt()
 sequence = opt.decode_sequence(one_hot)
 complement = opt.get_complement(sequence)
 
-print(f"Optimized sequence:     5'-{sequence}-3'")
-print(f"Reverse complement:     5'-{complement}-3'")
+print(f"Optimized: 5'-{sequence}-3'")
+print(f"Complement: 5'-{complement}-3'")
+
+# Step 2: Validate against exact physics
+energy_grid = np.linspace(-3, 3, 100)
+
+H_s, GL_s, GR_s = create_hamiltonian(sequence, '_' * len(sequence))
+trans_single, dos_single = calculate_NEGF(H_s, GL_s, GR_s, energy_grid)
+
+H_d, GL_d, GR_d = create_hamiltonian(sequence, complement)
+trans_double, dos_double = calculate_NEGF(H_d, GL_d, GR_d, energy_grid)
+
+score = np.sum(np.abs(np.log10(trans_single + 1e-30) - np.log10(trans_double + 1e-30)))
+print(f"Ground-truth score: {score:.4f}")
 ```
 
 ### Using an Energy Mask
 
 ```python
-import torch
-
 # Only optimize transmission difference in the [-1, 0] eV window
 energy_grid = torch.linspace(-3, 3, 100)
 mask = ((energy_grid >= -1) & (energy_grid <= 0)).float()
 
-losses = opt.optimize(
-    predictor,
-    num_steps=500,
-    energy_mask=mask,    # focus optimization on this window
-    log_every=100
-)
+losses = opt.optimize(predictor, num_steps=500, energy_mask=mask, log_every=100)
 ```
 
 ---
@@ -401,26 +397,20 @@ losses = opt.optimize(
 |-----------|------|---------|-------------|
 | `seq_length` | int | required | Number of DNA bases to optimize |
 
+| Learnable Parameter | Shape | Init | Description |
+|---------------------|-------|------|-------------|
+| `logits` | `[N, 4]` | `randn` | Per-position nucleotide logits |
+| `gamma` | `[4]` | `ones` | Per-channel scale (adaptive entropy) |
+| `beta` | `[4]` | `zeros` | Per-channel offset |
+
 | Method | Signature | Returns |
 |--------|-----------|---------|
-| `forward` | `(tau: float)` | `(one_hot [N,4], normalized_logits [N,4])` |
+| `forward` | `()` | `(one_hot [N,4], scaled_logits [N,4])` |
 | `decode_sequence` | `(one_hot)` | DNA sequence string |
 | `get_complement` | `(sequence: str)` | Watson-Crick reverse complement string |
 | `build_graph_with_soft_features` | `(soft_bases, complementary_sequence=None)` | `Data` graph |
-| `compute_loss` | `(transmission_single, transmission_double, energy_mask=None)` | scalar loss tensor |
-| `optimize` | `(predictor, num_steps, tau_start=2.0, tau_end=0.1, lr=0.1, energy_mask=None, log_every=100)` | `List[float]` of losses |
-
-### optimize() Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `predictor` | nn.Module | required | Pre-trained predictor (will be frozen) |
-| `num_steps` | int | required | Number of optimization steps |
-| `tau_start` | float | 2.0 | Initial Gumbel-Softmax temperature |
-| `tau_end` | float | 0.1 | Final Gumbel-Softmax temperature |
-| `lr` | float | 0.1 | Learning rate for Adam optimizer |
-| `energy_mask` | Tensor or None | None | Mask for energy sub-window optimization |
-| `log_every` | int | 100 | Print progress every N steps |
+| `compute_loss` | `(transmission_single, transmission_double, energy_mask=None)` | scalar loss tensor (negative L1 norm) |
+| `optimize` | `(predictor, num_steps, lr=0.1, energy_mask=None, log_every=100)` | `List[float]` of losses |
 
 ---
 
@@ -435,9 +425,11 @@ g3nat/
     __init__.py           ← exports all model classes
   graph/
     construction.py       ← sequence_to_graph() used for topology
+  utils/
+    physics.py            ← create_hamiltonian(), calculate_NEGF() (ground-truth physics)
   __init__.py             ← top-level exports
 
 tests/
   test_models/
-    test_generator.py     ← tests covering all SequenceOptimizer functionality
+    test_generator.py     ← tests for SequenceOptimizer
 ```
