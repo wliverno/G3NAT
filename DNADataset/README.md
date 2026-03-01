@@ -99,27 +99,18 @@ MATLAB functions for processing DFT outputs and computing transmission propertie
 
 The dataset generation process is fully automated through `combined_script.slurm`.
 
+### 1. Edit the SLURM script (if needed)
+
+Inside `combined_script.slurm`, adjust:
+- DNA sequence length range (4–8 by default)
+- Number of sequences to generate
+- Contact mode (same / cross)
+- Coupling strengths (gamma values)
+
+### 2. Submit the pipeline
+
 ```bash
-# 1. Generate structure
-./dnabuilder -s "GGCCGG" -t B
-# Creates: ggccgg.pdb and ggccgg.gjf
-
-# 2. Run DFT calculation (edit combined_script.slurm first)
 sbatch combined_script.slurm
-# Generates: ggccgg.log, ggccgg.txt, ggccgg.mat
-
-# 3. Process DFT output to get Hamiltonian
-# In MATLAB:
-readMAT('ggccgg')
-# Generates: ggccgg_eigen.mat, ggccgg.mat (Hamiltonian)
-
-# 4. Generate parameter files
-python TransportSetup.py ggccgg.pdb --mode cross --gamma 0.1
-# Creates: Parameters_ggccgg.txt (with HOMO-based energy range)
-
-# 5. Set up transmission runs (edit TransportScript.slurm first)
-sbatch TransportScript.slurm
-# Creates run directories and submits transmission calculations
 ```
 
 ## Credits
