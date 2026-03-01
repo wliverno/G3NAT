@@ -136,6 +136,13 @@ DNA_SEQUENCE/
 
 Original `.pdb` and `.gjf` files remain in the main directory.
 
+## Common Issues
+
+- Small (~9 KB) `.mat` file → Gaussian matrix output not enabled properly.
+- `g16: command not found` → Load module `chem/g16`.
+- `readmat: Permission denied` → Ensure executable permissions.
+- Missing HOMO-LUMO range → Ensure `.log` and `_eigen.mat` exist.
+
 ## Credits
 
 - **MATLAB transmission functions**: Developed by Hashem Mohammad and Yiren Wang in the [Quantum Devices Lab](https://sites.uw.edu/anantmp/) at the University of Washington (Prof. M. P. Anantram's group)
