@@ -82,7 +82,7 @@ MATLAB functions for processing DFT outputs and computing transmission propertie
    4) Modifies the Gaussian input to enable matrix output and inserts the required trailer for matrix dumping.
    5) Runs a second Gaussian calculation to produce the Hamiltonian and overlap matrices in .mat format.
    6) Converts Gaussian matrix output using readmat and MATLAB processing.
-   7) Runs transmission simulations (ballistic or decoherence) using MATLABtransport scripts.
+   7) Runs transmission simulations (ballistic or decoherence) using MATLAB transport scripts.
    8) Organizes outputs into structured run folders.
    9) Converts results into pickle files for machine learning training within the G3NAT framework.
 
@@ -95,7 +95,9 @@ MATLAB functions for processing DFT outputs and computing transmission propertie
 - Called automatically by `TransportScript.slurm`
 - Manual: `sbatch run_transmission.slurm RUN_NUMBER DESCRIPTION`
 
-## Workflow
+## Workflow (Fully automated pipeline) 
+
+The dataset generation process is fully automated through `combined_script.slurm`.
 
 ```bash
 # 1. Generate structure
