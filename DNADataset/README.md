@@ -115,7 +115,7 @@ sbatch combined_script.slurm
 ## Directory Structure 
 
 After execution, results are organized as: 
-
+```
 DNA_SEQUENCE/
 ├── run1/
 │   ├── Parameters.txt
@@ -132,6 +132,7 @@ DNA_SEQUENCE/
 ├── transmission outputs
 ├── DOS outputs
 └── pickle files
+```
 
 Original `.pdb` and `.gjf` files remain in the main directory.
 
