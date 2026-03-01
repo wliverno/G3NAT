@@ -112,6 +112,28 @@ Inside `combined_script.slurm`, adjust:
 ```bash
 sbatch combined_script.slurm
 ```
+## Directory Structure 
+
+After execution, results are organized as: 
+
+DNA_SEQUENCE/
+├── run1/
+│   ├── Parameters.txt
+│   ├── Tran_sequence_gammaL_X_gammaR_X.mat
+│   ├── DOS_sequence_gammaL_X_gammaR_X.mat
+│   ├── metadata.txt
+│   └── run_config.txt
+├── run2/
+├── run3/
+├── run4/
+├── Parameters.txt
+├── sequence.mat
+├── sequence_eigen.mat
+├── transmission outputs
+├── DOS outputs
+└── pickle files
+
+Original `.pdb` and `.gjf` files remain in the main directory.
 
 ## Credits
 
