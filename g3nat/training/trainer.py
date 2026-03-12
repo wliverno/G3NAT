@@ -105,8 +105,8 @@ class Trainer:
             if progress_callback is not None:
                 progress_callback(epoch, train_loss, val_loss)
 
-            # Save checkpoint periodically if checkpointing is enabled
-            if self.config.checkpoint_dir is not None and checkpoint_callback is not None:
+            # Save checkpoint periodically
+            if checkpoint_callback is not None:
                 if (epoch + 1) % self.config.checkpoint_frequency == 0:
                     checkpoint_callback(self.model, self.optimizer, epoch, self.train_losses, self.val_losses)
 
@@ -114,8 +114,8 @@ class Trainer:
             if (epoch + 1) % 10 == 0:
                 print(f'Epoch [{epoch+1}/{self.config.num_epochs}], Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}')
 
-        # Save final checkpoint if checkpointing is enabled
-        if self.config.checkpoint_dir is not None and checkpoint_callback is not None:
+        # Save final checkpoint
+        if checkpoint_callback is not None:
             checkpoint_callback(self.model, self.optimizer, self.config.num_epochs - 1, self.train_losses, self.val_losses)
 
         return self.train_losses, self.val_losses
