@@ -169,6 +169,23 @@ def main():
     def progress_cb(epoch, train_loss, val_loss):
         save_progress_file(epoch, train_loss, val_loss, args.checkpoint_dir, vars(args))
 
+    # Resume from checkpoint if one exists
+    start_epoch = 0
+    resume_train_losses = None
+    resume_val_losses = None
+    resume_optimizer = None
+    checkpoint_path = os.path.join(args.checkpoint_dir, 'checkpoint_latest.pth')
+    if os.path.exists(checkpoint_path):
+        print(f"Resuming from checkpoint: {checkpoint_path}")
+        ckpt = torch.load(checkpoint_path, map_location=str(device), weights_only=False)
+        model.load_state_dict(ckpt['model_state_dict'])
+        start_epoch = ckpt['epoch'] + 1
+        resume_train_losses = ckpt['train_losses']
+        resume_val_losses = ckpt['val_losses']
+        resume_optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+        resume_optimizer.load_state_dict(ckpt['optimizer_state_dict'])
+        print(f"Resuming from epoch {start_epoch}")
+
     print("Training...")
     train_losses, val_losses = train_model(
         model=model,
@@ -179,7 +196,11 @@ def main():
         device=str(device),
         checkpoint_frequency=10,
         checkpoint_callback=checkpoint_cb,
-        progress_callback=progress_cb
+        progress_callback=progress_cb,
+        start_epoch=start_epoch,
+        train_losses=resume_train_losses,
+        val_losses=resume_val_losses,
+        optimizer=resume_optimizer
     )
 
     # Save final model
