@@ -62,7 +62,6 @@ def load_trained_model(model_path: str, device: str = 'auto') -> Tuple[Union[DNA
             num_layers=args.get('num_layers', 4),
             num_heads=args.get('num_heads', 4),
             energy_grid=energy_grid,
-            dropout=args.get('dropout', 0.1),
             n_orb=args.get('n_orb', 1),
             enforce_hermiticity=args.get('enforce_hermiticity', True),
             solver_type=args.get('solver_type', 'frobenius'),
@@ -72,23 +71,6 @@ def load_trained_model(model_path: str, device: str = 'auto') -> Tuple[Union[DNA
             conv_type=args.get('conv_type', 'gat')
         )
         print("DNATransportHamiltonianGNN initialized successfully")
-    elif model_type == 'simple_hamiltonian':
-        # Legacy support - for now just use hamiltonian model
-        print("Warning: Legacy DNAHamiltonianGNN detected. Using DNATransportHamiltonianGNN instead.")
-        model = DNATransportHamiltonianGNN(
-            hidden_dim=args.get('hidden_dim', 128),
-            num_layers=args.get('num_layers', 4),
-            num_heads=args.get('num_heads', 4),
-            energy_grid=energy_grid,
-            dropout=args.get('dropout', 0.1),
-            n_orb=args.get('n_orb', 1),
-            enforce_hermiticity=args.get('enforce_hermiticity', True),
-            solver_type=args.get('solver_type', 'frobenius'),
-            use_log_outputs=args.get('use_log_outputs', True),
-            log_floor=args.get('log_floor', 1e-16),
-            complex_eta=args.get('complex_eta', 1e-12),
-            conv_type=args.get('conv_type', 'transformer')
-        )
     else:  # standard
         model = DNATransportGNN(
             hidden_dim=args.get('hidden_dim', 128),
