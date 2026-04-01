@@ -154,7 +154,6 @@ def main():
             num_layers=args.num_layers,
             num_heads=args.num_heads,
             energy_grid=energy_grid,
-            dropout=args.dropout,
             n_orb=args.n_orb
         )
 
@@ -217,6 +216,8 @@ def main():
     print(f"Model saved: {model_path}")
     print(f"Final train loss: {train_losses[-1]:.4f}")
     print(f"Final val loss: {val_losses[-1]:.4f}")
+    if os.path.exists(checkpoint_path):
+        os.remove(checkpoint_path)
 
 if __name__ == '__main__':
     main()
