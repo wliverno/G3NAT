@@ -21,10 +21,9 @@ class DNATransportHamiltonianGNN(nn.Module):
                  num_layers: int = 4,
                  num_heads: int = 4,
                  energy_grid: np.ndarray = np.linspace(-3, 3, 100),
-                 dropout: float = 0.1,
                  n_orb: int = 1,
                  enforce_hermiticity: bool = True,
-                 solver_type: str = "frobenius",  # "frobenius" | "complex"
+                 solver_type: str = "complex",  # "frobenius" | "complex"
                  use_log_outputs: bool = True,
                  log_floor: float = 1e-16,
                  complex_eta: float = 1e-12,
@@ -38,7 +37,6 @@ class DNATransportHamiltonianGNN(nn.Module):
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
         self.energy_grid = energy_grid
-        self.dropout = dropout
         self.output_dim = len(energy_grid)
         self.n_orb = n_orb  # Number of orbitals per site (n_onsite = n_coupling = n_orb)
         self.enforce_hermiticity = enforce_hermiticity
@@ -63,12 +61,12 @@ class DNATransportHamiltonianGNN(nn.Module):
             if self.conv_type == 'gat':
                 conv = GATConv(
                     hidden_dim, hidden_dim // num_heads, heads=num_heads,
-                    dropout=dropout, add_self_loops=True, edge_dim=hidden_dim
+                    add_self_loops=True, edge_dim=hidden_dim
                 )
             else:
                 conv = TransformerConv(
                     hidden_dim, hidden_dim // num_heads, heads=num_heads,
-                    dropout=dropout, edge_dim=hidden_dim
+                    edge_dim=hidden_dim
                 )
             self.convs.append(conv)
             self.norms.append(nn.LayerNorm(hidden_dim))
@@ -76,18 +74,16 @@ class DNATransportHamiltonianGNN(nn.Module):
         # Graph-based Hamiltonian projections
         # Each node contributes n_orb x n_orb onsite energy block
         self.onsite_proj = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim // 2, n_orb * n_orb)
+            nn.Linear(hidden_dim, n_orb * n_orb)
         )
 
         # Each edge contributes n_orb x n_orb coupling block
         self.coupling_proj = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim // 2, n_orb * n_orb)
+            nn.Linear(hidden_dim, n_orb * n_orb)
         )
 
         # Global pooling
@@ -397,8 +393,8 @@ class DNATransportHamiltonianGNN(nn.Module):
         DOS_lin = torch.clamp(DOS_lin, min=self.log_floor)
 
         # Transmission: Tr[GammaL Gr GammaR Ga]
-        GammaL_mat = torch.diag_embed(GammaL).unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)
-        GammaR_mat = torch.diag_embed(GammaR).unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)
+        GammaL_mat = torch.diag_embed(GammaL).to(Gr.dtype).unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)
+        GammaR_mat = torch.diag_embed(GammaR).to(Gr.dtype).unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)
         M = torch.matmul(torch.matmul(GammaL_mat, Gr), torch.matmul(GammaR_mat, Ga))
         T_lin = torch.real(torch.einsum('benn->be', M))
         T_lin = torch.clamp(T_lin, min=self.log_floor)
@@ -600,7 +596,6 @@ class DNATransportHamiltonianGNN(nn.Module):
             x = self.convs[i](x, edge_index, edge_attr)
             x = self.norms[i](x)
             x = F.relu(x)
-            x = F.dropout(x, p=self.dropout, training=self.training)
 
         # Construct Hamiltonian matrix directly from graph structure
         H_matrix, H_size = self.construct_hamiltonian_from_graph(x, edge_attr, edge_index, batch, x_initial)
