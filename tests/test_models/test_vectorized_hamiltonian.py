@@ -219,3 +219,86 @@ class TestConstructHamiltonianNOrbMulti:
             block = H[0, s:e, s:e]
             assert torch.allclose(block, block.T, atol=1e-7), \
                 f"Site {site} diagonal block not symmetric: {block}"
+
+
+# ---- get_contact_vectors tests ----
+
+class TestGetContactVectors:
+    """Test vectorized get_contact_vectors."""
+
+    def test_single_graph_matches_reference(self):
+        """Vectorized gammas match reference for single graph."""
+        _, model = _make_model(n_orb=1)
+        model.eval()
+        graph = sequence_to_graph("ACGT", "ACGT", 0, 3, 0.1, 0.1)
+        data = Batch.from_data_list([graph])
+        with torch.no_grad():
+            _, _, edge_index, batch, x_init, edge_attr_init = _run_gnn_layers(model, data)
+            GL_vec, GR_vec = model.get_contact_vectors(x_init, edge_attr_init, edge_index, batch)
+            GL_ref, GR_ref = model._get_contact_vectors_reference(x_init, edge_attr_init, edge_index, batch)
+        assert torch.allclose(GL_vec, GL_ref, atol=1e-6), \
+            f"GammaL max diff: {(GL_vec - GL_ref).abs().max()}"
+        assert torch.allclose(GR_vec, GR_ref, atol=1e-6), \
+            f"GammaR max diff: {(GR_vec - GR_ref).abs().max()}"
+
+    def test_batched_matches_reference(self):
+        """Vectorized gammas match reference for a batch."""
+        _, model = _make_model(n_orb=1)
+        model.eval()
+        graphs = [
+            sequence_to_graph("ACGT", "ACGT", 0, 3, 0.1, 0.1),
+            sequence_to_graph("TGCA", "TGCA", 0, 3, 0.2, 0.2),
+            sequence_to_graph("GGCC", "GGCC", 0, 3, 0.1, 0.3),
+        ]
+        data = Batch.from_data_list(graphs)
+        with torch.no_grad():
+            _, _, edge_index, batch, x_init, edge_attr_init = _run_gnn_layers(model, data)
+            GL_vec, GR_vec = model.get_contact_vectors(x_init, edge_attr_init, edge_index, batch)
+            GL_ref, GR_ref = model._get_contact_vectors_reference(x_init, edge_attr_init, edge_index, batch)
+        assert torch.allclose(GL_vec, GL_ref, atol=1e-6)
+        assert torch.allclose(GR_vec, GR_ref, atol=1e-6)
+
+    def test_norb2_single_graph(self):
+        """Vectorized gammas match reference for n_orb=2."""
+        _, model = _make_model(n_orb=2)
+        model.eval()
+        graph = sequence_to_graph("ACGT", "ACGT", 0, 3, 0.1, 0.1)
+        data = Batch.from_data_list([graph])
+        with torch.no_grad():
+            _, _, edge_index, batch, x_init, edge_attr_init = _run_gnn_layers(model, data)
+            GL_vec, GR_vec = model.get_contact_vectors(x_init, edge_attr_init, edge_index, batch)
+            GL_ref, GR_ref = model._get_contact_vectors_reference(x_init, edge_attr_init, edge_index, batch)
+        # With n_orb=2, H_size = num_dna_nodes * 2, coupling fills n_orb consecutive entries
+        assert GL_vec.shape == GL_ref.shape
+        assert torch.allclose(GL_vec, GL_ref, atol=1e-6)
+        assert torch.allclose(GR_vec, GR_ref, atol=1e-6)
+
+    def test_norb2_batched(self):
+        """Vectorized gammas match reference for n_orb=2, batched."""
+        _, model = _make_model(n_orb=2)
+        model.eval()
+        graphs = [
+            sequence_to_graph("ACGT", "ACGT", 0, 3, 0.1, 0.1),
+            sequence_to_graph("TGCA", "TGCA", 0, 3, 0.2, 0.2),
+        ]
+        data = Batch.from_data_list(graphs)
+        with torch.no_grad():
+            _, _, edge_index, batch, x_init, edge_attr_init = _run_gnn_layers(model, data)
+            GL_vec, GR_vec = model.get_contact_vectors(x_init, edge_attr_init, edge_index, batch)
+            GL_ref, GR_ref = model._get_contact_vectors_reference(x_init, edge_attr_init, edge_index, batch)
+        assert torch.allclose(GL_vec, GL_ref, atol=1e-6)
+        assert torch.allclose(GR_vec, GR_ref, atol=1e-6)
+
+    def test_coupling_values_nonzero(self):
+        """Gamma vectors should have non-zero entries at contact positions."""
+        _, model = _make_model(n_orb=1)
+        model.eval()
+        graph = sequence_to_graph("ACGT", "ACGT", 0, 3, 0.1, 0.1)
+        data = Batch.from_data_list([graph])
+        with torch.no_grad():
+            _, _, edge_index, batch, x_init, edge_attr_init = _run_gnn_layers(model, data)
+            GL, GR = model.get_contact_vectors(x_init, edge_attr_init, edge_index, batch)
+        # Left contact connects to position 0 → GammaL[0] should be 0.1
+        assert GL[0].item() == pytest.approx(0.1, abs=1e-6)
+        # Right contact connects to position 3 → GammaR[3] should be 0.1
+        assert GR[3].item() == pytest.approx(0.1, abs=1e-6)
