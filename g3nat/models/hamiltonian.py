@@ -89,7 +89,7 @@ class DNATransportHamiltonianGNN(nn.Module):
         # Global pooling
         self.global_pool = global_mean_pool
 
-    def construct_hamiltonian_from_graph(self,
+    def _construct_hamiltonian_reference(self,
                                        node_features: torch.Tensor,
                                        edge_features: torch.Tensor,
                                        edge_index: torch.Tensor,
@@ -218,6 +218,16 @@ class DNATransportHamiltonianGNN(nn.Module):
         H_matrix = H_matrix + shift * identity.unsqueeze(0).expand(batch_size, -1, -1)
 
         return H_matrix, H_size
+
+    def construct_hamiltonian_from_graph(self,
+                                       node_features: torch.Tensor,
+                                       edge_features: torch.Tensor,
+                                       edge_index: torch.Tensor,
+                                       batch: torch.Tensor,
+                                       original_node_features: torch.Tensor) -> Tuple[torch.Tensor, int]:
+        """Vectorized Hamiltonian construction. Delegates to reference for now."""
+        return self._construct_hamiltonian_reference(
+            node_features, edge_features, edge_index, batch, original_node_features)
 
     def NEGFProjection(self,
         H_matrix: torch.Tensor,
@@ -408,7 +418,7 @@ class DNATransportHamiltonianGNN(nn.Module):
             return T, DOS, H_matrix
 
 
-    def get_contact_vectors(self, x: torch.Tensor,
+    def _get_contact_vectors_reference(self, x: torch.Tensor,
                         edge_attr: torch.Tensor,
                         edge_index: torch.Tensor,
                         batch: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -523,6 +533,13 @@ class DNATransportHamiltonianGNN(nn.Module):
             return GammaL_batch.squeeze(0), GammaR_batch.squeeze(0)
 
         return GammaL_batch, GammaR_batch
+
+    def get_contact_vectors(self, x: torch.Tensor,
+                        edge_attr: torch.Tensor,
+                        edge_index: torch.Tensor,
+                        batch: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Vectorized contact vector extraction. Delegates to reference for now."""
+        return self._get_contact_vectors_reference(x, edge_attr, edge_index, batch)
 
     def forward(self, data):
         """
