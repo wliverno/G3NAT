@@ -656,8 +656,95 @@ class DNATransportHamiltonianGNN(nn.Module):
                         edge_attr: torch.Tensor,
                         edge_index: torch.Tensor,
                         batch: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Vectorized contact vector extraction. Delegates to reference for now."""
-        return self._get_contact_vectors_reference(x, edge_attr, edge_index, batch)
+        """
+        Extract left and right contact coupling vectors (vectorized).
+
+        Args:
+            x: Node features [num_nodes, node_features]
+            edge_attr: Edge features [num_edges, edge_features]
+            edge_index: Edge indices [2, num_edges]
+            batch: Batch indices [num_nodes]
+
+        Returns:
+            gammaL: Left lead coupling [batch_size, H_size] or [H_size] for single graph
+            gammaR: Right lead coupling [batch_size, H_size] or [H_size] for single graph
+        """
+        device = x.device
+        n_orb = self.n_orb
+
+        if batch is None:
+            batch = torch.zeros(x.size(0), dtype=torch.long, device=device)
+
+        batch_size = int(batch.max().item() + 1)
+
+        # Per-graph node counts and offsets
+        node_counts = torch.bincount(batch, minlength=batch_size)
+        num_dna_nodes = int((node_counts[0] - 2).item())
+        H_size = num_dna_nodes * n_orb
+
+        graph_starts = torch.zeros(batch_size, dtype=torch.long, device=device)
+        if batch_size > 1:
+            graph_starts[1:] = torch.cumsum(node_counts[:-1], dim=0)
+
+        GammaL = torch.zeros(batch_size, H_size, device=device, dtype=x.dtype)
+        GammaR = torch.zeros(batch_size, H_size, device=device, dtype=x.dtype)
+
+        # Left contact is graph_starts[b] + 0, right is graph_starts[b] + 1
+        left_contact_ids = graph_starts        # [batch_size]
+        right_contact_ids = graph_starts + 1   # [batch_size]
+
+        # Find all contact-type edges (edge_attr[:, 2] == 1)
+        contact_edge_mask = (edge_attr[:, 2] == 1)
+        contact_src = edge_index[0, contact_edge_mask]
+        contact_dst = edge_index[1, contact_edge_mask]
+        contact_coupling = edge_attr[contact_edge_mask, 4]
+
+        # Which graph does each contact edge belong to?
+        contact_src_batch = batch[contact_src]
+
+        # Left contact edges: source is the left contact node of its graph
+        is_left = (contact_src == left_contact_ids[contact_src_batch])
+        # Right contact edges: source is the right contact node of its graph
+        is_right = (contact_src == right_contact_ids[contact_src_batch])
+
+        # For left contact edges, map destination to local DNA index
+        left_dst = contact_dst[is_left]
+        left_batch = contact_src_batch[is_left]
+        left_coupling = contact_coupling[is_left]
+        left_dna_local = left_dst - graph_starts[left_batch] - 2
+
+        # For right contact edges
+        right_dst = contact_dst[is_right]
+        right_batch = contact_src_batch[is_right]
+        right_coupling = contact_coupling[is_right]
+        right_dna_local = right_dst - graph_starts[right_batch] - 2
+
+        # Scatter coupling values into gamma vectors
+        if n_orb == 1:
+            GammaL[left_batch, left_dna_local] = left_coupling
+            GammaR[right_batch, right_dna_local] = right_coupling
+        else:
+            orb_offsets = torch.arange(n_orb, device=device)
+            # Expand each DNA index into n_orb orbital indices
+            left_orb_start = left_dna_local.unsqueeze(1) * n_orb + orb_offsets.unsqueeze(0)  # [num_left, n_orb]
+            right_orb_start = right_dna_local.unsqueeze(1) * n_orb + orb_offsets.unsqueeze(0)
+
+            # Expand batch indices to match
+            left_batch_exp = left_batch.unsqueeze(1).expand_as(left_orb_start)
+            right_batch_exp = right_batch.unsqueeze(1).expand_as(right_orb_start)
+
+            # Expand coupling to fill all orbitals
+            left_coupling_exp = left_coupling.unsqueeze(1).expand_as(left_orb_start)
+            right_coupling_exp = right_coupling.unsqueeze(1).expand_as(right_orb_start)
+
+            GammaL[left_batch_exp.reshape(-1), left_orb_start.reshape(-1)] = left_coupling_exp.reshape(-1)
+            GammaR[right_batch_exp.reshape(-1), right_orb_start.reshape(-1)] = right_coupling_exp.reshape(-1)
+
+        # Squeeze for single-graph backward compatibility
+        if batch_size == 1:
+            return GammaL.squeeze(0), GammaR.squeeze(0)
+
+        return GammaL, GammaR
 
     def forward(self, data):
         """
