@@ -225,9 +225,127 @@ class DNATransportHamiltonianGNN(nn.Module):
                                        edge_index: torch.Tensor,
                                        batch: torch.Tensor,
                                        original_node_features: torch.Tensor) -> Tuple[torch.Tensor, int]:
-        """Vectorized Hamiltonian construction. Delegates to reference for now."""
-        return self._construct_hamiltonian_reference(
-            node_features, edge_features, edge_index, batch, original_node_features)
+        """
+        Construct Hamiltonian matrix directly from graph structure (vectorized).
+
+        Args:
+            node_features: Node features after GNN layers [num_nodes, hidden_dim]
+            edge_features: Edge features after GNN layers [num_edges, hidden_dim]
+            edge_index: Edge connectivity [2, num_edges]
+            batch: Batch indices [num_nodes]
+            original_node_features: Original node features for contact detection [num_nodes, node_features]
+
+        Returns:
+            H_matrix: Hamiltonian matrix [batch_size, H_size, H_size]
+            H_size: Size of Hamiltonian (num_dna_nodes * n_orb)
+        """
+        device = node_features.device
+        n_orb = self.n_orb
+
+        # Handle batched processing
+        if batch is None:
+            batch = torch.zeros(node_features.size(0), dtype=torch.long, device=device)
+
+        batch_size = int(batch.max().item() + 1)
+
+        # --- Step 1: Identify DNA vs contact nodes ---
+        contact_mask = torch.all(original_node_features == 0, dim=1)
+        dna_mask = ~contact_mask
+
+        # --- Step 2: Compute per-graph offsets and validate equal DNA counts ---
+        node_counts = torch.bincount(batch, minlength=batch_size)
+        # Contacts are always the first 2 nodes per graph
+        dna_counts = node_counts - 2
+
+        if batch_size > 1:
+            if not torch.all(dna_counts == dna_counts[0]):
+                raise ValueError(
+                    f"All graphs in a batch must have the same number of DNA nodes. "
+                    f"Got {dna_counts.tolist()}. "
+                    "Enable length-bucketing DataLoader for the hamiltonian model."
+                )
+
+        num_dna_nodes = int(dna_counts[0].item())
+        H_size = num_dna_nodes * n_orb
+
+        # Per-graph start offsets: graph_starts[b] = sum of node_counts[:b]
+        graph_starts = torch.zeros(batch_size, dtype=torch.long, device=device)
+        if batch_size > 1:
+            graph_starts[1:] = torch.cumsum(node_counts[:-1], dim=0)
+
+        # --- Step 3: Compute local Hamiltonian indices for all DNA nodes ---
+        dna_indices = torch.where(dna_mask)[0]           # global indices of DNA nodes
+        dna_batch = batch[dna_indices]                    # which graph each belongs to
+        dna_local = dna_indices - graph_starts[dna_batch] - 2  # local index (0-based, contacts excluded)
+
+        # --- Step 4: Compute onsite blocks and fill diagonal ---
+        dna_features = node_features[dna_mask]
+        onsite_raw = self.onsite_proj(dna_features)                  # [total_dna, n_orb²]
+        onsite_blocks = onsite_raw.view(-1, n_orb, n_orb)           # [total_dna, n_orb, n_orb]
+        if self.enforce_hermiticity:
+            onsite_blocks = 0.5 * (onsite_blocks + onsite_blocks.transpose(-1, -2))
+
+        H_diag = torch.zeros(batch_size, H_size, H_size, dtype=torch.float32, device=device)
+
+        if n_orb == 1:
+            H_diag[dna_batch, dna_local, dna_local] = onsite_blocks.view(-1)
+        else:
+            # Expand to orbital indices: for DNA node with local index L,
+            # orbital indices are [L*n_orb, L*n_orb+1, ..., L*n_orb+n_orb-1]
+            orb_offsets = torch.arange(n_orb, device=device)
+            # row_orb[i, o] = dna_local[i] * n_orb + o
+            row_orb = dna_local.unsqueeze(1) * n_orb + orb_offsets.unsqueeze(0)  # [total_dna, n_orb]
+            # For each DNA node, scatter its n_orb x n_orb block onto the diagonal
+            for oi in range(n_orb):
+                for oj in range(n_orb):
+                    H_diag[dna_batch, row_orb[:, oi], row_orb[:, oj]] = onsite_blocks[:, oi, oj]
+
+        # --- Step 5: Filter edges to DNA-only pairs ---
+        src, dst = edge_index
+        both_dna = dna_mask[src] & dna_mask[dst]
+        dna_src = src[both_dna]
+        dna_dst = dst[both_dna]
+        dna_edge_features = edge_features[both_dna]
+
+        # Convert to local Hamiltonian indices
+        src_batch = batch[dna_src]
+        src_local = dna_src - graph_starts[src_batch] - 2
+        dst_local = dna_dst - graph_starts[src_batch] - 2
+
+        # --- Step 6: Deduplicate to upper triangle (src < dst), skip self-loops ---
+        upper_mask = src_local < dst_local
+        src_upper = src_local[upper_mask]
+        dst_upper = dst_local[upper_mask]
+        batch_upper = src_batch[upper_mask]
+        edge_feat_upper = dna_edge_features[upper_mask]
+
+        # Compute coupling blocks for upper-triangle edges only
+        coupling_raw = self.coupling_proj(edge_feat_upper)         # [num_upper_edges, n_orb²]
+        coupling_blocks = coupling_raw.view(-1, n_orb, n_orb)     # [num_upper_edges, n_orb, n_orb]
+
+        # --- Step 7: Fill off-diagonal (upper triangle only) ---
+        H_offdiag = torch.zeros(batch_size, H_size, H_size, dtype=torch.float32, device=device)
+
+        if n_orb == 1:
+            H_offdiag[batch_upper, src_upper, dst_upper] = coupling_blocks.view(-1)
+        else:
+            orb_offsets = torch.arange(n_orb, device=device)
+            src_orb = src_upper.unsqueeze(1) * n_orb + orb_offsets.unsqueeze(0)  # [num_edges, n_orb]
+            dst_orb = dst_upper.unsqueeze(1) * n_orb + orb_offsets.unsqueeze(0)  # [num_edges, n_orb]
+            for oi in range(n_orb):
+                for oj in range(n_orb):
+                    H_offdiag[batch_upper, src_orb[:, oi], dst_orb[:, oj]] = coupling_blocks[:, oi, oj]
+
+        # --- Step 8: Symmetrize and combine ---
+        # H_offdiag has values only in upper triangle, so transpose gives lower triangle
+        H_matrix = H_diag + H_offdiag + H_offdiag.transpose(-1, -2)
+
+        # Diagonal shift for positive definiteness
+        shift = 1e-6
+        identity = torch.eye(H_size, device=device)
+        H_matrix = H_matrix + shift * identity.unsqueeze(0).expand(batch_size, -1, -1)
+
+        return H_matrix, H_size
 
     def NEGFProjection(self,
         H_matrix: torch.Tensor,
