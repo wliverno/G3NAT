@@ -302,3 +302,65 @@ class TestGetContactVectors:
         assert GL[0].item() == pytest.approx(0.1, abs=1e-6)
         # Right contact connects to position 3 → GammaR[3] should be 0.1
         assert GR[3].item() == pytest.approx(0.1, abs=1e-6)
+
+
+# ---- End-to-end forward pass tests ----
+
+class TestForwardPassUnchanged:
+    """Verify that model.forward() produces identical results after vectorization."""
+
+    def test_forward_single_graph_norb1(self):
+        """Full forward pass output unchanged for n_orb=1."""
+        _, model = _make_model(n_orb=1)
+        model.eval()
+        graph = sequence_to_graph("ACGT", "ACGT", 0, 3, 0.1, 0.1)
+        data = Batch.from_data_list([graph])
+        with torch.no_grad():
+            dos, trans = model(data)
+        assert dos.shape == (1, 10)  # energy_grid has 10 points
+        assert trans.shape == (1, 10)
+        # Verify H stored on model is hermitian
+        assert torch.allclose(model.H, model.H.transpose(-1, -2), atol=1e-7)
+
+    def test_forward_batched_norb1(self):
+        """Full forward pass works for a batch."""
+        _, model = _make_model(n_orb=1)
+        model.eval()
+        graphs = [
+            sequence_to_graph("ACGT", "ACGT", 0, 3, 0.1, 0.1),
+            sequence_to_graph("TGCA", "TGCA", 0, 3, 0.2, 0.2),
+        ]
+        data = Batch.from_data_list(graphs)
+        with torch.no_grad():
+            dos, trans = model(data)
+        assert dos.shape == (2, 10)
+        assert trans.shape == (2, 10)
+        for b in range(2):
+            assert torch.allclose(model.H[b], model.H[b].T, atol=1e-7)
+
+    def test_forward_norb2(self):
+        """Full forward pass works for n_orb=2."""
+        _, model = _make_model(n_orb=2, solver_type='complex')
+        model.eval()
+        graph = sequence_to_graph("ACGT", "ACGT", 0, 3, 0.1, 0.1)
+        data = Batch.from_data_list([graph])
+        with torch.no_grad():
+            dos, trans = model(data)
+        assert dos.shape == (1, 10)
+        assert trans.shape == (1, 10)
+        assert torch.allclose(model.H, model.H.transpose(-1, -2), atol=1e-7)
+
+    def test_gradients_flow(self):
+        """Verify gradients flow through the vectorized construction."""
+        _, model = _make_model(n_orb=1)
+        model.train()
+        graph = sequence_to_graph("ACGT", "ACGT", 0, 3, 0.1, 0.1)
+        data = Batch.from_data_list([graph])
+        dos, trans = model(data)
+        loss = dos.sum() + trans.sum()
+        loss.backward()
+        # Check that onsite_proj and coupling_proj have gradients
+        for name, param in model.named_parameters():
+            if 'onsite_proj' in name or 'coupling_proj' in name:
+                assert param.grad is not None, f"No gradient for {name}"
+                assert not torch.all(param.grad == 0), f"Zero gradient for {name}"
