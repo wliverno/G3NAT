@@ -11,6 +11,7 @@ class TrainingConfig:
     max_grad_norm: float = 1.0
     checkpoint_frequency: int = 10
     checkpoint_dir: Optional[str] = None
+    warmup_epochs: int = 50
 
     @classmethod
     def from_kwargs(cls, **kwargs):

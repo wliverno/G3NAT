@@ -64,7 +64,6 @@ def test_hamiltonian_model_unchanged():
         num_layers=2,
         num_heads=2,
         energy_grid=energy_grid,
-        dropout=0.0,
         n_orb=1,
         solver_type='frobenius'
     )

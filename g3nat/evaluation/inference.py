@@ -32,7 +32,7 @@ def load_trained_model(model_path: str, device: str = 'auto') -> Tuple[Union[DNA
 
     # Extract model arguments
     args = checkpoint.get('args', {})
-    energy_grid = checkpoint.get('energy_grid', np.linspace(-3, 3, 100))
+    energy_grid = checkpoint.get('energy_grid', np.linspace(-1, 1, 201))
 
     # Detect model type from state dict keys
     state_dict = checkpoint['model_state_dict']
@@ -81,6 +81,29 @@ def load_trained_model(model_path: str, device: str = 'auto') -> Tuple[Union[DNA
             conv_type=args.get('conv_type', 'transformer')
         )
         print("DNATransportGNN initialized successfully")
+
+    # Handle legacy Hamiltonian checkpoints that had Dropout layers and hidden_dim//2 intermediate
+    if model_type == 'hamiltonian':
+        has_legacy_proj = any(k.endswith('.3.weight') and ('onsite_proj' in k or 'coupling_proj' in k)
+                              for k in state_dict.keys())
+        if has_legacy_proj:
+            import torch.nn as nn
+            # Old architecture: Linear(hidden_dim, hidden_dim//2) → ReLU → Dropout → Linear(hidden_dim//2, n_orb²)
+            hidden_dim = args.get('hidden_dim', 128)
+            n_orb = args.get('n_orb', 1)
+            model.onsite_proj = nn.Sequential(
+                nn.Linear(hidden_dim, hidden_dim // 2),
+                nn.ReLU(),
+                nn.Dropout(0.0),
+                nn.Linear(hidden_dim // 2, n_orb * n_orb)
+            )
+            model.coupling_proj = nn.Sequential(
+                nn.Linear(hidden_dim, hidden_dim // 2),
+                nn.ReLU(),
+                nn.Dropout(0.0),
+                nn.Linear(hidden_dim // 2, n_orb * n_orb)
+            )
+            print("Detected legacy checkpoint format — rebuilt projection layers to match")
 
     # Load trained weights
     model.load_state_dict(checkpoint['model_state_dict'])
