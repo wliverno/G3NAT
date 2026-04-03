@@ -39,7 +39,8 @@ class Trainer:
         # Initialize optimizer
         self.optimizer = torch.optim.Adam(
             self.model.parameters(),
-            lr=self.config.learning_rate
+            lr=self.config.learning_rate,
+            weight_decay=1e-5
         )
 
         # Loss function
@@ -93,6 +94,13 @@ class Trainer:
                         state[k] = v.to(model_device)
 
         for epoch in range(start_epoch, self.config.num_epochs):
+            # Learning rate warmup: ramp from lr/100 to lr over warmup_epochs epochs
+            if self.config.warmup_epochs > 0 and epoch < self.config.warmup_epochs:
+                warmup_scale = (epoch + 1) / self.config.warmup_epochs
+                lr = self.config.learning_rate * max(0.01, warmup_scale)
+                for pg in self.optimizer.param_groups:
+                    pg['lr'] = lr
+
             # Training phase
             train_loss = self._train_epoch(train_loader)
             self.train_losses.append(train_loss)
@@ -196,7 +204,8 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
                checkpoint_dir: str = None, checkpoint_frequency: int = 10,
                start_epoch: int = 0, train_losses: List[float] = None,
                val_losses: List[float] = None, optimizer: torch.optim.Optimizer = None,
-               checkpoint_callback=None, progress_callback=None, max_grad_norm: float = 1.0):
+               checkpoint_callback=None, progress_callback=None, max_grad_norm: float = 1.0,
+               warmup_epochs: int = 50):
     """
     Train the DNA Transport GNN model (backward-compatible function).
 
@@ -227,7 +236,8 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         device=device,
         max_grad_norm=max_grad_norm,
         checkpoint_frequency=checkpoint_frequency,
-        checkpoint_dir=checkpoint_dir
+        checkpoint_dir=checkpoint_dir,
+        warmup_epochs=warmup_epochs
     )
 
     # Create trainer

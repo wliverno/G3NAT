@@ -80,7 +80,6 @@ def test_full_pipeline():
         num_layers=2,
         num_heads=2,
         energy_grid=energy_grid,
-        dropout=0.0,
         n_orb=1
     )
     print(f"   Model parameters: {sum(p.numel() for p in model.parameters()):,}")
