@@ -86,6 +86,13 @@ class DNATransportHamiltonianGNN(nn.Module):
             nn.Linear(hidden_dim, n_orb * n_orb)
         )
 
+        # Initialize final projection layers to near-zero so the initial
+        # Hamiltonian is small and (E·I - H) stays well-conditioned early in training.
+        nn.init.normal_(self.onsite_proj[-1].weight, std=0.01)
+        nn.init.zeros_(self.onsite_proj[-1].bias)
+        nn.init.normal_(self.coupling_proj[-1].weight, std=0.01)
+        nn.init.zeros_(self.coupling_proj[-1].bias)
+
         # Global pooling
         self.global_pool = global_mean_pool
 

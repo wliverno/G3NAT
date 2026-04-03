@@ -78,7 +78,7 @@ def test_hamiltonian_gnn_forward():
     batch = Batch.from_data_list([graph])
 
     energy_grid = np.linspace(-2, 2, 20)
-    model = DNATransportHamiltonianGNN(hidden_dim=64, num_layers=2, num_heads=2, energy_grid=energy_grid, dropout=0.1, n_orb=1)
+    model = DNATransportHamiltonianGNN(hidden_dim=64, num_layers=2, num_heads=2, energy_grid=energy_grid, n_orb=1)
     model.eval()
     with torch.no_grad():
         dos_pred, trans_pred = model(batch)
@@ -106,7 +106,7 @@ def test_negf_consistency_with_generator():
 
     # Model's NEGFProjection (returns T, DOS, H in log10)
     model = DNATransportHamiltonianGNN(hidden_dim=8, num_layers=1, num_heads=1,
-                                       energy_grid=energy_grid, dropout=0.0, n_orb=1)
+                                       energy_grid=energy_grid, n_orb=1)
     H_t = torch.tensor(H, dtype=torch.float64)
     gL_t = torch.tensor(GammaL, dtype=torch.float64)
     gR_t = torch.tensor(GammaR, dtype=torch.float64)
