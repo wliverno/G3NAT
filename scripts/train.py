@@ -49,6 +49,9 @@ def parse_args():
     parser.add_argument('--num_heads', type=int, default=4)
     parser.add_argument('--dropout', type=float, default=0.0)
     parser.add_argument('--n_orb', type=int, default=1)
+    parser.add_argument('--conv_type', type=str, default='gat',
+                       choices=['gat', 'transformer'],
+                       help='Graph convolution type for the hamiltonian model')
 
     # Training parameters
     parser.add_argument('--num_epochs', type=int, default=100)
@@ -154,7 +157,8 @@ def main():
             num_layers=args.num_layers,
             num_heads=args.num_heads,
             energy_grid=energy_grid,
-            n_orb=args.n_orb
+            n_orb=args.n_orb,
+            conv_type=args.conv_type
         )
 
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
