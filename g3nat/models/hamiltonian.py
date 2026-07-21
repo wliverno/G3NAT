@@ -27,7 +27,10 @@ class DNATransportHamiltonianGNN(nn.Module):
                  use_log_outputs: bool = True,
                  log_floor: float = 1e-16,
                  complex_eta: float = 1e-12,
-                 conv_type: str = 'gat'):
+                 conv_type: str = 'gat',
+                 use_geometry: bool = False,
+                 geom_dim: int = 7,
+                 geom_norm_stats: Optional[Dict] = None):
         super().__init__()
         # Use features specified in dataset.py
         node_features = 4  # 4 one-hot features (A, T, G, C)
@@ -97,6 +100,45 @@ class DNATransportHamiltonianGNN(nn.Module):
 
         # Global pooling
         self.global_pool = global_mean_pool
+
+        # Optional SE(3)-invariant geometry channel. Default off = byte-for-byte
+        # identical model (no extra params/buffers, existing checkpoints load).
+        self.use_geometry = use_geometry
+        self.geom_dim = geom_dim
+        if use_geometry:
+            self.geom_encoder = nn.Sequential(
+                nn.Linear(geom_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Linear(hidden_dim, hidden_dim),
+            )
+            nn.init.normal_(self.geom_encoder[-1].weight, std=0.01)
+            nn.init.zeros_(self.geom_encoder[-1].bias)
+            # per-edge-type z-score buffers: row 0 backbone, row 1 hbond
+            mean = torch.zeros(2, geom_dim)
+            std = torch.ones(2, geom_dim)
+            if geom_norm_stats is not None:
+                mean[0] = torch.tensor(geom_norm_stats["backbone"]["mean"], dtype=torch.float)
+                std[0] = torch.tensor(geom_norm_stats["backbone"]["std"], dtype=torch.float)
+                mean[1] = torch.tensor(geom_norm_stats["hbond"]["mean"], dtype=torch.float)
+                std[1] = torch.tensor(geom_norm_stats["hbond"]["std"], dtype=torch.float)
+            self.register_buffer("geom_mean", mean)
+            self.register_buffer("geom_std", std)
+
+    def _fuse_geometry(self, edge_attr_proj, edge_attr_initial, data):
+        """Add per-edge-type-normalized geometry to the projected edge embedding.
+
+        Backbone edges (edge_attr_initial[:,0]==1) use row 0 stats; H-bond edges
+        (col 1) use row 1. Masked/contact edges contribute 0 (mask gates them).
+        """
+        geom = data.edge_geom
+        mask = data.edge_geom_mask
+        is_bb = (edge_attr_initial[:, 0] == 1).to(geom.dtype).unsqueeze(1)  # [E,1]
+        is_hb = (edge_attr_initial[:, 1] == 1).to(geom.dtype).unsqueeze(1)
+        mean = is_bb * self.geom_mean[0] + is_hb * self.geom_mean[1]  # [E,7]
+        std = is_bb * self.geom_std[0] + is_hb * self.geom_std[1]
+        std = torch.where(std == 0, torch.ones_like(std), std)
+        normed = (geom - mean) / std
+        return edge_attr_proj + self.geom_encoder(normed) * mask
 
     def _construct_hamiltonian_reference(self,
                                        node_features: torch.Tensor,
@@ -837,6 +879,10 @@ class DNATransportHamiltonianGNN(nn.Module):
         # Project node and edge features
         x = self.node_proj(x)
         edge_attr = self.edge_proj(edge_attr)
+
+        # Fuse SE(3)-invariant geometry into the edge embedding (no-op when off)
+        if getattr(self, 'use_geometry', False):
+            edge_attr = self._fuse_geometry(edge_attr, edge_attr_initial, data)
 
         # Graph convolution layers
         for i in range(self.num_layers):
