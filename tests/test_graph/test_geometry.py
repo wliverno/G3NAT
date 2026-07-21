@@ -33,6 +33,41 @@ def test_base_centroids_and_distances():
     assert 3.0 < d_stack < 4.5, d_stack        # ~3.7 A
 
 
+def _toy_entry():
+    # 4 base pairs, distinct param values so a mis-mapping is detectable.
+    bp = np.array([[1, 2, 3, 4, 5, 6],
+                   [7, 8, 9, 10, 11, 12],
+                   [13, 14, 15, 16, 17, 18],
+                   [19, 20, 21, 22, 23, 24]], float)
+    step = np.array([[101, 102, 103, 104, 105, 106],
+                     [111, 112, 113, 114, 115, 116],
+                     [121, 122, 123, 124, 125, 126]], float)  # Nstep = 3
+    # primary stacked along +z (3.4 apart); comp ordered 5'->3' antiparallel so
+    # comp[n-1-i] sits at the same helical level as primary[i] (WC pair, 6 A across).
+    pc = np.array([[0, 0, 0], [0, 0, 3.4], [0, 0, 6.8], [0, 0, 10.2]], float)
+    cc = np.array([[6, 0, 10.2], [6, 0, 6.8], [6, 0, 3.4], [6, 0, 0]], float)
+    return {"bp_pars": bp, "step_pars": step,
+            "primary_centroids": pc, "comp_centroids": cc}
+
+
+def test_assemble_backbone_primary_and_hbond():
+    g = geometry.assemble_graph_geometry("acgt", "acgt", _toy_entry())
+    # primary backbone step i: [dist(p_i,p_{i+1})=3.4, *step[i]]
+    np.testing.assert_allclose(g[("backbone", "primary", 0)], [3.4, 101, 102, 103, 104, 105, 106])
+    np.testing.assert_allclose(g[("backbone", "primary", 2)], [3.4, 121, 122, 123, 124, 125, 126])
+    # hbond pair i: [dist(p_i, c_{n-1-i})=6.0, *bp[i]]
+    np.testing.assert_allclose(g[("hbond", 0)], [6.0, 1, 2, 3, 4, 5, 6])
+    np.testing.assert_allclose(g[("hbond", 3)], [6.0, 19, 20, 21, 22, 23, 24])
+
+
+def test_assemble_backbone_complementary_shares_step():
+    g = geometry.assemble_graph_geometry("acgt", "acgt", _toy_entry())
+    # comp step j shares primary step index n-2-j (n=4): j=0->2, j=1->1, j=2->0
+    np.testing.assert_allclose(g[("backbone", "complementary", 0)], [3.4, 121, 122, 123, 124, 125, 126])
+    np.testing.assert_allclose(g[("backbone", "complementary", 1)], [3.4, 111, 112, 113, 114, 115, 116])
+    np.testing.assert_allclose(g[("backbone", "complementary", 2)], [3.4, 101, 102, 103, 104, 105, 106])
+
+
 @pytest.mark.skipif(not os.path.isdir(DATASET), reason="DSSR dataset not present")
 def test_build_cache_and_norm_stats(tmp_path):
     out = str(tmp_path / "geom.pkl")
