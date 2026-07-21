@@ -37,7 +37,8 @@ def sequence_to_graph(primary_sequence: str,
                      left_contact_positions: Optional[Union[int, List[int], Tuple[str, Union[int, List[int]]]]] = None,
                      right_contact_positions: Optional[Union[int, List[int], Tuple[str, Union[int, List[int]]]]] = None,
                      left_contact_coupling: Union[float, List[float]] = 0.1,
-                     right_contact_coupling: Union[float, List[float]] = 0.1) -> Data:
+                     right_contact_coupling: Union[float, List[float]] = 0.1,
+                     geometry: Optional[Dict] = None) -> Data:
     """
     Convert DNA sequence to PyTorch Geometric graph with left and right contacts.
     
@@ -136,7 +137,25 @@ def sequence_to_graph(primary_sequence: str,
     # Edge construction - contact connections and backbone connections
     edge_index = []
     edge_attr = []
-    
+
+    # Parallel geometry channel: one 7-tuple + mask per edge, emitted in exact
+    # lockstep with edge_attr so alignment never drifts from edge order.
+    from g3nat.graph.geometry import assemble_graph_geometry
+    edge_geom = []
+    edge_geom_mask = []
+    _ZERO7 = [0.0] * 7
+    _geo = assemble_graph_geometry(primary_sequence, complementary_sequence, geometry) \
+        if geometry is not None else {}
+
+    def _emit(edge_id):
+        g7 = _geo.get(edge_id)
+        if g7 is None:
+            edge_geom.append(_ZERO7)
+            edge_geom_mask.append([0.0])
+        else:
+            edge_geom.append(list(g7))
+            edge_geom_mask.append([1.0])
+
     # Left contact connections
     for i, pos in enumerate(left_positions):
         if left_strand == 'primary':
@@ -155,10 +174,12 @@ def sequence_to_graph(primary_sequence: str,
         # Contact → base (directionality = 1)
         edge_index.append([node_mapping['left_contact'], base_node_idx])
         edge_attr.append(get_edge_features('contact', 1, coupling))
-        
+        _emit(None)  # contact edges carry no geometry
+
         # Base → contact (directionality = -1)
         edge_index.append([base_node_idx, node_mapping['left_contact']])
         edge_attr.append(get_edge_features('contact', -1, coupling))
+        _emit(None)
     
     # Right contact connections
     for i, pos in enumerate(right_positions):
@@ -178,10 +199,12 @@ def sequence_to_graph(primary_sequence: str,
         # Contact → base (directionality = 1)
         edge_index.append([node_mapping['right_contact'], base_node_idx])
         edge_attr.append(get_edge_features('contact', 1, coupling))
-        
+        _emit(None)  # contact edges carry no geometry
+
         # Base → contact (directionality = -1)
         edge_index.append([base_node_idx, node_mapping['right_contact']])
         edge_attr.append(get_edge_features('contact', -1, coupling))
+        _emit(None)
     
     # Primary strand backbone connections (connect adjacent existing bases)
     primary_positions = [pos for pos, base in enumerate(primary_sequence) if base != '_']
@@ -197,10 +220,12 @@ def sequence_to_graph(primary_sequence: str,
             # 5'→3' direction (forward)
             edge_index.append([node1_idx, node2_idx])
             edge_attr.append(get_edge_features('backbone', 1))  # Directionality = 1
-            
+            _emit(('backbone', 'primary', pos1))
+
             # 3'→5' direction (backward)
             edge_index.append([node2_idx, node1_idx])
             edge_attr.append(get_edge_features('backbone', -1))  # Directionality = -1
+            _emit(('backbone', 'primary', pos1))
 
     # Complementary strand backbone connections (only between existing bases)
     complementary_positions = [pos for pos, base in enumerate(complementary_sequence) if base != '_']
@@ -216,10 +241,12 @@ def sequence_to_graph(primary_sequence: str,
             # 5'→3' direction (forward)
             edge_index.append([node1_idx, node2_idx])
             edge_attr.append(get_edge_features('backbone', 1))  # Directionality = 1
-            
+            _emit(('backbone', 'complementary', pos1))
+
             # 3'→5' direction (backward)
             edge_index.append([node2_idx, node1_idx])
             edge_attr.append(get_edge_features('backbone', -1))  # Directionality = -1
+            _emit(('backbone', 'complementary', pos1))
     
     # Hydrogen bonding between complementary strands
     # Only create hydrogen bonds where both bases exist
@@ -233,14 +260,28 @@ def sequence_to_graph(primary_sequence: str,
             primary_idx = node_mapping[('primary', i)]
             complementary_idx = node_mapping[('complementary', comp_loc)]
 
-            # No Directionality for Hydrogen Bonds            
+            # No Directionality for Hydrogen Bonds
             edge_index.extend([[primary_idx, complementary_idx], [complementary_idx, primary_idx]])
             edge_attr.extend([get_edge_features('hydrogen_bond', 0), get_edge_features('hydrogen_bond', 0)])
+            _emit(('hbond', i))
+            _emit(('hbond', i))
     
     edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
     edge_attr = torch.tensor(edge_attr, dtype=torch.float)
-    
+
+    num_edges = edge_index.size(1) if edge_index.numel() > 0 else len(edge_attr)
+    if edge_geom:
+        edge_geom_t = torch.tensor(edge_geom, dtype=torch.float)
+        edge_geom_mask_t = torch.tensor(edge_geom_mask, dtype=torch.float)
+    else:
+        edge_geom_t = torch.zeros((num_edges, 7), dtype=torch.float)
+        edge_geom_mask_t = torch.zeros((num_edges, 1), dtype=torch.float)
+    assert edge_geom_t.size(0) == num_edges, \
+        f"edge_geom misaligned: {edge_geom_t.size(0)} rows vs {num_edges} edges"
+
     data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
+    data.edge_geom = edge_geom_t
+    data.edge_geom_mask = edge_geom_mask_t
     # Annotate with number of DNA nodes (total nodes minus 2 contacts)
     try:
         data.num_dna_nodes = int(x.size(0) - 2)
