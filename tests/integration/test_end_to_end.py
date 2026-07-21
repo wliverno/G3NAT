@@ -117,3 +117,30 @@ def test_full_pipeline():
 
 if __name__ == "__main__":
     test_full_pipeline()
+
+
+def test_end_to_end_geometry_on():
+    """Full path: geometry cache -> dataset -> batched graph -> model(use_geometry=True)."""
+    from g3nat.models import DNATransportHamiltonianGNN
+    from g3nat.graph.geometry import compute_norm_stats
+    rng = np.random.RandomState(0)
+    seqs = ["ACGT", "ACGT"]
+    entry = {"bp_pars": rng.randn(4, 6), "step_pars": rng.randn(3, 6),
+             "primary_centroids": np.array([[0, 0, i * 3.4] for i in range(4)], float),
+             "comp_centroids": np.array([[6, 0, (3 - i) * 3.4] for i in range(4)], float)}
+    cache = {"acgt": entry}
+    egrid = np.linspace(-3, 3, 20)
+    ds = create_dna_dataset(seqs, np.zeros((2, 20)), np.zeros((2, 20)), egrid,
+                            complementary_sequences=["ACGT", "ACGT"], geometry_cache=cache)
+    stats = compute_norm_stats(cache)
+    model = DNATransportHamiltonianGNN(hidden_dim=32, num_layers=2, num_heads=2,
+                                       energy_grid=egrid, conv_type='gat',
+                                       use_geometry=True, geom_norm_stats=stats)
+    loader = DataLoader(ds, batch_size=2)
+    batch = next(iter(loader))
+    # geometry survived dataset -> loader batching, aligned to edges
+    assert hasattr(batch, 'edge_geom') and batch.edge_geom.shape[1] == 7
+    assert batch.edge_geom.shape[0] == batch.edge_index.shape[1]
+    assert batch.edge_geom_mask.sum() > 0
+    dos, trans = model(batch)
+    assert torch.isfinite(dos).all() and torch.isfinite(trans).all()
