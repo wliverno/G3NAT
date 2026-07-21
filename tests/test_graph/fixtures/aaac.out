@@ -1,0 +1,174 @@
+****************************************************************************
+           DSSR: an Integrated Software Tool for
+          Dissecting the Spatial Structure of RNA
+           v2.8.0-2026feb18 by xiangjun@x3dna.org
+
+****************************************************************************
+Note: By default, each nucleotide is identified by chainId.name#. So a
+      common case would be B.A1689, meaning adenosine #1689 on chain B.
+      One-letter base names for modified nucleotides are put in lower
+      case (e.g., 'c' for 5MC). For further information about the output
+      notation, please refer to the DSSR User Manual.
+    Questions and suggestions are *always* welcome on the 3DNA Forum.
+
+Command: x3dna-dssr -i=aaac.pdb --more -o=aaac.out
+Date and time: 2026-03-17 13:27:08
+File name: aaac.pdb
+    no. of DNA/RNA chains: 1 [_=8]
+    no. of nucleotides:    8
+    no. of atoms:          253
+    no. of waters:         0
+    no. of metals:         0
+
+****************************************************************************
+List of 4 base pairs
+     nt1            nt2            bp  name        Saenger   LW   DSSR
+   1 DA1            DT8            A-T WC          20-XX     cWW  cW-W
+       [-99.3(anti) ~C2'-endo lambda=54.3] [-99.4(anti) ~C2'-endo lambda=54.3]
+       d(C1'-C1')=10.70 d(N1-N9)=8.97 d(C6-C8)=9.87 tor(C1'-N1-N9-C1')=-1.0
+       H-bonds[2]: "N6(amino)-O4(carbonyl)[2.88],N1-N3(imino)[2.90]"
+       interBase-angle=1  Simple-bpParams: Shear=0.01 Stretch=-0.09 Buckle=0.0 Propeller=-1.2
+       bp-pars: [0.00    -0.09   -0.00   0.01    -1.23   -2.68]
+   2 DA2            DT7            A-T WC          20-XX     cWW  cW-W
+       [-99.3(anti) ~C2'-endo lambda=54.3] [-99.3(anti) ~C2'-endo lambda=54.3]
+       d(C1'-C1')=10.70 d(N1-N9)=8.97 d(C6-C8)=9.87 tor(C1'-N1-N9-C1')=-1.0
+       H-bonds[2]: "N6(amino)-O4(carbonyl)[2.88],N1-N3(imino)[2.90]"
+       interBase-angle=1  Simple-bpParams: Shear=0.01 Stretch=-0.09 Buckle=0.0 Propeller=-1.2
+       bp-pars: [0.01    -0.09   -0.00   0.01    -1.23   -2.68]
+   3 DA3            DT6            A-T WC          20-XX     cWW  cW-W
+       [-99.4(anti) ~C2'-endo lambda=54.3] [-99.3(anti) ~C2'-endo lambda=54.3]
+       d(C1'-C1')=10.70 d(N1-N9)=8.97 d(C6-C8)=9.87 tor(C1'-N1-N9-C1')=-1.0
+       H-bonds[2]: "N6(amino)-O4(carbonyl)[2.88],N1-N3(imino)[2.90]"
+       interBase-angle=1  Simple-bpParams: Shear=0.01 Stretch=-0.09 Buckle=0.0 Propeller=-1.2
+       bp-pars: [0.01    -0.09   -0.00   0.01    -1.23   -2.69]
+   4 DC4            DG5            C-G WC          19-XIX    cWW  cW-W
+       [-99.4(anti) ~C2'-endo lambda=54.3] [-99.4(anti) ~C2'-endo lambda=54.3]
+       d(C1'-C1')=10.70 d(N1-N9)=8.97 d(C6-C8)=9.86 tor(C1'-N1-N9-C1')=-1.0
+       H-bonds[3]: "N4(amino)-O6(carbonyl)[2.81],N3-N1(imino)[2.87],O2(carbonyl)-N2(amino)[2.81]"
+       interBase-angle=1  Simple-bpParams: Shear=0.15 Stretch=-0.17 Buckle=-0.0 Propeller=-1.2
+       bp-pars: [0.15    -0.17   -0.00   -0.03   -1.25   -1.62]
+
+****************************************************************************
+List of 1 helix
+  Note: a helix is defined by base-stacking interactions, regardless of bp
+        type and backbone connectivity, and may contain more than one stem.
+      helix#number[stems-contained] bps=number-of-base-pairs in the helix
+      bp-type: '|' for a canonical WC/wobble pair, '.' otherwise
+      helix-form: classification of a dinucleotide step comprising the bp
+        above the given designation and the bp that follows it. Types
+        include 'A', 'B' or 'Z' for the common A-, B- and Z-form helices,
+        '.' for an unclassified step, and 'x' for a step without a
+        continuous backbone.
+      --------------------------------------------------------------------
+  helix#1[1] bps=4
+      strand-1 5'-AAAC-3'
+       bp-type    ||||
+      strand-2 3'-TTTG-5'
+      helix-form  BBB
+    helical-rise:   3.38(0.00)
+    helical-radius: 8.97(0.00)
+    helical-axis:    0.000     0.000     1.000
+       point-one:    0.000     0.000     0.000
+       point-two:    0.000     0.000    10.140
+   1 DA1            DT8            A-T WC           20-XX     cWW  cW-W
+        bp1-pars:  [0.00     -0.09    0.00     0.01     -1.23    -2.68]
+       step-pars:  [0.00     -0.20    3.37     0.01     -2.81    35.90]
+       heli-pars:  [0.08     0.00     3.38     -4.54    -0.01    36.00]
+        bp2-pars:  [0.01     -0.09    0.00     0.01     -1.23    -2.68]
+       C1'-based:                rise=3.37                 twist=35.90
+       C1'-based:              h-rise=3.38               h-twist=36.00
+   2 DA2            DT7            A-T WC           20-XX     cWW  cW-W
+        bp1-pars:  [0.01     -0.09    0.00     0.01     -1.23    -2.68]
+       step-pars:  [0.00     -0.20    3.37     0.01     -2.81    35.89]
+       heli-pars:  [0.08     0.01     3.38     -4.54    -0.01    36.00]
+        bp2-pars:  [0.01     -0.09    0.00     0.01     -1.23    -2.69]
+       C1'-based:                rise=3.37                 twist=35.89
+       C1'-based:              h-rise=3.38               h-twist=36.00
+   3 DA3            DT6            A-T WC           20-XX     cWW  cW-W
+        bp1-pars:  [0.01     -0.09    0.00     0.01     -1.23    -2.69]
+       step-pars:  [0.03     -0.16    3.38     -0.02    -2.79    37.00]
+       heli-pars:  [0.13     -0.05    3.38     -4.39    0.03     37.11]
+        bp2-pars:  [0.15     -0.17    0.00     -0.03    -1.25    -1.62]
+       C1'-based:                rise=3.38                 twist=35.89
+       C1'-based:              h-rise=3.38               h-twist=36.00
+   4 DC4            DG5            C-G WC           19-XIX    cWW  cW-W
+
+****************************************************************************
+List of 1 stem
+  Note: a stem is defined as a helix consisting of only canonical WC/wobble
+        pairs, with a continuous backbone.
+      stem#number[#helix-number containing this stem]
+      Other terms are defined as in the above Helix section.
+      --------------------------------------------------------------------
+  stem#1[#1] bps=4
+      strand-1 5'-AAAC-3'
+       bp-type    ||||
+      strand-2 3'-TTTG-5'
+      helix-form  BBB
+    helical-rise:   3.38(0.00)
+    helical-radius: 8.97(0.00)
+    helical-axis:    0.000     0.000     1.000
+       point-one:    0.000     0.000     0.000
+       point-two:    0.000     0.000    10.140
+   1 DA1            DT8            A-T WC           20-XX     cWW  cW-W
+        bp1-pars:  [0.00     -0.09    0.00     0.01     -1.23    -2.68]
+       step-pars:  [0.00     -0.20    3.37     0.01     -2.81    35.90]
+       heli-pars:  [0.08     0.00     3.38     -4.54    -0.01    36.00]
+        bp2-pars:  [0.01     -0.09    0.00     0.01     -1.23    -2.68]
+       C1'-based:                rise=3.37                 twist=35.90
+       C1'-based:              h-rise=3.38               h-twist=36.00
+   2 DA2            DT7            A-T WC           20-XX     cWW  cW-W
+        bp1-pars:  [0.01     -0.09    0.00     0.01     -1.23    -2.68]
+       step-pars:  [0.00     -0.20    3.37     0.01     -2.81    35.89]
+       heli-pars:  [0.08     0.01     3.38     -4.54    -0.01    36.00]
+        bp2-pars:  [0.01     -0.09    0.00     0.01     -1.23    -2.69]
+       C1'-based:                rise=3.37                 twist=35.89
+       C1'-based:              h-rise=3.38               h-twist=36.00
+   3 DA3            DT6            A-T WC           20-XX     cWW  cW-W
+        bp1-pars:  [0.01     -0.09    0.00     0.01     -1.23    -2.69]
+       step-pars:  [0.03     -0.16    3.38     -0.02    -2.79    37.00]
+       heli-pars:  [0.13     -0.05    3.38     -4.39    0.03     37.11]
+        bp2-pars:  [0.15     -0.17    0.00     -0.03    -1.25    -1.62]
+       C1'-based:                rise=3.38                 twist=35.89
+       C1'-based:              h-rise=3.38               h-twist=36.00
+   4 DC4            DG5            C-G WC           19-XIX    cWW  cW-W
+
+****************************************************************************
+Secondary structures in dot-bracket notation (dbn) as a whole and per chain
+>aaac nts=8 [whole]
+AAAC&GTTT
+((((&))))
+>aaac-_ #1 nts=8 1.20(1.26) [chain] DNA*
+AAAC&GTTT
+((((&))))
+
+****************************************************************************
+Summary of structural features of 8 nucleotides
+  Note: the first five columns are: (1) serial number, (2) one-letter
+    shorthand name, (3) dbn, (4) id string, (5) rmsd (~zero) of base
+    ring atoms fitted against those in a standard base reference
+    frame. The sixth (last) column contains a comma-separated list of
+    features whose meanings are mostly self-explanatory, except for:
+      turn: angle C1'(i-1)--C1'(i)--C1'(i+1) < 90 degrees
+      break: no backbone linkage between O3'(i-1) and P(i)
+   1  A ( DA1 0.009  anti,~C2'-endo,BI,canonical,non-pair-contact,helix-end,stem-end
+   2  A ( DA2 0.009  anti,~C2'-endo,BI,canonical,non-pair-contact,helix,stem
+   3  A ( DA3 0.009  anti,~C2'-endo,BI,canonical,non-pair-contact,helix,stem
+   4  C ( DC4 0.008  break,anti,~C2'-endo,canonical,non-pair-contact,helix-end,stem-end
+   5  G ) DG5 0.008  anti,~C2'-endo,BI,canonical,non-pair-contact,helix-end,stem-end
+   6  T ) DT6 0.018  anti,~C2'-endo,BI,canonical,non-pair-contact,helix,stem
+   7  T ) DT7 0.017  anti,~C2'-endo,BI,canonical,non-pair-contact,helix,stem
+   8  T ) DT8 0.017  anti,~C2'-endo,canonical,non-pair-contact,helix-end,stem-end
+
+****************************************************************************
+List of 7 additional files
+   1 dssr-pairs.pdb -- an ensemble of base pairs
+   2 dssr-stems.pdb -- an ensemble of stems
+   3 dssr-helices.pdb -- an ensemble of helices (coaxial stacking)
+   4 dssr-2ndstrs.bpseq -- secondary structure in bpseq format
+   5 dssr-2ndstrs.ct -- secondary structure in connectivity table format
+   6 dssr-2ndstrs.dbn -- secondary structure in dot-bracket notation
+   7 dssr-torsions.txt -- backbone torsion angles and suite names
+
+****************************************************************************
+Time used: 00:00:00:01
