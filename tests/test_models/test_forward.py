@@ -132,3 +132,23 @@ def test_geometry_changes_output():
     with torch.no_grad():
         out1 = m(Batch.from_data_list([g2]))
     assert not torch.allclose(out0[1], out1[1])      # transmission responds to geometry
+
+
+def test_geometry_checkpoint_roundtrip(tmp_path):
+    """A use_geometry=True model saves and reloads via load_trained_model (buffers restored)."""
+    from g3nat.evaluation.inference import load_trained_model
+    egrid = np.linspace(-3, 3, 20)
+    stats = {"backbone": {"mean": [0.5] * 7, "std": [1.5] * 7},
+             "hbond": {"mean": [0.3] * 7, "std": [2.0] * 7}}
+    m = DNATransportHamiltonianGNN(hidden_dim=32, num_layers=2, num_heads=2,
+                                   energy_grid=egrid, conv_type='gat',
+                                   use_geometry=True, geom_norm_stats=stats)
+    p = str(tmp_path / "geom_model.pth")
+    torch.save({'model_state_dict': m.state_dict(),
+                'args': {'hidden_dim': 32, 'num_layers': 2, 'num_heads': 2,
+                         'n_orb': 1, 'conv_type': 'gat', 'use_geometry': True},
+                'energy_grid': egrid}, p)
+    m2, eg, dev = load_trained_model(p, device='cpu')
+    # per-type norm buffers restored from the checkpoint, not left at identity defaults
+    assert torch.allclose(m2.geom_mean, m.geom_mean)
+    assert torch.allclose(m2.geom_std, m.geom_std)
