@@ -79,9 +79,11 @@ class DNATransportHamiltonianGNN(nn.Module):
             nn.Linear(hidden_dim, n_orb * n_orb)
         )
 
-        # Each edge contributes n_orb x n_orb coupling block
+        # Each edge contributes n_orb x n_orb coupling block.
+        # Input = [x_low, x_high, edge_feat] (3 * hidden_dim) so the coupling depends on
+        # BOTH endpoint bases (their post-conv node embeddings), not just the edge type.
         self.coupling_proj = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(3 * hidden_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, n_orb * n_orb)
         )
@@ -158,9 +160,8 @@ class DNATransportHamiltonianGNN(nn.Module):
             # Symmetrize onsite blocks to ensure Hermiticity (real symmetric here)
             onsite_blocks = 0.5 * (onsite_blocks + onsite_blocks.transpose(-1, -2))
 
-        # Get coupling blocks for edges between DNA nodes
-        coupling_blocks = self.coupling_proj(edge_features)  # [num_edges, n_orb²]
-        coupling_blocks = coupling_blocks.view(-1, self.n_orb, self.n_orb)  # [num_edges, n_orb, n_orb]
+        # Coupling blocks are computed per undirected DNA pair inside the loop below,
+        # from both endpoint node embeddings + the edge feature (base-aware).
 
         # Initialize Hamiltonian matrix
         H_matrix = torch.zeros(batch_size, H_size, H_size,
@@ -211,9 +212,19 @@ class DNATransportHamiltonianGNN(nn.Module):
                     v_orb_start = v * self.n_orb
                     v_orb_end = v_orb_start + self.n_orb
 
-                    # Use the first occurrence's coupling block for this undirected pair
+                    # Base-aware coupling: both endpoint embeddings (low-local first) + edge
+                    # feature, matching the vectorized path so the two constructions agree.
+                    # global_edge_idx is the first-occurrence directed edge for this pair,
+                    # which is the low->high edge because sequence_to_graph appends the
+                    # position-ascending direction first (enforced by test_vectorized_hamiltonian).
                     global_edge_idx = graph_edge_indices[local_edge_idx]
-                    coupling_block = coupling_blocks[global_edge_idx]
+                    edge_feat = edge_features[global_edge_idx]
+                    if src_local <= dst_local:
+                        x_lo, x_hi = node_features[src_g], node_features[dst_g]
+                    else:
+                        x_lo, x_hi = node_features[dst_g], node_features[src_g]
+                    coupling_in = torch.cat([x_lo, x_hi, edge_feat], dim=-1)
+                    coupling_block = self.coupling_proj(coupling_in).view(self.n_orb, self.n_orb)
 
                     # Set symmetric coupling blocks
                     H_matrix[batch_idx, u_orb_start:u_orb_end, v_orb_start:v_orb_end] = coupling_block
@@ -325,9 +336,16 @@ class DNATransportHamiltonianGNN(nn.Module):
         dst_upper = dst_local[upper_mask]
         batch_upper = src_batch[upper_mask]
         edge_feat_upper = dna_edge_features[upper_mask]
+        # Global node indices of each undirected pair's endpoints, low-local first
+        # (under upper_mask, dna_src is the smaller-local-index endpoint).
+        node_low = dna_src[upper_mask]
+        node_high = dna_dst[upper_mask]
 
-        # Compute coupling blocks for upper-triangle edges only
-        coupling_raw = self.coupling_proj(edge_feat_upper)         # [num_upper_edges, n_orb²]
+        # Base-aware coupling: concat both endpoint embeddings (low, high) with the edge feature.
+        x_low = node_features[node_low]                            # [num_upper_edges, hidden_dim]
+        x_high = node_features[node_high]                          # [num_upper_edges, hidden_dim]
+        coupling_in = torch.cat([x_low, x_high, edge_feat_upper], dim=-1)  # [num_upper, 3*hidden_dim]
+        coupling_raw = self.coupling_proj(coupling_in)             # [num_upper_edges, n_orb^2]
         coupling_blocks = coupling_raw.view(-1, n_orb, n_orb)     # [num_upper_edges, n_orb, n_orb]
 
         # --- Step 7: Fill off-diagonal (upper triangle only) ---
