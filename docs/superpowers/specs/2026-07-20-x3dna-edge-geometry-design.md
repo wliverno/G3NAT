@@ -188,6 +188,10 @@ pushes it toward the wrap boundary).
 
 In `DNATransportHamiltonianGNN`:
 
+- Convolution default: `conv_type='gat'`. GAT is the best DFT-fitting convolution on record
+  (val 0.547 vs transformer 1.42 on the pickle data; see `docs/model-results.md`). Geometry
+  work runs on DFT data, so Plan 2 trains with GAT unless explicitly overridden. (`train.py`
+  default was flipped to `gat` accordingly.)
 - New constructor args: `use_geometry: bool = False`, `geom_dim: int = 7`.
 - New `geom_encoder = nn.Linear(geom_dim, hidden_dim)` shared across edge types (2-layer MLP
   optional; start linear), final layer initialized near zero.
