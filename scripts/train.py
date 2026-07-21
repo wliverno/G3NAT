@@ -49,7 +49,7 @@ def parse_args():
     parser.add_argument('--num_heads', type=int, default=4)
     parser.add_argument('--dropout', type=float, default=0.0)
     parser.add_argument('--n_orb', type=int, default=1)
-    parser.add_argument('--conv_type', type=str, default='gat',
+    parser.add_argument('--conv_type', type=str, default='transformer',
                        choices=['gat', 'transformer'],
                        help='Graph convolution type for the hamiltonian model')
 
