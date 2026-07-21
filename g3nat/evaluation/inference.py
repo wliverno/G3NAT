@@ -68,7 +68,8 @@ def load_trained_model(model_path: str, device: str = 'auto') -> Tuple[Union[DNA
             use_log_outputs=args.get('use_log_outputs', True),
             log_floor=args.get('log_floor', 1e-16),
             complex_eta=args.get('complex_eta', 1e-12),
-            conv_type=args.get('conv_type', 'gat')
+            conv_type=args.get('conv_type', 'gat'),
+            use_geometry=args.get('use_geometry', False)
         )
         print("DNATransportHamiltonianGNN initialized successfully")
     else:  # standard
