@@ -49,9 +49,12 @@ def parse_args():
     parser.add_argument('--num_heads', type=int, default=4)
     parser.add_argument('--dropout', type=float, default=0.0)
     parser.add_argument('--n_orb', type=int, default=1)
-    parser.add_argument('--conv_type', type=str, default='transformer',
+    parser.add_argument('--conv_type', type=str, default='gat',
                        choices=['gat', 'transformer'],
-                       help='Graph convolution type for the hamiltonian model')
+                       help='Graph convolution type for the hamiltonian model. '
+                            'Default gat: best for DFT (pickle) fitting '
+                            '(val 0.547 vs transformer 1.42). transformer fits the '
+                            'synthetic TB data better. See docs/model-results.md.')
 
     # Training parameters
     parser.add_argument('--num_epochs', type=int, default=100)
