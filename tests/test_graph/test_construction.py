@@ -64,3 +64,38 @@ if __name__ == "__main__":
     test_sequence_to_graph_simple()
     test_sequence_to_graph_cross_contacts()
     print("All graph construction tests passed!")
+
+
+def test_edge_geom_default_absent():
+    """No geometry supplied -> zero tensors, all masked 0, correct shapes."""
+    d = sequence_to_graph("ACGT", "ACGT")
+    n_edges = d.edge_index.shape[1]
+    assert d.edge_geom.shape == (n_edges, 7)
+    assert d.edge_geom_mask.shape == (n_edges, 1)
+    assert torch.count_nonzero(d.edge_geom_mask) == 0
+    assert torch.count_nonzero(d.edge_geom) == 0
+
+
+def test_edge_geom_lands_on_backbone_and_hbond_only():
+    """With geometry supplied: backbone+hbond edges masked 1, contacts masked 0."""
+    import numpy as np
+    entry = {
+        "bp_pars": np.arange(4 * 6).reshape(4, 6).astype(float),
+        "step_pars": (np.arange(3 * 6).reshape(3, 6) + 100).astype(float),
+        "primary_centroids": np.array([[0, 0, i * 3.4] for i in range(4)], float),
+        "comp_centroids": np.array([[6, 0, (3 - i) * 3.4] for i in range(4)], float),
+    }
+    d = sequence_to_graph("ACGT", "ACGT", geometry=entry)
+    ea = d.edge_attr
+    contact = ea[:, 2] == 1
+    bb = ea[:, 0] == 1
+    hb = ea[:, 1] == 1
+    # contacts never carry geometry
+    assert torch.count_nonzero(d.edge_geom_mask[contact]) == 0
+    # every backbone and hbond edge of a full duplex carries geometry
+    assert torch.all(d.edge_geom_mask[bb] == 1)
+    assert torch.all(d.edge_geom_mask[hb] == 1)
+    # backbone slot 0 is a positive stacking distance (~3.4)
+    assert torch.all(d.edge_geom[bb][:, 0] > 0)
+    # hbond slot 0 is the ~6 A atom-centroid distance, not the ~0.09 A degeneracy
+    assert torch.all(d.edge_geom[hb][:, 0] > 4.0)
