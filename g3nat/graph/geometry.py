@@ -159,6 +159,40 @@ def _edge_rows(cache):
     return np.array(back), np.array(hb)
 
 
+def assemble_graph_geometry(primary_seq, comp_seq, entry):
+    """Map a cached per-sequence geometry entry onto graph edge identities.
+
+    Returns {edge_id: [d_centroid, t1, t2, t3, r1, r2, r3]} with edge ids:
+      ("backbone", "primary", i)        primary step between positions i and i+1
+      ("backbone", "complementary", j)  comp step between comp positions j and
+                                        j+1, sharing primary step index n-2-j
+      ("hbond", i)                      pair i (primary i <-> comp n-1-i)
+    Keys are absent where the underlying params/centroids are missing; callers
+    mask those edges to 0. Backbone slot 0 is the per-strand stacking centroid
+    distance; H-bond slot 0 is the atom-centroid pairing distance (~6 A), never
+    the degenerate frame-origin distance.
+    """
+    bp = np.asarray(entry["bp_pars"], float)
+    step = np.asarray(entry["step_pars"], float)
+    pc = np.asarray(entry["primary_centroids"], float)
+    cc = np.asarray(entry["comp_centroids"], float)
+    n = pc.shape[0]
+    ncomp = cc.shape[0]
+    out = {}
+    # primary backbone: step i between primary i and i+1
+    for i in range(min(step.shape[0], max(0, n - 1))):
+        out[("backbone", "primary", i)] = [centroid_distance(pc[i], pc[i + 1]), *step[i]]
+    # complementary backbone: comp step j shares primary step index n-2-j
+    for j in range(max(0, ncomp - 1)):
+        si = n - 2 - j
+        if 0 <= si < step.shape[0]:
+            out[("backbone", "complementary", j)] = [centroid_distance(cc[j], cc[j + 1]), *step[si]]
+    # hbond: primary i pairs comp n-1-i
+    for i in range(min(bp.shape[0], n, ncomp)):
+        out[("hbond", i)] = [centroid_distance(pc[i], cc[ncomp - 1 - i]), *bp[i]]
+    return out
+
+
 def compute_norm_stats(cache):
     """Per-edge-type z-score stats over the assembled 7-tuples (std floored at 1e-6)."""
     back, hb = _edge_rows(cache)
