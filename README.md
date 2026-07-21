@@ -10,7 +10,7 @@ Full DNA DFT dataset status: _In Progress_
 
 ### Core modules
 - `g3nat/models/`: GNN models (standard and Hamiltonian), NEGF projection
-- `g3nat/graph/`: DNA sequence to graph conversion (core innovation)
+- `g3nat/graph/`: DNA sequence to graph conversion (core innovation); optional X3DNA/DSSR edge-geometry extraction (`geometry.py`)
 - `g3nat/data/`: Dataset creation, synthetic data generation, pickle loading
 - `g3nat/training/`: Training loop, configuration, callbacks
 - `g3nat/utils/`: Device setup, physics utilities (Hamiltonian, NEGF)
@@ -46,11 +46,11 @@ You can create and load trained models to use for transport prediction, and the 
 ```python
 from g3nat.models import load_trained_model, predict_sequence
 
-model, energy_grid, device = load_trained_model('outputs/dna_transport_standard_model.pth')
+model, energy_grid, device = load_trained_model('outputs/hamiltonian_pickle_model.pth')
 dos_pred, trans_pred = predict_sequence(
     model,
     sequence="ACGTACGT",
-    complementary_sequence="__GTAC__"       # or omit to use complementary strand
+    complementary_sequence="__GTAC__",      # or omit to use complementary strand
     left_contact_positions=0,               # Defaults to index on primary strand
     right_contact_positions=7,
     left_contact_coupling=0.1,
@@ -71,7 +71,7 @@ fig, ax = visualize_dna_graph(G, "ACGTACGT", "TGCATGCA")
 
 ### Training from dataset (pickle format)
 
-For this work, we have generated a dataset of 500 structures with 4 contact positions for a total of 2000 data points **(NOTE: in progress, link to be uploaded when complete)**
+For this work, we have generated a dataset of ~515 sequences, each with 4 contact/coupling variants (2 contact types x 2 couplings), for a total of ~2058 data points **(NOTE: in progress, link to be uploaded when complete)**
 
 To use this data set, ensure that all pickle files are in the correct directory, and use the unified training script:
 
@@ -92,9 +92,42 @@ python scripts/train.py \
 ```
 
 
+### Edge geometry (X3DNA / DSSR) -- optional, experimental
+
+`DNATransportHamiltonianGNN` can consume an SE(3)-invariant description of the local
+geometry on each edge (X3DNA base-pair-step and base-pair parameters plus a base-centroid
+distance), gated by `--use_geometry`. It is off by default; when off, the model is
+byte-for-byte identical to the standard one and existing checkpoints load unchanged.
+
+Build the per-sequence geometry cache once (offline; requires the X3DNA-DSSR binary and PDB
+structures that have residue names -- the pickle `gjf_text` is coordinates only and cannot
+be used):
+
+```python
+from g3nat.graph.geometry import build_geometry_cache
+build_geometry_cache('/path/to/pdb/dataset', 'geom_cache/geometry.pkl')
+```
+
+Then train with geometry on:
+
+```bash
+python scripts/train.py --data_source pickle --data_dir /path/to/pickle/files \
+    --model_type hamiltonian --conv_type gat --use_geometry \
+    --geom_cache geom_cache/geometry.pkl
+```
+
+**Honest caveat:** on the current DFT dataset the structures are idealized fiber B-DNA, so
+the geometry is near-constant across sequences and carries no predictive signal -- a
+geometry-on run matches the geometry-off baseline within noise (0.538 vs 0.547; see
+`docs/model-results.md`). The feature is infrastructure for future datasets with real
+geometric variation (MD / crystal / predicted structures). Design:
+`docs/superpowers/specs/2026-07-20-x3dna-edge-geometry-design.md`.
+
 ### Notes
 - Node features: 4 one-hot features (A, T, G, C)
-- Edge features: 5 values per edge: [backbone_onehot, hbond_onehot, contact_onehot, directionality, coupling]
+- Edge features (`edge_attr`): 5 values per edge: [backbone_onehot, hbond_onehot, contact_onehot, directionality, coupling]
+- Optional edge geometry: with `--use_geometry`, each edge additionally carries a separate SE(3)-invariant `edge_geom` (7 values) channel plus an `edge_geom_mask`; `edge_attr` itself is unchanged. See "Edge geometry" above.
+- Default graph convolution for the Hamiltonian model is `gat` (best on the DFT dataset; `--conv_type transformer` fits the synthetic TB data better). See `docs/model-results.md`.
 - Hamiltonian NEGF implementation is vectorized for stability; transmission/DOS are returned as log10-safe values for training stability in `DNATransportHamiltonianGNN`.
 
 ### Contact configuration defaults
