@@ -94,3 +94,41 @@ if __name__ == "__main__":
     test_standard_model_unchanged()
     test_hamiltonian_model_unchanged()
     print("All model tests passed!")
+
+
+def _hmodel(**kw):
+    torch.manual_seed(0)
+    return DNATransportHamiltonianGNN(
+        hidden_dim=32, num_layers=2, num_heads=2, n_orb=1, conv_type='gat',
+        energy_grid=np.linspace(-3, 3, 20), **kw)
+
+
+def test_use_geometry_false_is_structurally_identical():
+    """use_geometry=False adds no params/buffers -> existing checkpoints load."""
+    from torch_geometric.data import Batch
+    m = _hmodel(use_geometry=False)
+    names = [n for n, _ in m.named_parameters()] + [n for n, _ in m.named_buffers()]
+    assert not any('geom' in n for n in names)
+    g = sequence_to_graph("ACGT", "ACGT")
+    dos, trans = m(Batch.from_data_list([g]))
+    assert torch.isfinite(dos).all() and torch.isfinite(trans).all()
+
+
+def test_geometry_changes_output():
+    """With use_geometry=True, changing an edge's geometry changes the prediction."""
+    from torch_geometric.data import Batch
+    m = _hmodel(use_geometry=True)
+    # move geom_encoder off its near-zero init so geometry can influence the output
+    with torch.no_grad():
+        for p in m.geom_encoder.parameters():
+            p.add_(0.1)
+    g = sequence_to_graph("ACGT", "ACGT")            # all masks 0 -> no geometry
+    with torch.no_grad():
+        out0 = m(Batch.from_data_list([g]))
+    g2 = g.clone()
+    bb = (g2.edge_attr[:, 0] == 1).nonzero(as_tuple=True)[0][0]
+    g2.edge_geom[bb] = torch.tensor([3.4, 1., 2., 3., 4., 5., 6.])
+    g2.edge_geom_mask[bb] = 1.0
+    with torch.no_grad():
+        out1 = m(Batch.from_data_list([g2]))
+    assert not torch.allclose(out0[1], out1[1])      # transmission responds to geometry
