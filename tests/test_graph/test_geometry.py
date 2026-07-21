@@ -1,8 +1,10 @@
 import os
 import numpy as np
+import pytest
 from g3nat.graph import geometry
 
 FIX = os.path.join(os.path.dirname(__file__), "fixtures")
+DATASET = "/mmfs1/gscratch/anantram/asyed4/DNADataSet"
 
 
 def test_parse_dssr_out_aaac():
@@ -29,3 +31,20 @@ def test_base_centroids_and_distances():
     # stacking (neighbor) distance on strand 0
     d_stack = geometry.centroid_distance(cent[(0, 1)], cent[(0, 2)])  # DA1 : DA2
     assert 3.0 < d_stack < 4.5, d_stack        # ~3.7 A
+
+
+@pytest.mark.skipif(not os.path.isdir(DATASET), reason="DSSR dataset not present")
+def test_build_cache_and_norm_stats(tmp_path):
+    out = str(tmp_path / "geom.pkl")
+    cache = geometry.build_geometry_cache(DATASET, out, sequences=["aaac", "aaat"])
+    assert "aaac" in cache
+    e = cache["aaac"]
+    assert e["bp_pars"].shape == (4, 6) and e["step_pars"].shape == (3, 6)
+    assert e["primary_centroids"].shape == (4, 3) and e["comp_centroids"].shape == (4, 3)
+    assert os.path.exists(out)
+    stats = geometry.compute_norm_stats(cache)
+    for t in ("backbone", "hbond"):
+        assert np.asarray(stats[t]["mean"]).shape == (7,)
+        assert np.all(np.asarray(stats[t]["std"]) >= 1e-6)
+    # hbond distance channel (slot 0) is the atom distance ~6, not the degenerate ~0.09
+    assert stats["hbond"]["mean"][0] > 4.0
