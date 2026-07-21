@@ -1,0 +1,29 @@
+#!/bin/bash
+#SBATCH --job-name=g3nat-geomcache
+#SBATCH --account=anantram-ckpt
+#SBATCH --partition=ckpt-all
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=4
+#SBATCH --time=04:00:00
+#SBATCH --mem=8GB
+##
+
+source /gscratch/anantram/willll/miniconda3/etc/profile.d/conda.sh
+conda activate g3nat
+cd /mmfs1/gscratch/anantram/willll/G3NAT
+
+export X3DNA_DSSR=/mmfs1/gscratch/anantram/asyed4/x3dna-dssr
+
+# Build the per-sequence SE(3)-invariant geometry cache over the training
+# sequences (DSSR bp/step params + base-centroid distances from the PDBs).
+python -u -c "
+import glob, os
+from g3nat.graph.geometry import build_geometry_cache
+seqs = sorted({os.path.basename(p).split('_run')[0]
+               for p in glob.glob('pickle_files/*_run1.pkl')})
+print('building geometry cache for', len(seqs), 'sequences')
+cache = build_geometry_cache('/mmfs1/gscratch/anantram/asyed4/DNADataSet',
+                             'geom_cache/geometry.pkl', sequences=seqs)
+print('cache built:', len(cache), 'sequences with geometry ->', 'geom_cache/geometry.pkl')
+"
+echo "=== geomcache exit code: $? ==="
