@@ -48,3 +48,34 @@ def test_build_cache_and_norm_stats(tmp_path):
         assert np.all(np.asarray(stats[t]["std"]) >= 1e-6)
     # hbond distance channel (slot 0) is the atom distance ~6, not the degenerate ~0.09
     assert stats["hbond"]["mean"][0] > 4.0
+
+
+@pytest.mark.skipif(not os.path.isdir(DATASET), reason="DSSR dataset not present")
+def test_geometry_is_se3_invariant(tmp_path):
+    src = os.path.join(DATASET, "aaac", "aaac.pdb")
+    lines = open(src).read().splitlines()
+    rng = np.random.RandomState(3)
+    A = rng.randn(3, 3)
+    Q, R = np.linalg.qr(A)
+    Q = Q @ np.diag(np.sign(np.diag(R)))
+    if np.linalg.det(Q) < 0:
+        Q[:, 0] = -Q[:, 0]
+    t = np.array([11.0, -22.0, 33.0])
+    rot = []
+    for ln in lines:
+        if ln.startswith(("ATOM", "HETATM")):
+            xyz = np.array([float(ln[30:38]), float(ln[38:46]), float(ln[46:54])])
+            v = Q @ xyz + t
+            ln = ln[:30] + f"{v[0]:8.3f}{v[1]:8.3f}{v[2]:8.3f}" + ln[54:]
+        rot.append(ln)
+    rp = str(tmp_path / "aaac_rot.pdb")
+    open(rp, "w").write("\n".join(rot) + "\n")
+
+    p0 = geometry.parse_dssr_out(geometry.run_dssr(src, workdir=str(tmp_path)))
+    p1 = geometry.parse_dssr_out(geometry.run_dssr(rp, workdir=str(tmp_path)))
+    np.testing.assert_allclose(p0["step_pars"], p1["step_pars"], atol=0.05)
+    np.testing.assert_allclose(p0["bp_pars"], p1["bp_pars"], atol=0.05)
+    c0, c1 = geometry.base_centroids(src), geometry.base_centroids(rp)
+    d0 = geometry.centroid_distance(c0[(0, 1)], c0[(0, 2)])
+    d1 = geometry.centroid_distance(c1[(0, 1)], c1[(0, 2)])
+    assert abs(d0 - d1) < 1e-3
