@@ -55,6 +55,11 @@ def parse_args():
                             'Default gat: best for DFT (pickle) fitting '
                             '(val 0.547 vs transformer 1.42). transformer fits the '
                             'synthetic TB data better. See docs/model-results.md.')
+    parser.add_argument('--use_geometry', action='store_true',
+                       help='Fuse SE(3)-invariant X3DNA edge geometry (hamiltonian model). '
+                            'Requires a geometry cache built via GeomCacheJob.')
+    parser.add_argument('--geom_cache', type=str, default='geom_cache/geometry.pkl',
+                       help='Path to the per-sequence geometry cache (used with --use_geometry).')
 
     # Training parameters
     parser.add_argument('--num_epochs', type=int, default=100)
@@ -105,6 +110,18 @@ def main():
 
     print(f"Loaded {len(seqs)} samples")
 
+    # Optional SE(3)-invariant edge geometry (hamiltonian model only)
+    geom_cache = None
+    geom_norm_stats = None
+    if args.use_geometry:
+        import pickle as _pk
+        from g3nat.graph.geometry import compute_norm_stats
+        print(f"Loading geometry cache from {args.geom_cache}...")
+        with open(args.geom_cache, 'rb') as _f:
+            geom_cache = _pk.load(_f)
+        geom_norm_stats = compute_norm_stats(geom_cache)
+        print(f"Geometry cache loaded: {len(geom_cache)} sequences; per-type norm stats computed")
+
     # Create dataset
     if args.data_source == 'pickle':
         dataset = create_dna_dataset(
@@ -116,7 +133,8 @@ def main():
             left_contact_positions_list=left_contact_pos_list,
             right_contact_positions_list=right_contact_pos_list,
             left_contact_coupling_list=left_coupling_list,
-            right_contact_coupling_list=right_coupling_list
+            right_contact_coupling_list=right_coupling_list,
+            geometry_cache=geom_cache
         )
     else:
         dataset = create_dna_dataset(
@@ -124,7 +142,8 @@ def main():
             dos_data=dos_data,
             transmission_data=trans_data,
             energy_grid=energy_grid,
-            complementary_sequences=comp_seqs
+            complementary_sequences=comp_seqs,
+            geometry_cache=geom_cache
         )
 
     # Split dataset
@@ -161,7 +180,9 @@ def main():
             num_heads=args.num_heads,
             energy_grid=energy_grid,
             n_orb=args.n_orb,
-            conv_type=args.conv_type
+            conv_type=args.conv_type,
+            use_geometry=args.use_geometry,
+            geom_norm_stats=geom_norm_stats
         )
 
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")

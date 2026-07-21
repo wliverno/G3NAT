@@ -52,3 +52,23 @@ def test_create_dna_dataset_matches_baseline(baseline_data):
     # Compare targets
     assert torch.allclose(graph0.dos, baseline_data['graph0_dos']), "Sample 0: DOS mismatch"
     assert torch.allclose(graph0.transmission, baseline_data['graph0_transmission']), "Sample 0: Transmission mismatch"
+
+
+def test_geometry_cache_flows_to_graph():
+    """create_dna_dataset(geometry_cache=...) attaches edge_geom that survives __getitem__."""
+    seqs = ["ACGT"]
+    entry = {"bp_pars": np.zeros((4, 6)), "step_pars": np.ones((3, 6)),
+             "primary_centroids": np.array([[0, 0, i * 3.4] for i in range(4)], float),
+             "comp_centroids": np.array([[6, 0, (3 - i) * 3.4] for i in range(4)], float)}
+    ds = create_dna_dataset(seqs, np.zeros((1, 10)), np.zeros((1, 10)), np.linspace(-1, 1, 10),
+                            complementary_sequences=["ACGT"],
+                            geometry_cache={"acgt": entry})   # cache keyed lowercase
+    d = ds[0]
+    assert hasattr(d, "edge_geom") and d.edge_geom.shape[1] == 7
+    bb = d.edge_attr[:, 0] == 1
+    assert d.edge_geom_mask[bb].sum() > 0        # backbone edges carry geometry
+
+    # no cache -> geometry present but fully masked (backward compatible)
+    ds0 = create_dna_dataset(seqs, np.zeros((1, 10)), np.zeros((1, 10)), np.linspace(-1, 1, 10),
+                             complementary_sequences=["ACGT"])
+    assert ds0[0].edge_geom_mask.sum() == 0

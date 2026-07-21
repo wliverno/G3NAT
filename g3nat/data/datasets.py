@@ -91,6 +91,11 @@ class DNATransportDataset(torch.utils.data.Dataset):
             if self.gamma_r is not None:
                 data.gamma_r = self.gamma_r[idx]  # Vector of right contact couplings for this sequence
 
+            # Carry SE(3)-invariant edge geometry through (present when built with a cache)
+            if hasattr(graph, 'edge_geom'):
+                data.edge_geom = graph.edge_geom
+                data.edge_geom_mask = graph.edge_geom_mask
+
             return data
         else:
             raise NotImplementedError(
@@ -138,6 +143,7 @@ def create_dna_dataset(sequences: List[str], dos_data: np.ndarray,
                       right_contact_positions_list: Optional[List] = None,
                       left_contact_coupling_list: Optional[List[float]] = None,
                       right_contact_coupling_list: Optional[List[float]] = None,
+                      geometry_cache: Optional[dict] = None,
                       graph_converter_func=None,
                       **graph_kwargs) -> DNATransportDataset:
     """
@@ -214,6 +220,10 @@ def create_dna_dataset(sequences: List[str], dos_data: np.ndarray,
             right_contacts = np.where(seq_gamma_r > 0)[0]
             if len(right_contacts) > 0:
                 seq_kwargs['right_contact_coupling'] = float(seq_gamma_r[right_contacts[-1]])
+
+        # Per-sequence SE(3)-invariant edge geometry (keyed by lowercase sequence)
+        if geometry_cache is not None:
+            seq_kwargs['geometry'] = geometry_cache.get(sequence.lower())
 
         if complementary_sequences is not None and i < len(complementary_sequences):
             # Use both primary and complementary sequences
