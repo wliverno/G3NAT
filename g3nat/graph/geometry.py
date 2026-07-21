@@ -1,10 +1,15 @@
 """Offline extraction of SE(3)-invariant edge geometry from DNA PDB structures."""
 import os
 import re
+import pickle
+import shutil
+import tempfile
+import warnings
 import subprocess
 import numpy as np
 
 _BRACKET = re.compile(r"\[([^\]]*)\]")
+_DSSR_DEFAULT = "/mmfs1/gscratch/anantram/asyed4/x3dna-dssr"
 
 
 def _rows(out_text, tag):
@@ -59,3 +64,109 @@ def base_centroids(pdb_path):
 
 def centroid_distance(a, b):
     return float(np.linalg.norm(np.asarray(a) - np.asarray(b)))
+
+
+def _dssr_bin(dssr_bin=None):
+    return dssr_bin or os.environ.get("X3DNA_DSSR", _DSSR_DEFAULT)
+
+
+def run_dssr(pdb_path, dssr_bin=None, workdir=None):
+    """Run DSSR on a PDB and return the .out text.
+
+    DSSR writes its output + auxiliary files into the working directory, so we run
+    it in a writable temp dir by default (the source PDB dir may be read-only).
+    """
+    pdb_path = os.path.abspath(pdb_path)
+    owns_dir = workdir is None
+    workdir = workdir or tempfile.mkdtemp(prefix="dssr_")
+    out = os.path.join(workdir, "dssr.out")
+    try:
+        subprocess.run([_dssr_bin(dssr_bin), f"-i={pdb_path}", "--more", f"-o={out}"],
+                       check=True, capture_output=True, cwd=workdir)
+        text = open(out).read()
+    finally:
+        if owns_dir:
+            shutil.rmtree(workdir, ignore_errors=True)
+    return text
+
+
+def _centroids_by_strand(pdb_path):
+    """Per-strand base centroids as arrays ordered by residue number.
+
+    Returns {chain_index: np.ndarray[N_res, 3]}.
+    """
+    cent = base_centroids(pdb_path)
+    strands = {}
+    for (chain, resseq), xyz in cent.items():
+        strands.setdefault(chain, []).append((resseq, xyz))
+    ordered = {}
+    for chain, items in strands.items():
+        items.sort(key=lambda t: t[0])
+        ordered[chain] = np.array([xyz for _, xyz in items])
+    return ordered
+
+
+def build_geometry_cache(dataset_dir, out_path, sequences=None):
+    """Run DSSR + centroids over <seq>/<seq>.pdb and cache per-sequence geometry.
+
+    cache[seq] = {bp_pars [Npair,6], step_pars [Nstep,6],
+                  primary_centroids [Nprimary,3], comp_centroids [Ncomp,3]}.
+    Missing/failed sequences are warned and skipped, not fatal. Writes a pickle.
+    """
+    if sequences is None:
+        sequences = sorted(d for d in os.listdir(dataset_dir)
+                           if os.path.isdir(os.path.join(dataset_dir, d)))
+    cache = {}
+    for seq in sequences:
+        pdb = os.path.join(dataset_dir, seq, f"{seq}.pdb")
+        if not os.path.exists(pdb):
+            warnings.warn(f"missing pdb for {seq}")
+            continue
+        try:
+            pars = parse_dssr_out(run_dssr(pdb))
+            strands = _centroids_by_strand(pdb)
+            cache[seq] = {
+                "bp_pars": pars["bp_pars"],
+                "step_pars": pars["step_pars"],
+                "primary_centroids": strands.get(0, np.zeros((0, 3))),
+                "comp_centroids": strands.get(1, np.zeros((0, 3))),
+            }
+        except Exception as ex:  # noqa: BLE001
+            warnings.warn(f"geometry failed for {seq}: {ex}")
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    with open(out_path, "wb") as f:
+        pickle.dump(cache, f)
+    return cache
+
+
+def _edge_rows(cache):
+    """Assemble backbone and hbond 7-tuples across all sequences (for norm stats).
+
+    backbone = [stack_dist, shift, slide, rise, tilt, roll, twist]
+    hbond    = [pair_dist,  shear, stretch, stagger, buckle, propeller, opening]
+    """
+    back, hb = [], []
+    for e in cache.values():
+        pc, cc = e["primary_centroids"], e["comp_centroids"]
+        step, bp = e["step_pars"], e["bp_pars"]
+        n = pc.shape[0]
+        # backbone (primary strand): step k between primary k and k+1
+        for k in range(min(step.shape[0], max(0, n - 1))):
+            back.append([centroid_distance(pc[k], pc[k + 1]), *step[k]])
+        # hbond: pair k = primary k with comp (Ncomp-1-k)
+        for k in range(min(bp.shape[0], n, cc.shape[0])):
+            hb.append([centroid_distance(pc[k], cc[cc.shape[0] - 1 - k]), *bp[k]])
+    return np.array(back), np.array(hb)
+
+
+def compute_norm_stats(cache):
+    """Per-edge-type z-score stats over the assembled 7-tuples (std floored at 1e-6)."""
+    back, hb = _edge_rows(cache)
+
+    def st(a):
+        if a.size == 0:
+            return {"mean": [0.0] * 7, "std": [1.0] * 7}
+        return {"mean": a.mean(0).tolist(),
+                "std": np.maximum(a.std(0), 1e-6).tolist()}
+
+    return {"backbone": st(back), "hbond": st(hb)}

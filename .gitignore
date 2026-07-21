@@ -161,3 +161,6 @@ checkpoints/training_status.txt
 
 # Worktree directories
 .worktrees/
+
+# X3DNA geometry cache
+geom_cache/
