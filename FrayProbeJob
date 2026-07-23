@@ -1,0 +1,16 @@
+#!/bin/bash
+#SBATCH --job-name=g3nat-fray
+#SBATCH --account=anantram-ckpt
+#SBATCH --partition=ckpt-all
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=4
+#SBATCH --time=00:30:00
+#SBATCH --mem=8GB
+##
+
+source /gscratch/anantram/willll/miniconda3/etc/profile.d/conda.sh
+conda activate g3nat
+cd /mmfs1/gscratch/anantram/willll/G3NAT
+
+python -u scripts/fray_probe.py
+echo "=== fray exit code: $? ==="
