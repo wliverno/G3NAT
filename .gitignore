@@ -130,6 +130,7 @@ dmypy.json
 
 # Project-specific
 outputs/
+outputs_fray/
 !tests/baseline/outputs/
 logs/
 *.jpg
@@ -164,3 +165,6 @@ checkpoints/training_status.txt
 
 # X3DNA geometry cache
 geom_cache/
+
+# slurm Logs
+slurm-*.out
