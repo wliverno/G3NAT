@@ -1,4 +1,4 @@
-# Fray Probe: terminal-destacking sensitivity of the geometry-ON model (Stage 1)
+# Fray Probe: whole-Hamiltonian response to terminal destacking (Stage 1)
 
 **Date:** 2026-07-22
 **Branch:** `x3dna-edge-geometry`
@@ -6,107 +6,123 @@
 
 ## Goal
 
-Measure how the geometry-ON Hamiltonian GNN's predicted **terminal stacking coupling**
-responds when we destack (fray) the 3' terminal base of the primary strand, and show how
-far that morph sits outside the training geometry distribution. Pure model inference, no
-DFT. This is Stage 1 of a two-stage experiment; Stage 2 (DFT on rebuilt coordinates) is a
-separate spec, gated on what Stage 1 shows.
+Perturb the geometry of ONE edge (destack the 3' terminal base of the primary strand) and
+watch how the **entire predicted Hamiltonian** `model.H` responds -- not just the terminal
+coupling. We do not know what the geometry-ON model learned, so we make no assumption about
+where the change shows up: the deliverable is a map of *which part of the Hamiltonian moves
+the most*, including any non-local ("other side of the bases") or cross-strand effects. Pure
+model inference, no DFT. Stage 2 (DFT on rebuilt coordinates) is a separate spec.
 
-## Framing (why this is diagnostic, not confirmatory)
+## Framing (open-ended, not confirmatory)
 
-The model was trained on geometrically-uniform data (idealized fiber B-DNA), where the
-backbone geometry barely varied (rise std ~0.005 A, distance std ~0.27 A from the cache).
-So the model had almost no signal teaching it "destacking weakens the coupling." The
-expected result is that the predicted coupling is nearly flat across the sweep (or
-extrapolates arbitrarily once out-of-distribution), NOT that it decays like real physics.
-Quantifying that flatness/gap is the deliverable: it is the concrete, honest evidence for
-why varied-geometry training data is needed. Success = a clear read on the model's geometry
-sensitivity, whatever it is.
+The model was trained on geometrically-uniform data (fiber B-DNA; backbone rise std ~0.005 A,
+distance std ~0.27 A). So it had almost no signal about how geometry maps to the Hamiltonian,
+and its learned response is unknown. A local edge morph passes through the GNN's message
+passing and could move onsite energies or couplings anywhere. We therefore observe the full
+`|H(morphed) - H(unmorphed)|`, deliberately sweeping into deep out-of-distribution geometry,
+and report the actual response pattern -- flat, localized, delocalized, or "something crazy."
+The training structures were idealized textbook models, so physical realism of the morph is
+explicitly NOT a requirement; mapping the model's response function is.
 
 ## What is morphed (and what is not)
 
 - **Topology is never changed.** Every node (bases + 2 contacts) and every edge (backbone,
   H-bond, contact) stays present with mask unchanged. No bond/edge is removed.
-- **Only one edge's geometry is swept:** the terminal primary backbone (stacking) edge
-  between the last two primary bases, positions `N-2` and `N-1`. Its 7-tuple is
+- **One edge's geometry is swept:** the terminal primary backbone (stacking) edge between the
+  last two primary bases, positions `N-2` and `N-1`. Its 7-tuple is
   `[d, shift, slide, rise, tilt, roll, twist]`; we raise slot 0 (`d`) and slot 3 (`rise`)
-  **together** by a shared destack amount `delta`, holding shift/slide/tilt/roll/twist and
-  all other edges fixed. Moving `d` and `rise` together corresponds to a physical axial
-  destacking motion (not independent number-fiddling).
-- **Physical bound.** `delta` is capped so `d` stays at or below the extended-backbone limit
-  (order ~6-7 A center-to-center; the exact ceiling is set from the real C1'-C1' extended
-  geometry at implementation, not eyeballed). Beyond that a covalent backbone bond would have
-  to break -- out of scope for a physical fray.
-- **Honest limitation:** other edges (e.g. the terminal H-bond edge) are held fixed, so each
-  sweep point is a controlled single-edge perturbation, not a fully re-relaxed 3D structure.
-  This is the standard way to probe a model's response to one input; fully-relaxed physical
-  coordinates are built in Stage 2 for DFT.
+  together by a shared destack amount `delta`, holding the other five slots and all other
+  edges fixed. This isolates cause (one edge) so any change elsewhere is a propagated effect.
+- **Sweep range:** `delta` from 0 to ~5 A (so `d` runs ~3.9 -> ~9 A), ~35 points -- wide on
+  purpose, spanning in-distribution to deep out-of-distribution. No physical cap (textbook
+  structures; see Framing).
+- Both directed copies of the terminal backbone edge get the same values.
 
-## Readout
+## Readouts (whole-Hamiltonian, not just one element)
 
-The number watched is the terminal stacking coupling
-`t_term = | model.H[i_term, i_neighbor] |`, where for `n_orb=1` the primary base at position
-`k` maps to Hamiltonian local index `k`, so `i_term = N-1`, `i_neighbor = N-2`. `model.H` is
-the DNA Hamiltonian exposed by `DNATransportHamiltonianGNN.forward` (`self.H`), taken for the
-single-graph batch (`model.H[0]`).
+Let `H0 = model.H[0]` for the unmorphed graph and `Hd = model.H[0]` for each morphed graph
+(`M x M`, `M = num_dna_nodes`, `n_orb=1`). `D(delta) = Hd - H0`. We report:
+
+1. **Response heatmaps:** `|D(delta)|` as an `M x M` heatmap at a few delta values (a small
+   in-distribution one and large out-of-distribution ones). Axes labeled by
+   (strand, position, base): primary `b0..b_{N-1}` at indices `0..N-1`, complementary at
+   `N..2N-1`. This is the primary "which part changes most" visual.
+2. **Argmax tracking:** for each delta, the location `(i,j)` of `max|D|`, and whether it stays
+   at the terminal stacking element or moves (does the hot spot migrate to the 5' end / the
+   complementary strand?).
+3. **Region decomposition vs delta:** the summed `|D|` over disjoint regions, so we can see
+   where the response concentrates:
+   - diagonal (onsite energies) vs off-diagonal (couplings)
+   - terminal-local (any element touching base `N-1` or `N-2`) vs distal (everything else)
+   - primary-primary vs complementary-complementary vs cross-strand blocks
+   - plus the total `||D||_F` (Frobenius).
+4. **Top-K changed elements** at max delta: a table of the largest `|D_ij|` with location, the
+   two bases involved, and coupling type (onsite / stacking / H-bond / cross-strand).
+5. **Reference curve:** the terminal stacking coupling `|Hd[N-1, N-2]|` vs `d` (the element we
+   naively expected to move), plotted with the in-distribution `d` band shaded -- kept as one
+   line, not the whole story.
+
+Primary-base position `k` maps to Hamiltonian index `k` (`n_orb=1`), so terminal base = `N-1`,
+its stacked neighbor = `N-2`. `model.H` is `self.H` set in `DNATransportHamiltonianGNN.forward`.
 
 ## Design
 
 `scripts/fray_probe.py`:
 
 1. Load the geometry-ON model:
-   `load_trained_model('outputs_pickle_gat_geom/hamiltonian_pickle_model.pth')`. This model
-   was saved with `use_geometry=True` in its args, so the loader reconstructs it with the
-   geometry encoder + norm buffers (the reload path added in Plan 2 Task 4).
-2. Load the geometry cache `geom_cache/geometry.pkl`.
-3. Choose 3-4 training sequences spanning terminal step types (e.g. a purine-purine, a
-   pyrimidine-pyrimidine, and mixed terminal steps); exact sequences selected from the cache
+   `load_trained_model('outputs_pickle_gat_geom/hamiltonian_pickle_model.pth')` (saved with
+   `use_geometry=True`; the loader reconstructs the geometry encoder + norm buffers via the
+   Plan 2 reload path).
+2. Load `geom_cache/geometry.pkl`.
+3. Choose 3-4 training sequences spanning terminal step types (a purine-purine, a
+   pyrimidine-pyrimidine, and mixed terminal steps); exact sequences chosen from the cache
    keys at implementation. For each sequence:
    a. Build the geometry-ON graph: `sequence_to_graph(primary, comp, geometry=cache[seq])`
-      with default contacts (probe looks at an internal coupling, not transport).
+      with default contacts.
    b. Locate the two directed terminal primary backbone edges (endpoints = primary nodes
-      `N-2`, `N-1`) and record their row indices in `edge_geom`; record `d0 = edge_geom[row,0]`,
-      `r0 = edge_geom[row,3]`.
-   c. Sweep `delta` over `~25` points from 0 to `delta_max` (so `d` reaches the physical
-      ceiling). At each point: set `edge_geom[rows,0] = d0 + delta`, `edge_geom[rows,3] =
-      r0 + delta` on both directed copies; forward the model; record `t_term`.
-4. Record the in-distribution band for the backbone `d` and `rise` columns (mean +/- 3*std
-   from `compute_norm_stats`), so the plot can shade where in-distribution ends.
-5. Write raw sweep data to `outputs_fray/fray_sweep.csv` (columns: seq, delta, d, rise,
-   t_term) and the norm band to `outputs_fray/norm_band.json`.
+      `N-2`, `N-1`); record their `edge_geom` rows and `d0`, `r0`.
+   c. `H0` = forward on the unmorphed graph.
+   d. Sweep `delta` (35 points, 0 to ~5 A): set `edge_geom[rows,0]=d0+delta`,
+      `edge_geom[rows,3]=r0+delta`; forward; store `Hd` and `D=Hd-H0`; record all readouts
+      above.
+4. Record the in-distribution band (mean +/- 3*std of backbone `d`, `rise`) from
+   `compute_norm_stats`.
+5. Write raw outputs to `outputs_fray/`: `sweep_metrics.csv` (per seq, delta: d, rise,
+   term_coupling, argmax_i, argmax_j, ||D||_F, region sums), `Hmats.npz` (H0 and selected Hd
+   per seq, for the heatmaps), `norm_band.json`.
 
-Plotting (styled with the dataviz skill): `outputs_fray/fray_sweep.png` -- x = destack
-distance `d`, y = `t_term`, one line per sequence, in-distribution `d` band shaded, an
-annotation of the physical expectation (coupling should decay toward 0). Built from the CSV.
+Plots (dataviz skill), into `outputs_fray/`:
+- `response_heatmaps.png`: `|D|` heatmaps per sequence at chosen deltas, axis-labeled by base.
+- `region_curves.png`: region-decomposition sums + `||D||_F` vs `d`, in-dist band shaded.
+- `terminal_coupling.png`: the reference terminal-coupling curve vs `d`.
 
-`FrayProbeJob` (sbatch, g3nat env, GPU or CPU, short): runs `scripts/fray_probe.py`.
+`FrayProbeJob` (sbatch, g3nat env, short; GPU or CPU): runs `scripts/fray_probe.py`.
 
 ## Error handling / edge cases
 
-- Sequence missing from the cache, or its terminal step masked (geometry absent): skip with a
-  warning; the probe needs a real terminal-edge geometry to perturb.
-- `n_orb != 1`: assert `n_orb == 1` (the trained model uses it); the index mapping above
-  assumes it.
-- If `model.H` is not populated, call `forward` once first (it sets `self.H`).
+- Sequence missing from cache, or terminal step masked: skip with a warning.
+- Assert `n_orb == 1` (the trained model uses it; the index mapping assumes it).
+- Ensure `model.H` is populated by calling `forward` before reading it.
+- Heatmap labels handle the two strands; single-strand inputs are out of scope (dataset is
+  duplex).
 
 ## Testing
 
-- Unit: on a tiny hand-built graph + a small `use_geometry=True` model, `fray_probe`'s
-  edge-location helper returns the correct terminal backbone rows, and raising `delta`
-  monotonically changes `edge_geom[row,0]` -- i.e. the perturbation lands on the right edge.
-- Sanity (in the job log): at `delta=0` the recovered `t_term` equals the model's coupling
-  on the unmorphed graph (the sweep starts from the real value).
+- Unit: on a tiny hand-built graph + a small `use_geometry=True` model, the edge-location
+  helper returns the correct terminal backbone rows, and raising `delta` changes only
+  `edge_geom[row,0]` / `[row,3]` on those rows (perturbation lands on the intended edge).
+- Sanity (job log): at `delta=0`, `D` is exactly zero (sweep starts from the unmorphed H).
 
 ## Non-goals
 
 - No DFT (Stage 2, separate spec).
-- No coordinate rebuilding or full structure relaxation in Stage 1 (bounded param sweep only).
-- No claim that the model *should* track fraying -- the point is to measure whether/how much
-  it does.
-- No change to the model, the graph builder, or any Plan 2 code -- this is a read-only probe
-  script on top of the shipped feature.
+- No coordinate rebuilding / structure relaxation and no physical bound on the morph
+  (textbook structures; we are mapping the model's response function).
+- No claim the model *should* respond in any particular way -- we report what it does.
+- No change to the model, graph builder, or any Plan 2 code -- read-only probe on top of the
+  shipped feature.
 
 ## Run
 
-`sbatch FrayProbeJob`, then read `slurm-<jobid>.out` and `outputs_fray/`. `outputs_fray/` is
-a new output dir (add to `.gitignore` alongside the other `outputs_*`).
+`sbatch FrayProbeJob`, then read `slurm-<jobid>.out` and `outputs_fray/`. Add `outputs_fray/`
+to `.gitignore` alongside the other `outputs_*`.
