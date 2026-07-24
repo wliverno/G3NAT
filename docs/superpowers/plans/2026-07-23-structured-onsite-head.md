@@ -29,7 +29,7 @@
 **Interfaces:**
 - Produces: `grouped_split(groups: list, test_size: float = 0.2, seed: int = 42) -> tuple[list[int], list[int]]` returning (train_indices, val_indices), no group shared across the two.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/test_data/test_splits.py
@@ -52,12 +52,12 @@ def test_deterministic_given_seed():
     assert grouped_split(seqs, seed=1) == grouped_split(seqs, seed=1)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `conda run -n g3nat python -m pytest tests/test_data/test_splits.py -v`
 Expected: FAIL (ModuleNotFoundError: g3nat.data.splits)
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```python
 # g3nat/data/splits.py
@@ -85,12 +85,12 @@ def grouped_split(groups: List, test_size: float = 0.2, seed: int = 42) -> Tuple
 
 Create `tests/test_data/__init__.py` (empty) if the test dir needs it.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `conda run -n g3nat python -m pytest tests/test_data/test_splits.py -v`
 Expected: PASS (both tests)
 
-- [ ] **Step 5: Wire into train.py**
+- [x] **Step 5: Wire into train.py**
 
 Add near the other args (after `scripts/train.py:62`, the geometry block):
 ```python
@@ -105,12 +105,12 @@ Replace `scripts/train.py:150-152`:
 ```
 (`seqs` is the sequence list, parallel to dataset item order.)
 
-- [ ] **Step 6: Verify train.py still parses + smoke-imports**
+- [x] **Step 6: Verify train.py still parses + smoke-imports**
 
 Run: `conda run -n g3nat python -c "import scripts.train"` and `conda run -n g3nat python scripts/train.py --help | grep split_seed`
 Expected: no import error; `--split_seed` listed.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add g3nat/data/splits.py tests/test_data/ scripts/train.py
@@ -128,7 +128,7 @@ git commit -m "feat(split): group train/val by sequence (fix identity leak)"
 **Interfaces:**
 - Produces: `DNATransportHamiltonianGNN(..., structured_onsite=False, alpha_granularity='global', alpha_mode='fixed', alpha_value=0.0, alpha_init=0.9)`. When `structured_onsite=True`: attributes `self.onsite_baseline` (Parameter [4, n_orb*n_orb]); alpha state (`self.onsite_alpha_theta` Parameter if learned, else buffer `self.onsite_alpha_fixed`); helper `self._onsite_alpha() -> Tensor` shape [1] (global) or [4] (per_base), values in [0,1], EXACT at fixed endpoints.
 
-- [ ] **Step 1: Write the failing test (byte-identical when off; params appear when on)**
+- [x] **Step 1: Write the failing test (byte-identical when off; params appear when on)**
 
 ```python
 # tests/test_models/test_structured_onsite.py
@@ -166,12 +166,12 @@ def test_per_base_learned_alpha_has_four_values():
     assert (m._onsite_alpha() > 0).all() and (m._onsite_alpha() < 1).all()
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `conda run -n g3nat python -m pytest tests/test_models/test_structured_onsite.py -v`
 Expected: FAIL (unexpected kwarg `structured_onsite`)
 
-- [ ] **Step 3: Implement signature + gated params**
+- [x] **Step 3: Implement signature + gated params**
 
 Add to `__init__` signature (after `geom_norm_stats` param, hamiltonian.py:33):
 ```python
@@ -206,12 +206,12 @@ Add AFTER the geometry block (after hamiltonian.py:125), so existing layers' ini
         return self.onsite_alpha_fixed
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `conda run -n g3nat python -m pytest tests/test_models/test_structured_onsite.py -v`
 Expected: PASS (all 4 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add g3nat/models/hamiltonian.py tests/test_models/test_structured_onsite.py
@@ -230,7 +230,7 @@ git commit -m "feat(onsite): gated structured-onsite params + alpha helper (byte
 - Consumes: `self.onsite_baseline`, `self._onsite_alpha()`, `self.structured_onsite`, `self.alpha_granularity` from Task 2; `original_node_features`, `dna_mask`/`dna_node_mask`, `dna_features`/`dna_node_features` already local in each construct.
 - Produces: mixed `onsite_blocks` when structured_onsite on; unchanged when off. Behavior at alpha=0 == current; at alpha=1 == baseline[base] per node.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # add to tests/test_models/test_structured_onsite.py
@@ -279,12 +279,12 @@ def test_gradient_flows_to_baseline():
     assert m.onsite_baseline.grad is not None and m.onsite_baseline.grad.abs().sum() > 0
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `conda run -n g3nat python -m pytest tests/test_models/test_structured_onsite.py -k "alpha0 or alpha1 or identity or gradient" -v`
 Expected: FAIL (mixing not applied; alpha1 diag != baseline)
 
-- [ ] **Step 3: Implement mixing helper + patch both paths**
+- [x] **Step 3: Implement mixing helper + patch both paths**
 
 Add a helper method on the model:
 ```python
@@ -312,12 +312,12 @@ Reference path -- replace hamiltonian.py:199 (`onsite_blocks = self.onsite_proj(
 ```
 (Confirm the reference method's mask var name is `dna_node_mask` and it receives `original_node_features`; if the arg is named differently, use that name.)
 
-- [ ] **Step 4: Run to verify all pass**
+- [x] **Step 4: Run to verify all pass**
 
 Run: `conda run -n g3nat python -m pytest tests/test_models/test_structured_onsite.py -v`
 Expected: PASS (all tests, incl. Task 2's)
 
-- [ ] **Step 5: Verify reference == vectorized with mixing on**
+- [x] **Step 5: Verify reference == vectorized with mixing on**
 
 Add + run:
 ```python
@@ -333,7 +333,7 @@ def test_reference_matches_vectorized_with_mixing():
 ```
 Run the file again; expected PASS. (If an existing ref-vs-vectorized test util exists in `tests/`, extend it to run with `structured_onsite=True` instead.)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add g3nat/models/hamiltonian.py tests/test_models/test_structured_onsite.py
@@ -353,7 +353,7 @@ git commit -m "feat(onsite): apply alpha mixing in both construct paths (differe
 - Consumes: model kwargs from Task 2.
 - Produces: `--structured_onsite`, `--alpha_granularity`, `--alpha_mode`, `--alpha_value`, `--alpha_init` on train.py; all reconstruction sites accept these from `checkpoint['args']`.
 
-- [ ] **Step 1: Write the failing round-trip test**
+- [x] **Step 1: Write the failing round-trip test**
 
 ```python
 def test_checkpoint_roundtrip_reconstructs_structured_model(tmp_path):
@@ -372,12 +372,12 @@ def test_checkpoint_roundtrip_reconstructs_structured_model(tmp_path):
     assert loaded.onsite_baseline.shape == (4, 1)
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `conda run -n g3nat python -m pytest tests/test_models/test_structured_onsite.py -k roundtrip -v`
 Expected: FAIL (strict load_state_dict: unexpected keys onsite_baseline / onsite_alpha_theta)
 
-- [ ] **Step 3: Register args in reconstruction sites**
+- [x] **Step 3: Register args in reconstruction sites**
 
 `g3nat/evaluation/inference.py` -- add after line 72 (`use_geometry=...`), inside the `DNATransportHamiltonianGNN(...)` call:
 ```python
@@ -389,7 +389,7 @@ Expected: FAIL (strict load_state_dict: unexpected keys onsite_baseline / onsite
 ```
 Apply the SAME five-line addition to the `DNATransportHamiltonianGNN(...)` constructor call inside `load_model` in `scripts/analyze_learned_hamiltonian.py` and `scripts/probe_onsite_dilution.py` (both build from `ck['args']` / `a`; use `a.get('structured_onsite', False)` etc.).
 
-- [ ] **Step 4: Add train.py flags + pass to model**
+- [x] **Step 4: Add train.py flags + pass to model**
 
 Add after `scripts/train.py:62`:
 ```python
@@ -412,12 +412,12 @@ Add to the `DNATransportHamiltonianGNN(...)` call at `scripts/train.py:177-186`:
 ```
 (Reject the degenerate combo: after parse, `assert not (args.alpha_granularity=='per_base' and args.alpha_mode=='fixed'), "per_base+fixed needs 4 alphas; use learned or global"`.)
 
-- [ ] **Step 5: Run round-trip test + full suite**
+- [x] **Step 5: Run round-trip test + full suite**
 
 Run: `conda run -n g3nat python -m pytest tests/test_models/test_structured_onsite.py -v && conda run -n g3nat python -m pytest tests/ -q`
 Expected: round-trip PASS; existing ~85-test suite still PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add scripts/train.py g3nat/evaluation/inference.py scripts/analyze_learned_hamiltonian.py scripts/probe_onsite_dilution.py tests/test_models/test_structured_onsite.py
@@ -440,7 +440,7 @@ git commit -m "feat(onsite): wire alpha flags through train + reconstruction sit
   - `baseline_distinctness(baseline: np.ndarray) -> dict` with `min_pairwise`, `spread` (worst-case pairwise gap + std across the 4 baselines). NOTE: true eta^2 needs per-SITE onsite data and is NOT returned here; it is computed separately by `scripts/probe_onsite_dilution.py::variance_decomposition`.
   - `is_physical_win(before: dict, after: dict) -> bool`: True only if BOTH onsite-in-window AND eig-in-window improve (guards "shifted, not fixed").
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```python
 # tests/test_evaluation/test_physicality.py
@@ -476,12 +476,12 @@ def test_win_requires_both_to_improve():
     assert is_physical_win(before, real) is True
 ```
 
-- [ ] **Step 2: Run to verify fail**
+- [x] **Step 2: Run to verify fail**
 
 Run: `conda run -n g3nat python -m pytest tests/test_evaluation/test_physicality.py -v`
 Expected: FAIL (module missing)
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 # g3nat/evaluation/physicality.py
@@ -524,12 +524,12 @@ def is_physical_win(before, after, eps=1e-6):
             after['frac_eig_in_window'] > before['frac_eig_in_window'] + eps)
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 Run: `conda run -n g3nat python -m pytest tests/test_evaluation/test_physicality.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add g3nat/evaluation/physicality.py tests/test_evaluation/
@@ -547,7 +547,7 @@ git commit -m "feat(eval): physicality metrics with onsite+eig co-gate and disti
 - Consumes: a trained checkpoint (structured_onsite). Uses `load_model` pattern from Task 4.
 - Produces: prints the 4 learned baselines, gauge-corrected (subtract model's G), alongside Roche + Voityuk-Rosch (values from `g3nat/utils/physics.py`), and `baseline_distinctness`.
 
-- [ ] **Step 1: Implement (no unit test; it is a reporting script exercised on a real checkpoint)**
+- [x] **Step 1: Implement (no unit test; it is a reporting script exercised on a real checkpoint)**
 
 ```python
 #!/usr/bin/env python3
@@ -583,7 +583,7 @@ if __name__ == '__main__':
     main()
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add scripts/extract_tb_params.py
