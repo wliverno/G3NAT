@@ -437,7 +437,7 @@ git commit -m "feat(onsite): wire alpha flags through train + reconstruction sit
   - `onsite_metrics(H_diag: np.ndarray, window=(-1,1)) -> dict` with `frac_in_window`, `min`, `max`, `range`.
   - `eig_metrics(H: np.ndarray, window=(-1,1)) -> dict` with `frac_eig_in_window`.
   - `coupling_bandwidth(H: np.ndarray) -> float` (max abs off-diagonal, the escape-valve diagnostic).
-  - `baseline_distinctness(baseline: np.ndarray) -> dict` with `min_pairwise`, `eta2` (base-identity variance-explained; reuse `scripts/probe_onsite_dilution.py::variance_decomposition` logic).
+  - `baseline_distinctness(baseline: np.ndarray) -> dict` with `min_pairwise`, `spread` (worst-case pairwise gap + std across the 4 baselines). NOTE: true eta^2 needs per-SITE onsite data and is NOT returned here; it is computed separately by `scripts/probe_onsite_dilution.py::variance_decomposition`.
   - `is_physical_win(before: dict, after: dict) -> bool`: True only if BOTH onsite-in-window AND eig-in-window improve (guards "shifted, not fixed").
 
 - [ ] **Step 1: Write failing tests**
