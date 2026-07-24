@@ -13,10 +13,11 @@
 # Receptive-field sweep: num_layers in {1,2,3,4} x split_seed in {42,43}.
 #
 # WHY. DNA sequences in this dataset are 4-8 bases, i.e. 8-16 DNA nodes on a ladder graph.
-# With num_layers=4 the convolutions reach the ENTIRE molecule, so every base embedding is a
-# function of the whole sequence -- that is global mixing, not nearest-neighbour context. The
-# physics says onsite energy and coupling are set by immediate stacking neighbours plus the
-# H-bond partner, i.e. a 1-2 hop receptive field. This sweep settles empirically whether the
+# Measured DNA-subgraph diameter: length 4 -> 4, length 8 -> 8 (roughly 2*len(seq)). So with
+# num_layers=4 the convolutions cover the whole molecule only for length-4 sequences (26% of
+# the dataset) and about half of it at length 8. Either way 4 hops reaches ~4 bases away,
+# well beyond the 1-2 hop neighbourhood -- immediate stacking neighbours plus the H-bond
+# partner -- that sets onsite energy physically. This sweep settles empirically whether the
 # extra reach buys fit, and what it costs in how strongly onsite is tied to base identity.
 #
 # Read the result as a trade-off curve, NOT a single winner:

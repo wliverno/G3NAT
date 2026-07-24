@@ -131,17 +131,22 @@ DFT sequences (identical across cells). Window = [-1, 1] eV.
 | 0.9   | 0.6928   | 0.7042    | -2.17e-04 | 0.576      | 0.573      | 0.28    | 0.745 | 0.494    |
 | 1.0   | 0.7034   | 0.6592    | +1.73e-04 | 0.244      | 0.484      | 0.62    | 1.000 | 0.061    |
 
-All six cells satisfy |slope| <= 3e-4/epoch, so none is under-converged by that criterion.
-alpha=1.0 is nonetheless the least settled: it is the only cell with a *positive* tail slope
-(+1.7e-4) and the only one whose final epoch (0.7034) is worse than its own tail mean
-(0.6592). Read its headline number as ~0.66-0.70, not 0.7034.
+All six cells satisfy |slope| <= 3e-4/epoch, so none is under-converged by that criterion --
+alpha=1.0's +1.73e-4 is in fact *smaller* in magnitude than alpha=0.25's -2.86e-4. What
+actually singles alpha=1.0 out: it is the only cell with a **positive** tail slope, and the
+only one whose final epoch exceeds its own tail mean by more than 5% (+6.70%, versus +1.70%
+for the next-worst and <1% for the rest). Read its headline number as ~0.66-0.70, not 0.7034.
 
 **Learned per-base baselines** (eV, `onsite_baseline`, n_orb=1):
 
-| alpha | A       | T       | G       | C       | spread | min pairwise gap |
-|-------|---------|---------|---------|---------|--------|------------------|
-| 0.9   | -1.1252 | -0.6315 | +0.2508 | -1.6306 | 1.882  | 0.494            |
-| 1.0   | -1.2725 | -1.1955 | -0.2950 | -1.3340 | 1.039  | 0.061 (C-A)      |
+| alpha | A       | T       | G       | C       | range (max-min) | min pairwise gap |
+|-------|---------|---------|---------|---------|-----------------|------------------|
+| 0.9   | -1.1252 | -0.6315 | +0.2508 | -1.6306 | 1.882           | 0.494 (A-T)      |
+| 1.0   | -1.2725 | -1.1955 | -0.2950 | -1.3340 | 1.039           | 0.061 (C-A)      |
+
+Note the column is max-min. Do NOT confuse it with `baseline_distinctness()['spread']` in
+`g3nat/evaluation/physicality.py`, which returns the population *std* of the same four
+values (0.694 and 0.424 respectively).
 
 ### CORRECTION: the alpha sweep does not measure what it was designed to measure
 
@@ -196,9 +201,14 @@ Consequences for interpretation:
   Do not describe them as "partially structured."
 - `eta2 = 1.000` at alpha = 1.0 is tautological (onsite *is* the per-base table there), not
   a finding.
-- `ons_in_win = 0.244` at alpha = 1.0 is just the fraction of bases that are G: the four
-  baselines are -1.27/-1.20/-0.295/-1.33 and only G falls inside [-1,1]. At alpha=1.0 the
-  in-window metric measures base composition and nothing else.
+- `ons_in_win = 0.244` at alpha = 1.0 is just the fraction of **DNA graph nodes (both
+  strands)** that are G: the four baselines are -1.27/-1.20/-0.295/-1.33 and only G falls
+  inside [-1,1]. Recomputed over the collector's exact 400-sequence sample: G = 1130/4636 =
+  0.2437 across both strands, matching. (Counting only the primary strand gives 533/2318 =
+  0.230 and would *not* match -- Watson-Crick pairing forces the combined-strand G and C
+  counts to be equal regardless of the primary strand's composition, so "both strands" is
+  the reading that applies.) At alpha=1.0 the in-window metric measures base composition and
+  nothing else.
 
 ### The [-1,1] "window" is the supervision range, not a physicality criterion
 
@@ -257,8 +267,10 @@ live path -- earlier revisions of this section cited it by mistake.)
 
 - H is built only on graph edges; zero-initialized and filled per edge pair. Already
   edge-banded, never dense.
-- Already real (`float32`, ~394) and symmetric (onsite blocks symmetrized ~392; off-diagonal
-  blocks written as a symmetric pair ~454).
+- Already real (`float32`, 394) and symmetric (onsite blocks symmetrized at 392; the final
+  matrix is assembled as `H_diag + H_offdiag + H_offdiag.transpose(-1,-2)` at 454).
+  (Line numbers re-derived by `grep -n` at write time, after an earlier revision of this
+  paragraph shipped five citations that were off by 1-3 lines.)
 - Energy reference is pinned by the data: DOS/T are supervised on a fixed 201-point grid
   (`energy_grid` in the checkpoints is exactly `linspace(-1,1,201)`), so a global shift of
   `diag(H)` shifts every eigenvalue and is observable by the loss.
@@ -284,11 +296,13 @@ eigen**vectors**.
 
 ### Dataset facts established while investigating
 
-- The 4 pickle variants per sequence are `{contact_type: same, cross} x {coupling: 0.1, 0.6}`
-  (verified over 100 sequences: exactly 4 cells, 100 each). So we **already** train across
-  two contact couplings and two contact geometries per sequence, and that did not resolve
-  the under-determination -- expected, since all of it constrains eigenvalues plus one
-  contact-to-contact matrix element of G.
+- The 4 pickle variants per sequence are `{contact_type: same, cross} x {coupling: 0.1, 0.6}`.
+  Verified over the **full** dataset (all 2058 files through the real loader): `same/0.1` 515,
+  `cross/0.1` 514, `same/0.6` 514, `cross/0.6` 514 = 2057, the shortfall of 1 being the single
+  corrupt pickle `gaaac_run2.pkl` ("Ran out of input"), which the loader skips. So we
+  **already** train across two contact couplings and two contact geometries per sequence, and
+  that did not resolve the under-determination -- expected, since all of it constrains
+  eigenvalues plus one contact-to-contact matrix element of G.
 - Nothing ties the DNA block of H to be identical across a sequence's 4 contact variants,
   though physically it must be: the on-site energies of the bases are a property of the DNA,
   not of the electrodes attached to it. **Measured** (8 sequences having all 4 variants,
@@ -308,13 +322,22 @@ eigen**vectors**.
   the free model's 7.10 eV span is itself the pathology; against the physical scale the
   drift is large, not small. Tying the DNA block across a sequence's contact variants is
   therefore a real candidate constraint, and it costs no new data.
-- Sequence lengths are 4-8 bases (540/446/328/360/384 files at lengths 4/5/6/7/8). With 8-16
-  DNA nodes on a ladder, **4 GAT layers reach the entire molecule** -- that is global mixing,
-  not nearest-neighbour smearing. The physics argues for a 1-2 hop receptive field.
-  `num_layers` is therefore a live experimental knob, not a fixed choice.
+- Sequence lengths are 4-8 bases (540/446/328/360/384 files at lengths 4/5/6/7/8, sum 2058).
+- **Receptive field, corrected.** An earlier revision claimed "4 GAT layers reach the entire
+  molecule." That is true only for length-4 sequences. Measured DNA-subgraph diameter with
+  networkx: length 4 -> 8 nodes, diameter 4 (4 layers = full coverage); length 8 -> 16 nodes,
+  diameter 8 (4 layers = half the molecule). Diameter grows roughly as `2*len(seq)`, so
+  full-molecule mixing applies to 540/2058 = 26% of the dataset, not all of it.
+  The argument for sweeping `num_layers` survives but is weaker than stated: 4 hops still
+  reaches ~4 bases away along the strand, well beyond the 1-2 hop neighbourhood
+  (stacking neighbours + H-bond partner) that sets onsite energy physically. `num_layers`
+  is a live experimental knob, not a fixed choice -- but do not describe the status quo as
+  "global mixing" for most of the dataset.
 - Residue-resolved DFT local DOS is available at essentially full coverage:
-  `asyed4/DNADataSet/<seq>/run{1..4}/DOS_<seq>_gammaL_*_gammaR_*.mat`, 2081 files over 523
-  sequences (1043 at gamma 0.1, 1038 at gamma 0.6), plus matching `Tran_*.mat`.
+  `asyed4/DNADataSet/<seq>/run{1..4}/DOS_<seq>_gammaL_*_gammaR_*.mat`, 2081 files over **522**
+  sequence directories (1043 at gamma 0.1, 1038 at gamma 0.6), plus matching `Tran_*.mat`.
+  (523 is the count of `*_Fock.mat` files, a different file type -- an earlier revision
+  reported it here by mistake.)
   `scripts/dos_map.py:66-87` already maps DOSAtom rows to PDB atoms and groups by residue.
 
 ### DOS-map before/after (sequence AAAC)
@@ -323,7 +346,7 @@ Learned onsite (`diag H`) overlaid on the DFT residue-resolved local DOS:
 
 | model                        | onsite range (eV) |
 |------------------------------|-------------------|
-| free, leaking split (old)    | to -33            |
+| free, leaking split (old)    | -32.13 to -0.30   |
 | free, grouped split (alpha=0)| -10.5 to -0.7     |
 | structured alpha=0.9         | -1.69 to 0.00     |
 | structured alpha=1.0         | -1.33 to -0.30    |
