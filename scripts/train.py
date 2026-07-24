@@ -19,7 +19,6 @@ from g3nat.training.callbacks import save_checkpoint, save_progress_file
 from g3nat.utils import setup_device
 
 from torch_geometric.loader import DataLoader
-from sklearn.model_selection import train_test_split
 from torch.utils.data import Subset
 
 def parse_args():
@@ -60,6 +59,8 @@ def parse_args():
                             'Requires a geometry cache built via GeomCacheJob.')
     parser.add_argument('--geom_cache', type=str, default='geom_cache/geometry.pkl',
                        help='Path to the per-sequence geometry cache (used with --use_geometry).')
+    parser.add_argument('--split_seed', type=int, default=42,
+                       help='Seed for the sequence-grouped train/val split.')
 
     # Training parameters
     parser.add_argument('--num_epochs', type=int, default=100)
@@ -146,10 +147,9 @@ def main():
             geometry_cache=geom_cache
         )
 
-    # Split dataset
-    train_indices, val_indices = train_test_split(
-        range(len(dataset)), test_size=0.2, random_state=42
-    )
+    # Split dataset -- GROUPED by sequence so no sequence appears in both train and val.
+    from g3nat.data.splits import grouped_split
+    train_indices, val_indices = grouped_split(seqs, test_size=0.2, seed=args.split_seed)
     train_dataset = Subset(dataset, train_indices)
     val_dataset = Subset(dataset, val_indices)
 
