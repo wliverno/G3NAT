@@ -30,7 +30,12 @@ def load_model(path):
     a = ck['args']; eg = np.asarray(ck['energy_grid'], dtype=float)
     m = g3nat.DNATransportHamiltonianGNN(
         hidden_dim=a['hidden_dim'], num_layers=a['num_layers'], num_heads=a['num_heads'],
-        energy_grid=eg, n_orb=a['n_orb'], conv_type=a.get('conv_type', 'gat'))
+        energy_grid=eg, n_orb=a['n_orb'], conv_type=a.get('conv_type', 'gat'),
+        structured_onsite=a.get('structured_onsite', False),
+        alpha_granularity=a.get('alpha_granularity', 'global'),
+        alpha_mode=a.get('alpha_mode', 'fixed'),
+        alpha_value=a.get('alpha_value', 0.0),
+        alpha_init=a.get('alpha_init', 0.9))
     m.load_state_dict(ck['model_state_dict']); m.eval()
     return m, a
 

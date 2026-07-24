@@ -61,6 +61,14 @@ def parse_args():
                        help='Path to the per-sequence geometry cache (used with --use_geometry).')
     parser.add_argument('--split_seed', type=int, default=42,
                        help='Seed for the sequence-grouped train/val split.')
+    parser.add_argument('--structured_onsite', action='store_true',
+                       help='Mix a per-base onsite baseline with the context head.')
+    parser.add_argument('--alpha_granularity', choices=['global', 'per_base'], default='global')
+    parser.add_argument('--alpha_mode', choices=['fixed', 'learned'], default='fixed')
+    parser.add_argument('--alpha_value', type=float, default=0.0,
+                       help='Fixed mixing factor in [0,1] (alpha_mode=fixed).')
+    parser.add_argument('--alpha_init', type=float, default=0.9,
+                       help='Initial mixing factor (alpha_mode=learned).')
 
     # Training parameters
     parser.add_argument('--num_epochs', type=int, default=100)
@@ -76,6 +84,8 @@ def parse_args():
 
 def main():
     args = parse_args()
+    assert not (args.alpha_granularity == 'per_base' and args.alpha_mode == 'fixed'), \
+        "per_base+fixed needs 4 alphas; use learned or global"
 
     os.makedirs(args.output_dir, exist_ok=True)
     os.makedirs(args.checkpoint_dir, exist_ok=True)
@@ -182,7 +192,12 @@ def main():
             n_orb=args.n_orb,
             conv_type=args.conv_type,
             use_geometry=args.use_geometry,
-            geom_norm_stats=geom_norm_stats
+            geom_norm_stats=geom_norm_stats,
+            structured_onsite=args.structured_onsite,
+            alpha_granularity=args.alpha_granularity,
+            alpha_mode=args.alpha_mode,
+            alpha_value=args.alpha_value,
+            alpha_init=args.alpha_init,
         )
 
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
