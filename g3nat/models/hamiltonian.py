@@ -549,6 +549,11 @@ class DNATransportHamiltonianGNN(nn.Module):
         dos_safe = torch.clamp(dos_raw, min=1e-16)  # Ensure positive values without abs()
         DOS = torch.log10(dos_safe)
 
+        # Per-site local DOS (LDOS): diagonal of the same spectral quantity whose
+        # trace gives dos_raw above. Linear units, unclamped -- side channel only,
+        # does not feed back into DOS/T/H. Shape [batch, n_energy, H_size].
+        ldos_lin = -1 * torch.diagonal(Gr_imag, dim1=-2, dim2=-1) / np.pi
+
         # Calculate transmission
         # Convert gamma vectors to diagonal matrices for matrix multiplication
         # [batch, H_size] -> [batch, energy, H_size, 1]
@@ -573,8 +578,10 @@ class DNATransportHamiltonianGNN(nn.Module):
         T = torch.log10(T_safe)
 
         if squeeze_output:
+            self.ldos = ldos_lin.squeeze(0)
             return T.squeeze(0), DOS.squeeze(0), H_matrix.squeeze(0)
         else:
+            self.ldos = ldos_lin
             return T, DOS, H_matrix
 
     def NEGFProjectionComplex(self,
@@ -633,6 +640,11 @@ class DNATransportHamiltonianGNN(nn.Module):
         DOS_lin = (-1/np.pi) * torch.imag(torch.einsum('benn->be', Gr))
         DOS_lin = torch.clamp(DOS_lin, min=self.log_floor)
 
+        # Per-site local DOS (LDOS): diagonal of the same Gr whose trace gives
+        # DOS_lin above. Linear units, unclamped -- side channel only, does not
+        # feed back into DOS/T/H. Shape [batch, n_energy, H_size].
+        ldos_lin = (-1/np.pi) * torch.imag(torch.diagonal(Gr, dim1=-2, dim2=-1))
+
         # Transmission: Tr[GammaL Gr GammaR Ga]
         GammaL_mat = torch.diag_embed(GammaL).to(Gr.dtype).unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)
         GammaR_mat = torch.diag_embed(GammaR).to(Gr.dtype).unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)
@@ -644,8 +656,10 @@ class DNATransportHamiltonianGNN(nn.Module):
         T = maybe_log10(T_lin)
 
         if squeeze_output:
+            self.ldos = ldos_lin.squeeze(0)
             return T.squeeze(0), DOS.squeeze(0), H_matrix.squeeze(0)
         else:
+            self.ldos = ldos_lin
             return T, DOS, H_matrix
 
 
