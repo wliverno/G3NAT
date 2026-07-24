@@ -74,3 +74,18 @@ def test_gradient_flows_to_baseline():
     loss = (m.H ** 2).sum()
     loss.backward()
     assert m.onsite_baseline.grad is not None and m.onsite_baseline.grad.abs().sum() > 0
+
+
+def test_checkpoint_roundtrip_reconstructs_structured_model(tmp_path):
+    from g3nat.evaluation.inference import load_trained_model
+    m = _build(seed=6, structured_onsite=True, alpha_granularity='per_base',
+               alpha_mode='learned', alpha_value=0.0)
+    ckpt = tmp_path / "m.pth"
+    torch.save({'model_state_dict': m.state_dict(),
+                'energy_grid': EG,
+                'args': {'hidden_dim': 32, 'num_layers': 2, 'num_heads': 2, 'n_orb': 1,
+                         'conv_type': 'gat', 'structured_onsite': True,
+                         'alpha_granularity': 'per_base', 'alpha_mode': 'learned',
+                         'alpha_value': 0.0, 'alpha_init': 0.9}}, ckpt)
+    loaded, _, _ = load_trained_model(str(ckpt), device='cpu')  # must not raise on strict load
+    assert loaded.onsite_baseline.shape == (4, 1)
