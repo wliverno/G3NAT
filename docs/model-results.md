@@ -61,3 +61,36 @@ What this run confirms is the plumbing: `--use_geometry` runs end-to-end on the 
 dataset, trains stably (no NaN despite the near-constant features + 1e-6 std floor),
 and the added geom_encoder neither helps nor hurts. Real "geometry helps" needs varied
 structures (MD / crystal / predicted), which this branch is built to receive.
+
+## Onsite/spectrum window constraint -- NEGATIVE RESULT (2026-07-23)
+
+Goal: force the learned reduced Hamiltonian to be physical (energies inside the transmission
+window). Branch `constrain-onsite-window` (DEAD, not merged).
+
+**Physicality of existing models** (onsite = diag(H); eig = eigvalsh(H); window [-1,1] eV):
+
+| model | val loss | onsite [min,max] | eig [min,max] | eig in-window | verdict |
+|-------|----------|------------------|---------------|---------------|---------|
+| GAT-DFT (baseline) | 0.547 | [-32.5, -0.30] | [-33.4, -0.01] | 59% | UNPHYSICAL |
+| transformer-DFT | 1.42 | [-0.71, 2507] | [-0.81, 2651] | 25% | worse |
+| GAT-TB (synthetic) | 0.477 | [-1.41, 0.02] | [-1.59, 0.03] | 100% | physical (matches Roche) |
+| transformer-TB (synthetic) | 0.038 | [-1.40, 0.01] | [-1.62, 0.10] | 100% | physical |
+
+Key finding: **physicality tracks the DATA, not the architecture.** When the ground truth is a
+physical per-base TB (synthetic), both convs recover it. On real DFT both distort; the low-loss
+GAT "win" (0.547) is an unphysical H. Likely a 1-orbital-per-base TB cannot represent full DFT
+transport.
+
+**Soft penalty attempts** (GAT + base-aware, hidden=256, 5000 epochs, W=10):
+
+| constraint | final val | onsite result | eig in-window |
+|------------|-----------|---------------|---------------|
+| diagonal penalty | 1.87 | collapsed to -0.97 | (n/a) |
+| eigenvalue penalty | 2.19 | collapsed to -0.63 | 100% |
+
+Both failed: a penalty enforces a RANGE but not STRUCTURE, so the optimizer collapses every
+onsite to one value (in-window, degenerate, useless). Penalty route exhausted.
+
+**Next (planned, fresh branch off main):** structured onsite head -- tie onsite to base identity
+(residual base-baseline + limited context correction) so physicality comes from the
+parameterization, not a penalty. See the `g3nat` skill "Active investigation" for the reasoning.
