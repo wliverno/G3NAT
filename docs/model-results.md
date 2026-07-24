@@ -6,6 +6,13 @@ training loop (log10 DOS + log10 transmission MSE, see `g3nat/models/hamiltonian
 
 ## Graph convolution type: GAT vs Transformer
 
+> **WARNING (2026-07-24): this comparison does not survive scrutiny -- see section 4f at the
+> bottom.** These are final-epoch numbers under the leaking split, and the transformer is now
+> known to overfit badly (best val 0.579 reached 3650 epochs before its final 0.650). A
+> final-epoch comparison of overfitting runs measures degradation past the optimum, not fit.
+> Under the clean split with best-val, GAT (0.592 +/- 0.010) and transformer (0.579) look like
+> a tie. The `gat` default is not currently evidence-backed; re-run with early stopping.
+
 **Decision: `--conv_type` default is `gat`** (set in `scripts/train.py`). GAT is the best
 DFT-fitting convolution on record. The winner is dataset-dependent (see table), and the
 current and upcoming work (X3DNA edge geometry, Plan 2) is on the DFT/pickle data, where
@@ -224,17 +231,11 @@ reinforces the standing decision to keep supervision on transport observables on
 
 At alpha = 1.0, referenced to G: `C -1.039 < A -0.978 < T -0.901 < G 0`.
 
-**PROVISIONAL -- n = 1.** The pattern below comes from a single training run (`--split_seed
-42`) with no error bars, and `collect_onsite_sweep.py` has no cross-seed aggregation. Seeds
-43 and 44 were already running when this was first written; block on them before treating
-any of it as established. The neighbouring alpha=0.9 cell shows how much these numbers can
-move (baseline spread 1.88 vs 1.04; T shifts -0.63 -> -1.20; G changes sign), so a 0.061 eV
-gap quoted to three significant figures is not yet meaningful.
-
-Provisional reading: **G looks resolved and A/T/C do not.** A, T and C sit within 0.14 eV of
-each other (min pairwise gap 0.061 eV, C-A) while G stands ~0.9 eV above all three. A gap
-should only be called "resolved" once it clearly exceeds the cross-seed spread; that test is
-pending.
+**SUPERSEDED by the 3-seed replication below** -- see "Replication across seeds". The
+single-seed reading was "G resolved, A/T/C all unresolved within 0.14 eV". Replication
+confirms G-vs-A and G-vs-T, confirms A-vs-T is unresolved, and shows that **C is not
+clustered with A and T at all -- it is simply unconstrained** (cross-seed std 0.52, rank
+order changes between seeds). Do not cite the single-seed ordering.
 
 Comparisons:
 - Roche et al. 2003 (G 0, A -0.49, T -1.39, C -1.12; `g3nat/utils/physics.py:24`,
@@ -387,3 +388,115 @@ is what brings onsite into the DFT band.
 4. No coupling lookup table in the model (willll, 2026-07-24): the model must stay
    compatible with arbitrary geometry (fraying, flipped/twisted bases must produce different
    onsite and coupling). Generate a table *from* the trained model post hoc instead.
+
+## Replication across seeds (2026-07-24) -- four conclusions changed
+
+Collected by `scripts/collect_all_runs.py` (checkpoint metadata only, no forward passes, so
+nothing here depends on which sequences a physicality sample drew). Same config throughout:
+GAT, hidden=256, n_orb=1, batch=32, 5000 epochs, DFT pickle, grouped split.
+
+**Two cells failed outright and are excluded from every reading below:**
+alpha=0.75/seed 44 (val 1.660) and layers=3/seed 42 (val 1.443). Both sat above 1.4 from
+early in training. They are optimizer failures, not data.
+
+### 4a. alpha sweep with error bars
+
+| alpha | s42 | s43 | s44 | mean | std |
+|-------|--------|--------|--------|--------|--------|
+| 0     | 0.6054 | 0.5818 | 0.5889 | 0.5920 | 0.0099 |
+| 0.25  | 0.6312 | 0.5774 | 0.6667 | 0.6251 | 0.0367 |
+| 0.5   | 0.5734 | 0.6074 | 0.6782 | 0.6197 | 0.0436 |
+| 0.75  | 0.5881 | 0.6101 | (1.660 failed) | -- | -- |
+| 0.9   | 0.6928 | 0.6023 | 0.6444 | 0.6465 | 0.0369 |
+| 1.0   | 0.7034 | 0.6938 | 0.8020 | 0.7331 | 0.0489 |
+
+Reading: alpha = 0.25-0.75 are indistinguishable from alpha=0 given ~0.04 seed scatter,
+exactly as the reparametrization argument predicts (they *are* the free model). The pure
+per-base cost is **0.733 vs 0.592, about 0.14 (24%)** -- larger than the single-seed estimate
+of 0.098 (16%), and comfortably above the scatter. So per-base parameterization does cost
+real fit; the single seed understated it.
+
+### 4b. Per-base baselines -- G is resolved, C is NOT
+
+alpha=1.0 baselines referenced to G (removing any per-run global energy offset):
+
+| seed | A | T | C |
+|------|--------|--------|--------|
+| 42   | -0.978 | -0.901 | -1.039 |
+| 43   | -0.802 | -0.777 | -1.149 |
+| 44   | -0.760 | -0.774 | +0.013 |
+| mean | -0.846 | -0.817 | -0.725 |
+| std  | 0.094  | 0.059  | **0.524** |
+
+Pairwise gap vs cross-seed scatter (calling a gap "resolved" requires gap > 2*scatter):
+
+| pair | gap | scatter | verdict |
+|------|-------|---------|--------------|
+| A-G  | 0.846 | 0.094   | RESOLVED     |
+| T-G  | 0.817 | 0.059   | RESOLVED     |
+| A-T  | 0.029 | 0.111   | not resolved |
+| G-C  | 0.645 | 0.523   | not resolved |
+| A-C  | 0.121 | 0.532   | not resolved |
+| T-C  | 0.092 | 0.527   | not resolved |
+
+**The data pins G against A and T, and pins nothing else.** A and T are mutually
+indistinguishable (that part of the single-seed reading replicates). C is the surprise: it is
+not clustered with A and T, it is *unconstrained* -- std 0.52, and its rank order changes
+between seeds (lowest of the four in seed 42, highest in seed 44). The single-seed C = -1.039
+that appeared to agree with Roche's -1.12 was coincidence. Any future claim about C from this
+model needs seeds.
+
+### 4c. The alpha=0.9 differentiation does not replicate
+
+Seed 42 gave baseline range 1.88 (eta2 0.745) and was reported as the cell where per-base
+structure emerges under throttled context. Seeds 43 and 44 give ranges of **0.078 and 0.023**
+-- fully collapsed. Two of three runs show no differentiation. Treat the seed-42 alpha=0.9
+result as a seed artifact, not a finding.
+
+### 4d. Layers sweep -- more receptive field fits better, monotonically
+
+| layers | cells | mean |
+|--------|-------------------------|--------|
+| 1      | s42 0.7648, s43 0.7845  | 0.7747 |
+| 2      | s43 0.7331              | 0.7331 |
+| 3      | s43 0.6885 (s42 failed) | 0.6885 |
+| 4      | s42 0.6539              | 0.6539 |
+
+Noise floor: layers=4/s42 (0.6539) and alpha=0/s42 (0.6054) are the same configuration, so
+run-to-run noise is about 0.05. The trend spans 0.12 and is monotonic, so **more layers
+genuinely fits better** on this data. This runs against the receptive-field argument for
+fewer layers (willll's position that neighbour smearing is a feature is supported on fit).
+Incomplete: 2 of 8 cells missing, 1 failed -- 6 usable cells, and eta2 (whether the extra
+reach costs base-identity structure) is not yet measured. Do not close this question yet.
+
+### 4e. Learned alpha settles mid-range, and its baselines collapse
+
+`outputs_onsite_learned_global_s42`: learned alpha = **0.4795**, final val **0.5632** (the
+best single number in this whole table), baselines A/T/G/C = -0.413/-0.361/-0.482/-0.506,
+range 0.145 (collapsed).
+
+The prediction on record was that a naively-learned alpha would drift *low*, toward context.
+It did not -- it sat mid-range. The prediction was wrong in its specifics, and the result
+supports the underlying claim better than the prediction did: if every alpha < 1 gives the
+same hypothesis class, then alpha is simply **unidentified** and can settle anywhere, while
+the baselines collapse to a constant (which is what happened). Do not read 0.48 as "the data
+wants half context".
+
+### 4f. The transformer overfits, and the GAT-vs-transformer record needs revisiting
+
+`outputs_transformer_cleansplit_s42` (conv=transformer, clean grouped split):
+
+- train tail 0.4116, val tail 0.6496, **gap +0.238**
+- best val **0.5791**, reached **3650 epochs before the end**
+- tail slope +8.44e-05/epoch (positive)
+
+Both overfit signatures hold together (val rising after its minimum AND a large train-val
+gap), so this is genuine overfitting, not just a gap.
+
+**Consequence for model selection:** best-val 0.579 for the transformer is comparable to
+GAT's 0.592 +/- 0.010. The headline "GAT is 2.6x better on DFT (0.547 vs 1.42)" at the top of
+this document is a **final-epoch comparison on runs that overfit**, which measures how far a
+model has degraded past its own optimum rather than how well it can fit. Under a clean split
+with best-val (or early stopping) the two convs look like a tie. The `--conv_type gat`
+default is not currently justified by evidence; re-run the comparison with early stopping
+before relying on it. One transformer seed so far.
