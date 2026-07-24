@@ -171,7 +171,13 @@ splits; queue as sbatch jobs.
 
 ## Run (staging)
 
-1. Smoke: build head, one short grouped-split run at alpha=1, verify plumbing + baselines move
-   toward sane/distinct values + TIME a run. De-risk before spending compute.
-2. Full: launch the grouped-CV sweep + TB calibration + controls + learned/per-base runs as sbatch
-   jobs; collect into the discriminator curve; run the extraction/literature comparison.
+0. Smoke: build head, one short grouped-split run at alpha=1; verify plumbing + baselines move
+   toward sane/DISTINCT values + TIME a run. De-risk before spending compute.
+1. LOAD-BEARING (do first -- answers the core question):
+   a. Re-run the reference model (alpha=0) under the clean grouped split -> the honest baseline.
+   b. Fixed global DFT sweep {0,.25,.5,.75,.9,1.0} under grouped CV, best-checkpoint metric ->
+      headline val_loss(alpha) +/- std, physicality co-gate (onsite AND eig), baseline distinctness.
+   c. Extract the per-base baseline params at the informative alpha (the interpretable payoff).
+2. FULL COMPARISON (after 1): TB-calibration sweep (interpret the DFT curve against it) -> standalone
+   4-scalar control -> learned bilevel alpha -> per-base nested test (pre-registered ranking) ->
+   literature comparison across >=2 parameter sets.
