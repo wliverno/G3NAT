@@ -151,6 +151,25 @@ class DNATransportHamiltonianGNN(nn.Module):
             return torch.sigmoid(self.onsite_alpha_theta)
         return self.onsite_alpha_fixed
 
+    def _mix_onsite(self, dna_features: torch.Tensor, original_dna_onehot: torch.Tensor) -> torch.Tensor:
+        """onsite_raw before reshape. dna_features: post-conv [D, hidden];
+        original_dna_onehot: [D, 4] base one-hot in the SAME order.
+
+        onsite = alpha*baseline[base] + (1-alpha)*context, via a differentiable
+        soft-matmul (one-hot @ baseline table) so gradients flow to onsite_baseline.
+        When structured_onsite is off, returns onsite_proj(dna_features) unchanged.
+        """
+        context = self.onsite_proj(dna_features)                 # [D, n_orb^2]
+        if not self.structured_onsite:
+            return context
+        baseline = original_dna_onehot @ self.onsite_baseline    # [D, n_orb^2] soft-matmul
+        alpha = self._onsite_alpha()                             # [1] or [4]
+        if self.alpha_granularity == 'per_base':
+            a = original_dna_onehot @ alpha.view(4, 1)           # [D, 1] per-node
+        else:
+            a = alpha.view(1, 1)                                 # broadcast scalar
+        return a * baseline + (1.0 - a) * context
+
     def _fuse_geometry(self, edge_attr_proj, edge_attr_initial, data):
         """Add per-edge-type-normalized geometry to the projected edge embedding.
 
@@ -223,7 +242,7 @@ class DNATransportHamiltonianGNN(nn.Module):
 
         # Get onsite energies for DNA nodes only
         dna_node_features = node_features[dna_node_mask]  # [num_dna_nodes, hidden_dim]
-        onsite_blocks = self.onsite_proj(dna_node_features)  # [num_dna_nodes, n_orb²]
+        onsite_blocks = self._mix_onsite(dna_node_features, original_node_features[dna_node_mask])  # [num_dna_nodes, n_orb²]
         onsite_blocks = onsite_blocks.view(-1, self.n_orb, self.n_orb)  # [num_dna_nodes, n_orb, n_orb]
         if self.enforce_hermiticity:
             # Symmetrize onsite blocks to ensure Hermiticity (real symmetric here)
@@ -367,7 +386,7 @@ class DNATransportHamiltonianGNN(nn.Module):
 
         # --- Step 4: Compute onsite blocks and fill diagonal ---
         dna_features = node_features[dna_mask]
-        onsite_raw = self.onsite_proj(dna_features)                  # [total_dna, n_orb²]
+        onsite_raw = self._mix_onsite(dna_features, original_node_features[dna_mask])  # [total_dna, n_orb²]
         onsite_blocks = onsite_raw.view(-1, n_orb, n_orb)           # [total_dna, n_orb, n_orb]
         if self.enforce_hermiticity:
             onsite_blocks = 0.5 * (onsite_blocks + onsite_blocks.transpose(-1, -2))
