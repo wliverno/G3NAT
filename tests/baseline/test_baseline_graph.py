@@ -1,11 +1,6 @@
 # tests/baseline/test_baseline_graph.py
-import torch
-import pickle
-from pathlib import Path
 from g3nat.graph import sequence_to_graph
-
-BASELINE_DIR = Path(__file__).parent / "outputs"
-BASELINE_DIR.mkdir(exist_ok=True)
+from ._util import check_or_capture
 
 def test_capture_sequence_to_graph_simple():
     """Simple sequence case."""
@@ -26,10 +21,7 @@ def test_capture_sequence_to_graph_simple():
         'num_edges': graph.edge_index.size(1)
     }
 
-    with open(BASELINE_DIR / "graph_simple.pkl", "wb") as f:
-        pickle.dump(baseline, f)
-
-    print(f"Captured baseline: {graph.x.size(0)} nodes, {graph.edge_index.size(1)} edges")
+    check_or_capture("graph_simple.pkl", baseline)
 
 def test_capture_sequence_to_graph_cross_contacts():
     """Cross-strand contacts."""
@@ -50,10 +42,7 @@ def test_capture_sequence_to_graph_cross_contacts():
         'num_edges': graph.edge_index.size(1)
     }
 
-    with open(BASELINE_DIR / "graph_cross.pkl", "wb") as f:
-        pickle.dump(baseline, f)
-
-    print(f"Captured baseline: {graph.x.size(0)} nodes, {graph.edge_index.size(1)} edges")
+    check_or_capture("graph_cross.pkl", baseline)
 
 if __name__ == "__main__":
     test_capture_sequence_to_graph_simple()
