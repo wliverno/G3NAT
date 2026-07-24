@@ -30,7 +30,12 @@ class DNATransportHamiltonianGNN(nn.Module):
                  conv_type: str = 'gat',
                  use_geometry: bool = False,
                  geom_dim: int = 7,
-                 geom_norm_stats: Optional[Dict] = None):
+                 geom_norm_stats: Optional[Dict] = None,
+                 structured_onsite: bool = False,
+                 alpha_granularity: str = 'global',   # 'global' | 'per_base'
+                 alpha_mode: str = 'fixed',           # 'fixed' | 'learned'
+                 alpha_value: float = 0.0,
+                 alpha_init: float = 0.9):
         super().__init__()
         # Use features specified in dataset.py
         node_features = 4  # 4 one-hot features (A, T, G, C)
@@ -123,6 +128,28 @@ class DNATransportHamiltonianGNN(nn.Module):
                 std[1] = torch.tensor(geom_norm_stats["hbond"]["std"], dtype=torch.float)
             self.register_buffer("geom_mean", mean)
             self.register_buffer("geom_std", std)
+
+        # Optional structured onsite head. Default off = no new params (RNG stream and
+        # existing checkpoints unchanged). onsite = alpha*baseline[base] + (1-alpha)*context.
+        self.structured_onsite = structured_onsite
+        self.alpha_granularity = alpha_granularity
+        self.alpha_mode = alpha_mode
+        if structured_onsite:
+            n_alpha = 4 if alpha_granularity == 'per_base' else 1
+            # 4 per-base onsite blocks; near-zero init keeps early (E*I - H) well-conditioned.
+            self.onsite_baseline = nn.Parameter(torch.empty(4, n_orb * n_orb))
+            nn.init.normal_(self.onsite_baseline, std=0.01)
+            if alpha_mode == 'learned':
+                theta0 = float(np.log(alpha_init / (1.0 - alpha_init)))  # logit(alpha_init)
+                self.onsite_alpha_theta = nn.Parameter(torch.full((n_alpha,), theta0))
+            else:  # fixed: store alpha DIRECTLY (exact 0.0/1.0, no logit/sigmoid round-trip)
+                self.register_buffer('onsite_alpha_fixed', torch.full((n_alpha,), float(alpha_value)))
+
+    def _onsite_alpha(self) -> torch.Tensor:
+        """Mixing factor in [0,1], shape [1] (global) or [4] (per_base)."""
+        if self.alpha_mode == 'learned':
+            return torch.sigmoid(self.onsite_alpha_theta)
+        return self.onsite_alpha_fixed
 
     def _fuse_geometry(self, edge_attr_proj, edge_attr_initial, data):
         """Add per-edge-type-normalized geometry to the projected edge embedding.
