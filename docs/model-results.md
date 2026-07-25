@@ -397,6 +397,89 @@ is what brings onsite into the DFT band.
    compatible with arbitrary geometry (fraying, flipped/twisted bases must produce different
    onsite and coupling). Generate a table *from* the trained model post hoc instead.
 
+## Best-val WEIGHTS (2026-07-25) -- overfitting was destroying the per-base structure
+
+First measurement of any model-derived quantity on best-val weights. Everything before this
+was read off models that had been overfitting for thousands of epochs.
+
+### C is resolved. The "C is unconstrained" finding was an overfitting artifact.
+
+alpha=1.0, 3 seeds, referenced to G (`outputs_bv*_a1.0_s*/..._best.pth`):
+
+| | A | T | C |
+|---|---|---|---|
+| mean | -0.746 | -0.781 | -1.176 |
+| std (ddof=1) | 0.112 | 0.035 | **0.160** |
+
+| pair | gap | scatter | verdict |
+|------|-------|---------|--------------|
+| G-C  | 1.176 | 0.159   | RESOLVED     |
+| T-G  | 0.781 | 0.035   | RESOLVED     |
+| A-G  | 0.746 | 0.112   | RESOLVED     |
+| A-C  | 0.430 | 0.195   | RESOLVED     |
+| T-C  | 0.395 | 0.163   | RESOLVED     |
+| A-T  | 0.035 | 0.118   | not resolved |
+
+C's cross-seed std falls **0.52 -> 0.16**. The earlier headline -- "C is not clustered with A
+and T, it is unconstrained, its rank order flips between seeds" -- does not survive; it was an
+artifact of reading final-epoch weights. What replicates is A-vs-T being unresolved.
+
+**Learned ordering: G > A ~= T > C**, with A and T indistinguishable at our resolution.
+
+### Comparison to literature ORDERINGS (not magnitudes)
+
+Absolute values are not comparable -- ours are HOMO-referenced per sequence -- so only the
+ranking is meaningful, and G's position is pinned near 0 by that convention rather than by the
+fit, so G-agreement is not evidence. The informative comparison is the ordering of A, T and C
+among themselves.
+
+| source | ordering (highest onsite first) |
+|---|---|
+| Roche et al. 2003 (`physics.py:24`, doi:10.1103/PhysRevLett.91.228101) | G > A > C > T |
+| Faber et al. 2011 GW vertical IPs (doi:10.1103/PhysRevB.83.115123) | G > A > C > T |
+| **this model (best-val, 3 seeds)** | **G > A ~= T > C** |
+
+Two independent literature sources -- a tight-binding parameterisation and a GW ionization-
+potential calculation -- agree on `G > A > C > T`. (Faber IPs: G 7.81, A 8.22, C 8.73, T 9.05;
+lower IP means a higher-lying HOMO and therefore higher hole on-site energy, so the IP order
+inverts.)
+
+**Where we agree:** A sits high, just below G.
+**Where we disagree, specifically on T.** Literature places T lowest, ~0.9 eV below A in
+Roche. We place T level with A (gap 0.035, unresolved) and put C lowest instead. Numerically
+our C (-1.176) lands close to Roche's C (-1.12), while our T (-0.781) sits ~0.6 eV above
+Roche's T (-1.39).
+
+So the honest statement is: the model recovers C at roughly its literature position but
+**fails to reproduce the large A-T separation that both literature sources predict**. That is
+a concrete negative result about the learned H, and it is the first literature comparison in
+this project that is not circular -- it tests A/T/C ordering, none of which is fixed by the
+energy convention.
+
+### eta2 is ~5x higher than recorded, and depth remains unresolved
+
+eta2 (fraction of on-site variance explained by base identity) on best-val weights is
+**0.08-0.32**, against the 0.028 on record from overfit weights. Overfitting was washing out
+base-identity structure by roughly 5x, so "onsite is barely determined by base identity" was
+substantially an artifact.
+
+By depth (2 seeds each): L1 0.281/0.134, L2 0.082/0.318, L3 0.114/0.117, L4 0.129/0.097.
+Shallow ~0.20 vs deep ~0.11 leans toward fewer layers preserving more base identity, but
+L2's two seeds alone span 0.082-0.318, so within-depth scatter swamps the trend.
+**NOT RESOLVED at n=2.** A 4-seed x 4-depth rerun at 5000 epochs is in flight.
+
+### Caution on epoch count
+
+The 3000-epoch reruns hit best-val at epochs 2229/2665/2761 (alpha=0) and up to 2926
+(layers), i.e. close to the cap -- several may be truncated before their optimum. The earlier
+5000-epoch runs peaked at 549-1900, which is what the "2000 epochs suffices" suggestion was
+based on; best-epoch is evidently not stable across runs and that suggestion was premature.
+**Stay at 5000** (willll's original choice). With best-val checkpointing, extra epochs cost
+wall-clock only and can no longer degrade the saved result.
+
+Also note one alpha=1.0 cell at 3000 epochs failed outright (final 1.13), inflating that row
+to 0.8797 +/- 0.2157; that comparison is contaminated and is being redone.
+
 ## BEST-VAL correction (2026-07-24) -- read this before any table below
 
 Every number below this line, and everywhere above it, is **final-epoch**. That metric is
