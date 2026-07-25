@@ -71,9 +71,55 @@ Consequences:
    stands the centring is irreversible once the raw grid is dropped, and nobody downstream
    could recover physical energies or compare across sequences.
 
-## OPEN QUESTION: does per-sequence HOMO centring make the G result circular?
+## RESOLVED: HOMO centring does make the G result convention-driven (2026-07-24)
 
-Stated as a hypothesis. It has not been tested.
+Tested with `scripts/homo_composition.py` over all 515 sequences. The hypothesis below was
+**confirmed**, and a second measurement overturned the reason we had for worrying about it.
+
+**Composition drives the HOMO, decisively:**
+
+| class | n | E_HOMO (eV) |
+|---|---|---|
+| AT-only | 20 | -5.7328 +/- 0.0591 |
+| mixed | 479 | -5.0356 +/- 0.1242 |
+| GC-only | 16 | -4.9194 +/- 0.0605 |
+
+GC-only minus AT-only = **+0.8134 eV at 13.6 sigma**, and the classes are **completely
+disjoint** (AT max -5.6258 < GC min -5.0491). correlation(GC fraction, E_HOMO) = +0.69.
+
+It behaves as a **step function, not a gradient**: GC=0.00 gives -5.7328, GC=0.12 gives
+-5.1109 -- a single GC pair moves the HOMO 0.62 eV -- and the entire remaining range from
+GC=0.12 to GC=1.00 adds only 0.19 eV. Exactly what you expect if the HOMO is *the G level
+whenever any G is present*.
+
+**Consequence:** for 495 of 515 sequences, per-sequence centring pins a G-derived level at
+~0 by construction. The learned table's "G on top at -0.295, everything else 0.7-1.0 below"
+is substantially the reference convention. `docs/model-results.md` section 4b now carries
+this caveat. A single per-base table must reconcile "G at 0" (495 sequences) with "A at 0"
+(20 AT-only sequences), and at 495-to-20 the G constraint dominates.
+
+**A shared absolute axis IS available** (this corrects an earlier claim that it was not):
+E_HOMO spans 1.035 eV across all sequences against 2.0 eV windows, so the intersection of
+all 515 windows is **0.965 eV**, rising to **1.63 eV** if 90% of sequences are kept. Universal
+absolute parameters would be learnable on that axis.
+
+**DECISION (willll, 2026-07-24): stay HOMO-referenced.** The Fermi energy sits near the HOMO,
+transport happens at E_F, and we are modelling NEGF transport -- so the HOMO-referenced window
+is the physically meaningful one. Re-referencing to a common absolute axis would misalign the
+transport window across sequences, optimising for parameter extraction at the cost of the
+observable we actually model. Universal absolute parameters are **out of scope**, noted as
+future work. The published records still store the absolute reference so others can make the
+other choice.
+
+**What "interpretable H" now means for this project:** not a universal absolute per-base
+table -- that framing is retired. It means (a) relative level structure within a sequence,
+which is reference-free, and (b) whether H puts spectral weight in the right places, which is
+what LDOS measures. (b) is now the primary interpretability handle rather than a supporting
+one.
+
+---
+
+### Original hypothesis, kept for the reasoning trail
 
 Every duplex here contains G unless it is AT-only, because every C pairs with a G. If the
 HOMO of a G-containing duplex is a G-derived level, then centring puts G at ~0 **by
