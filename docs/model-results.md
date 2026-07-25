@@ -71,6 +71,14 @@ structures (MD / crystal / predicted), which this branch is built to receive.
 
 ## Onsite/spectrum window constraint -- NEGATIVE RESULT (2026-07-23)
 
+> **Read the corrections further down this file before taking this section at face value.**
+> Two of its premises have since been retracted: (1) the [-1,1] window is the SUPERVISION
+> range (HOMO +/- 1 eV per sequence), not a physicality criterion, so "UNPHYSICAL" verdicts
+> based on window membership overstate what was measured; (2) "matches Roche" for the
+> synthetic control is legitimate, but for DFT models G sits near 0 by the energy convention
+> rather than by fit. The -33 eV runaway IS still pathological and that finding stands. See
+> "The [-1,1] window is the supervision range" below, and `docs/dataset.md`.
+
 Goal: force the learned reduced Hamiltonian to be physical (energies inside the transmission
 window). Branch `constrain-onsite-window` (DEAD, not merged).
 

@@ -1,5 +1,15 @@
 # Structured onsite head: physicality from parameterization (not penalty)
 
+> **SUPERSEDED 2026-07-24 -- historical record, do not build on it.** This spec's goal was to
+> "extract the per-base tight-binding parameters for comparison to literature" and to make
+> onsite "physical by construction" judged by membership of the [-1,1] window. Both premises
+> are retired: the energy grid is centred per sequence on the HOMO, so absolute per-base
+> values are not recoverable and G is pinned near 0 by construction for 495/515 sequences;
+> and the window is the supervision range, not a physicality criterion. The alpha sweep this
+> spec designed also cannot discriminate what it claims, since every alpha < 1 shares one
+> hypothesis class. The implementation and its measurements are sound and are recorded in
+> `docs/model-results.md`; only the framing is wrong. See `docs/dataset.md`.
+
 Status: design approved (brainstorm); revised after adversarial review. Pre-implementation.
 Branch: `structured-onsite-head` (off `main`). Date: 2026-07-23.
 

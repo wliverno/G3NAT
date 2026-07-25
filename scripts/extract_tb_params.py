@@ -1,5 +1,32 @@
 #!/usr/bin/env python3
-"""Extract the learned per-base onsite (baseline) TB parameters and compare to literature.
+"""Extract the learned per-base onsite (baseline) values.
+
+!! READ BEFORE TRUSTING THE OUTPUT (2026-07-24) !!
+
+Two caveats make the literature comparison below far weaker than it looks, and this script
+will happily print a confident "ordering matches Roche" verdict in cases where that verdict
+is guaranteed by construction:
+
+1. THE G COLUMN IS SET BY THE ENERGY CONVENTION, NOT BY THE FIT. The energy grid is centred
+   per sequence on that sequence's HOMO, and the HOMO is a G-derived level whenever any G is
+   present -- which is 495 of 515 sequences. So G is pinned near 0 by construction, and the
+   gauge-shift-to-G=0 step below does NOT neutralise this; it bakes it in. A "G highest,
+   ordering matches Roche" result is close to guaranteed regardless of what the model learned.
+   Measured support: AT-only sequences sit 0.813 eV below GC-only ones at 13.6 sigma with zero
+   overlap (docs/dataset.md).
+
+2. THE TABLE IS ONLY MEANINGFUL AT alpha=1.0. For any alpha < 1 the mixing is a vacuous
+   reparametrization of the free model -- the baseline collapses to a near-constant and the
+   context head does the fitting -- so `onsite_baseline` from those checkpoints is not "the
+   learned parameters" in any useful sense (docs/model-results.md, "CORRECTION").
+
+The project has retired the goal of recovering universal ABSOLUTE per-base parameters; these
+values are HOMO-referenced and per-sequence. Compare ORDERING and SPACING only, never
+magnitudes, and do not present G's position as a recovered physical quantity.
+
+Original description follows.
+
+Compare the learned per-base onsite (baseline) TB parameters to literature.
 Comparisons are GAUGE-CORRECTED (each set shifted so G=0) -- absolute onsite is gauge-dependent.
 Usage: conda run -n g3nat python scripts/extract_tb_params.py <checkpoint.pth>"""
 import sys, os

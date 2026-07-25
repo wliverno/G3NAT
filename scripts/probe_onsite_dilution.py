@@ -35,7 +35,14 @@ from g3nat.graph import sequence_to_graph
 from g3nat.data.pickle import load_single_pickle
 
 BASES = 'ATGC'
-ONSITE_TRUE = {'A': -0.49, 'T': -1.39, 'G': 0.00, 'C': -1.12}  # Roche 2003 (synthetic ground truth)
+# Roche 2003 onsite energies. These ARE the ground truth for the synthetic TB control
+# (g3nat/utils/physics.py generates that data from them), so the comparison is legitimate
+# there. They are NOT ground truth for a DFT-trained model: DFT onsite here is HOMO-referenced
+# per sequence, so absolute magnitudes are not comparable to a literature table, and G is
+# pinned near 0 by the centring convention rather than by the fit (docs/dataset.md). When this
+# column appears in a DFT model's report, read ordering only -- never agreement in magnitude.
+ONSITE_ROCHE_SYNTHETIC_TRUTH = {'A': -0.49, 'T': -1.39, 'G': 0.00, 'C': -1.12}
+ONSITE_TRUE = ONSITE_ROCHE_SYNTHETIC_TRUTH  # back-compat alias; prefer the explicit name
 WINDOW = (-1.0, 1.0)  # transmission window used throughout the project
 
 
