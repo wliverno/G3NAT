@@ -53,14 +53,13 @@ C) and **16 GC-only** (no A or T).
 Raw `Egrid` is 201 points spanning exactly 2 eV, e.g. `aaac` is `[-6.3031, -4.3031]` with
 mean `-5.3031`. The loader (`g3nat/data/pickle.py:50`) subtracts the mean, giving `[-1, 1]`.
 
-**willll states the grid is centred on the HOMO**, so the window is HOMO +/- 1 eV and the
-reference is **per-sequence**.
+**The grid is centred on the HOMO**, so the window is HOMO +/- 1 eV and the reference is
+**per-sequence**. Confirmed by willll 2026-07-24: this is how the transmission and DOS were
+generated, i.e. it is a property of the generation pipeline, not an inference.
 
-**NOT INDEPENDENTLY VERIFIED.** An attempt to confirm this from `<seq>_eigen.mat` and
-`<seq>_occ.mat` returned `nan` (parsing failure, not a contradiction). Indirect support is
-good: `mean(Egrid)` is `gggg -4.9443`, `acgt -5.0153`, `aaac -5.3031` -- G-rich highest,
-AT-rich lowest, which is the ordering expected if it tracks the HOMO, since G has the lowest
-ionization potential. Confirm before publishing.
+Corroborated independently by the composition measurement below: `mean(Egrid)` separates
+AT-only from GC-only sequences by 0.813 eV at 13.6 sigma with zero overlap, in the direction
+G's low ionization potential predicts.
 
 Consequences:
 
