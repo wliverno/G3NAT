@@ -439,12 +439,20 @@ Pairwise gap vs cross-seed scatter (calling a gap "resolved" requires gap > 2*sc
 | A-C  | 0.121 | 0.532   | not resolved |
 | T-C  | 0.092 | 0.527   | not resolved |
 
-**The data pins G against A and T, and pins nothing else.** A and T are mutually
-indistinguishable (that part of the single-seed reading replicates). C is the surprise: it is
-not clustered with A and T, it is *unconstrained* -- std 0.52, and its rank order changes
-between seeds (lowest of the four in seed 42, highest in seed 44). The single-seed C = -1.039
-that appeared to agree with Roche's -1.12 was coincidence. Any future claim about C from this
-model needs seeds.
+**CAVEAT (2026-07-24) -- G's position is largely the energy CONVENTION, not a fit result.**
+`Egrid` is centred per sequence on the HOMO, and the HOMO is a G-derived level whenever any G
+is present. Measured: AT-only sequences sit at E_HOMO = -5.7328 +/- 0.059 while GC-only sit at
+-4.9194 +/- 0.061 -- a 0.813 eV separation at 13.6 sigma with **zero overlap**, and a single GC
+pair alone moves it 0.62 eV. So for 495 of 515 sequences the centring pins a G level at ~0 *by
+construction*. "G is resolved" should be read as "G is where the reference put it", and its
+tight cross-seed agreement is partly the convention reasserting itself rather than the data
+speaking. Do not present the G value as a recovered physical parameter. See `docs/dataset.md`.
+
+With that caveat: A and T are mutually indistinguishable (that part of the single-seed reading
+replicates). C is the surprise: it is not clustered with A and T, it is *unconstrained* -- std
+0.52, and its rank order changes between seeds (lowest of the four in seed 42, highest in seed
+44). The single-seed C = -1.039 that appeared to agree with Roche's -1.12 was coincidence. Any
+future claim about C from this model needs seeds.
 
 ### 4c. The alpha=0.9 differentiation does not replicate
 
