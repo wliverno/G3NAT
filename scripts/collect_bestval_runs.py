@@ -18,6 +18,9 @@ from g3nat.graph import sequence_to_graph
 from g3nat.data.pickle import load_single_pickle
 
 BASES = ['A', 'T', 'G', 'C']
+# run-directory prefix, e.g. `bestval` (3000-epoch set) or `bv5k` (5000-epoch set)
+PFX = sys.argv[1] if len(sys.argv) > 1 else 'bestval'
+print(f'collecting prefix: outputs_{PFX}_*\n')
 
 
 def stat(v):
@@ -38,8 +41,8 @@ print('=' * 76)
 print('1. LOSS TABLES from the 3000-epoch reruns  (final vs best-val)')
 print('=' * 76)
 for label, pat, key in [
-        ('alpha', 'outputs_bestval_a*/hamiltonian_pickle_model.pth', r'_a([0-9.]+)_s'),
-        ('layers', 'outputs_bestval_L*/hamiltonian_pickle_model.pth', r'_L(\d+)_s')]:
+        ('alpha', f'outputs_{PFX}_a*/hamiltonian_pickle_model.pth', r'_a([0-9.]+)_s'),
+        ('layers', f'outputs_{PFX}_L*/hamiltonian_pickle_model.pth', r'_L(\d+)_s')]:
     groups = {}
     for d, (f, b, e) in curves(pat).items():
         k = re.search(key, d).group(1)
@@ -55,7 +58,7 @@ print('\n' + '=' * 76)
 print('2. PER-BASE BASELINES from BEST-VAL weights (alpha=1.0 cells)')
 print('=' * 76)
 rows = {}
-for p in sorted(glob.glob('outputs_bestval_a1.0_s*/hamiltonian_pickle_model_best.pth')):
+for p in sorted(glob.glob(f'outputs_{PFX}_a1.0_s*/hamiltonian_pickle_model_best.pth')):
     s = re.search(r'_s(\d+)', p).group(1)
     b = torch.load(p, map_location='cpu', weights_only=False)['model_state_dict'].get('onsite_baseline')
     if b is not None:
@@ -133,7 +136,7 @@ def eta2_of(model):
 
 
 print(f'\n   {"cell":>12} {"eta2":>8}   per-base mean onsite (A/T/G/C)')
-for p in sorted(glob.glob('outputs_bestval_L*/hamiltonian_pickle_model_best.pth')):
+for p in sorted(glob.glob(f'outputs_{PFX}_L*/hamiltonian_pickle_model_best.pth')):
     e2, means = eta2_of(load(p))
     tag = re.search(r'(L\d+_s\d+)', p).group(1)
     print(f'   {tag:>12} {e2:8.4f}   ' + '  '.join(f'{b}:{means.get(b, float("nan")):+.3f}' for b in BASES))
