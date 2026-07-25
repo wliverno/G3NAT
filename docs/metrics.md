@@ -23,7 +23,37 @@ val_loss = mean over val batches of [ Huber(log10 DOS_pred, log10 DOS_target)
   `a*T + b*LDOS + (1-b)*DOS`, where today's loss is exactly `a=1, b=0`.
 - Both targets are log10 of clamped quantities, so the metric is scale-free in the observable
   but sensitive to the clamp floor near zero.
-- Unless stated otherwise, a quoted `val_loss` is the **final epoch**, not the best epoch.
+### final-epoch vs best-val -- USE BEST-VAL
+
+```
+final_val = val_losses[-1]
+best_val  = min(val_losses)          # recoverable from ANY stored checkpoint, no retraining
+```
+
+**Every model in this project trains ~3x past its optimum.** Measured over six identical
+runs: best val is reached at epoch **549, 771, 1033, 1331, 1689, 1900 of 5000**, after which
+the model overfits, ending a mean of **0.060** worse (max 0.115). Consequences:
+
+- Final-epoch val measures *how far a run drifted past its own optimum* as much as it
+  measures fit. Best-val has 3.4x lower run-to-run std (0.0084 vs 0.0286).
+- The drift is **capacity-dependent**, so it penalises larger models more and can invert an
+  ordering. It did: the `num_layers` trend looks non-monotonic at final-epoch (L2 worse than
+  L1) and is cleanly monotonic at best-val. Overfit gaps by depth: L1 0.009, L2 0.070,
+  L3 0.048, L4 0.051.
+- `tail_mean` does **not** help (std 0.0295, no better than final-epoch). Do not use it as a
+  stability-improved substitute.
+
+Historical numbers quoted before 2026-07-24 are final-epoch. `scripts/collect_bestval.py`
+recomputes any table at best-val from stored curves at no compute cost.
+
+**But loss curves are recoverable and weights are not.** Runs before 2026-07-24 saved only
+final-epoch weights, so anything measured *from the model* -- per-base baselines, eta2,
+window fractions, LDOS -- was computed on overfit weights. `scripts/train.py` now also writes
+`checkpoint_best.pth` and `<model>_best.pth`; prefer those for any model-derived quantity.
+The best checkpoint is the best among **checkpointed** epochs (every `checkpoint_frequency`),
+and it is saved only when the current epoch is itself the running minimum, so its stored
+weights always match its stored value. `best_val` / `best_val_epoch` in that file are the
+true global minimum of the curve, which may be marginally lower.
 
 ## 2. Convergence and stability
 
@@ -51,16 +81,28 @@ total scatter  = std over runs varying both
 - **Model init is not seeded anywhere.** `--split_seed` controls only the train/val split
   (`g3nat/data/splits.py`). So two runs at the same `--split_seed` still differ in init, and
   any "cross-seed std" mixes split and init variance.
-- Measured 2026-07-24: init noise ~= **0.001** (L4/s42 0.6042 vs alpha=0/s42 0.6054; L4/s43
-  0.5823 vs alpha=0/s43 0.5818). Split scatter at alpha=0 is 0.0099. So the cross-seed number
-  is dominated by the split, and init contributes almost nothing.
+- **CORRECTED 2026-07-24 (this file previously said ~0.001 -- that was wrong).** The 0.001
+  figure came from two same-config pairs that happened to agree, i.e. n=2. Six runs at
+  identical config and identical `--split_seed 42` give:
+
+  | metric | mean | std (ddof=1) | range |
+  |---|---|---|---|
+  | final-epoch | 0.6281 | **0.0286** | 0.076 |
+  | best-val | 0.5679 | **0.0084** | 0.025 |
+
+  So init noise is ~0.029 on final-epoch, not 0.001, and the alpha=0 cross-seed std of
+  0.0099 at n=3 was a lucky draw rather than a tight measurement.
+- **Use best-val as the yardstick: a difference must exceed ~2 x 0.0084 = 0.017 to mean
+  anything.** On final-epoch the equivalent bar is ~0.057.
 - **`std` here is `np.std` with default `ddof=0` (population).** At n=3 this understates the
   sample standard deviation by a factor `sqrt(3/2) = 1.22`. All quoted stds and the
   "resolved" verdicts below use the population form; the verdicts were re-checked and none
   flip under `ddof=1`, but new comparisons should say which convention they use.
-- A number obtained on a node with uncorrectable ECC errors is not a measurement. The L4/s42
-  cell read 0.6539 on `g3070` and 0.6042 on a clean node -- an 8% error from a run that
-  exited 0.
+- **RETRACTED:** an earlier version of this file blamed L4/s42's 0.6539 (vs 0.6042 on a clean
+  node) on `g3070`'s uncorrectable ECC errors. With the real init spread known (range 0.076),
+  0.6539 is an ordinary draw and the ECC attribution is unsupported. The ECC errors were real
+  -- they killed two jobs outright -- but they do not explain that number. Still exclude a
+  node throwing ECC errors; just do not attribute specific values to it without evidence.
 
 ## 4. "Resolved" -- when is a gap real?
 
