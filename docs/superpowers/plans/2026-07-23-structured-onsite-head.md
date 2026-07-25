@@ -1,5 +1,15 @@
 # Structured Onsite Head Implementation Plan
 
+> **SUPERSEDED 2026-07-24 -- historical record of completed work, do not build on the
+> framing.** Tasks 1-7 were implemented and their measurements stand (`docs/model-results.md`).
+> What is retired is why they were done: the goal of recovering universal absolute per-base
+> parameters, the use of [-1,1] window membership as a physicality criterion, and the belief
+> that the alpha sweep could discriminate how much context the data needs. The energy grid is
+> HOMO-centred per sequence, so absolute per-base values are not recoverable; the window is
+> the supervision range; and every alpha < 1 shares one hypothesis class. This plan is also
+> the literal source of `g3nat/evaluation/physicality.py` and `scripts/extract_tb_params.py`,
+> both of which now carry caveats. See `docs/dataset.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a per-base structured onsite head to the Hamiltonian GNN so the learned onsite energies are physical by construction, and measure how much context the DFT data needs by sweeping the mixing factor alpha.

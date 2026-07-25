@@ -9,11 +9,24 @@ For each cell checkpoint (outputs_<prefix>_a<alpha>_s<seed>/hamiltonian_pickle_m
     model.H over a FIXED sample of real DFT sequences (identical across cells -> comparable).
   - per-base baseline distinctness + eta^2 (how strongly onsite is tied to base identity).
 
-The val_loss(alpha) column IS the discriminator:
-  flat as alpha->1   => DFT onsite needs little context; a per-base baseline suffices
-                        (interpretable H at ~no fit cost -> structured head is a real win).
-  rising sharply     => the data wants context-dependent onsite; a 1-orbital-per-base
-                        reduction is inadequate (expect penalty-like collapse). Also a result.
+!! THE DISCRIMINATOR LOGIC BELOW IS RETRACTED (2026-07-24). Kept for provenance only. !!
+
+The original reading was: "val_loss flat as alpha->1 => onsite needs little context, a
+per-base baseline suffices, interpretable H at ~no fit cost, structured head is a real win;
+rising sharply => the data wants context-dependent onsite."
+
+It cannot discriminate either of those. For every alpha < 1 the mixing is a vacuous
+reparametrization -- collapse the baseline table to a constant and rescale onsite_proj's last
+layer by 1/(1-alpha) and you recover the free model exactly -- so the hypothesis class is
+IDENTICAL across [0,1) and only alpha=1.0 changes it. The sweep measures how expensive the
+free solution is to reach at each reparametrization, not how much context the data wants.
+See docs/model-results.md, "CORRECTION: the alpha sweep does not measure what it was designed
+to measure".
+
+Separately, the per-base table it extracts is HOMO-referenced: G is pinned near 0 by the
+energy convention for 495 of 515 sequences, so "G on top" is not a fit result.
+
+The columns below are still correct as measurements. Only the interpretation was wrong.
 
 Physicality uses a fixed DFT sequence sample (not each cell's val split) on purpose: it is a
 property of the learned H, and holding the sample constant across alphas keeps the columns
