@@ -397,7 +397,88 @@ is what brings onsite into the DFT band.
    compatible with arbitrary geometry (fraying, flipped/twisted bases must produce different
    onsite and coupling). Generate a table *from* the trained model post hoc instead.
 
-## Best-val WEIGHTS (2026-07-25) -- overfitting was destroying the per-base structure
+## CONVERGED best-val results (2026-07-25, 5000 epochs) -- supersedes everything below
+
+22 cells, 5000 epochs, best-val checkpointing, `--exclude=g3070`, zero failures.
+`outputs_bv5k_*`, collected by `scripts/collect_bestval_runs.py bv5k`. This is the first
+dataset in the project that is both converged and measured on best-val weights.
+
+**The 3000-epoch answer was wrong because those runs had not converged.** Keep 5000
+(willll's original choice); see the truncation note at the end, which argues for longer still.
+
+### The per-base structure is the GC/AT base-pair split
+
+alpha=1.0, 3 seeds, referenced to G:
+
+| | A | T | C |
+|---|---|---|---|
+| mean | -0.738 | -0.748 | **-0.020** |
+| std  | 0.029  | 0.028  | 0.045  |
+
+| pair | gap | scatter | verdict |
+|------|-------|---------|--------------|
+| A-T  | 0.010 | 0.040   | not resolved |
+| G-C  | 0.020 | 0.045   | not resolved |
+| A-G  | 0.738 | 0.029   | RESOLVED |
+| T-G  | 0.748 | 0.028   | RESOLVED |
+| A-C  | 0.718 | 0.054   | RESOLVED |
+| T-C  | 0.728 | 0.053   | RESOLVED |
+
+**Two groups: {G, C} and {A, T}, separated by 0.74 eV, unresolved within each.** That is the
+**base-pair** split, not the isolated-base ordering -- and it is the canonical structure in DNA
+charge transport. Compare base-pair vertical IPs (Khan, *Comput. Theor. Chem.* 1013, 136-139,
+2013, doi:10.1016/j.comptc.2013.03.007): GC 7.29 vs AT 7.88, a **0.59 eV** separation. We
+measure **0.74 eV**. Same structure, same order of magnitude.
+
+This makes physical sense for a one-site-per-base model of a *duplex*: every base is
+hydrogen-bonded to its partner, so the effective unit is the pair. Note also that **C is not
+pinned by the energy convention the way G is**, so C landing with G is a genuine result rather
+than an artifact of HOMO referencing.
+
+Cross-seed std is 0.028-0.045, versus 0.16-0.52 in every earlier version. **First stable
+per-base result the project has produced.** It supersedes both the final-epoch reading
+(G > A ~= T > C with C "unconstrained", std 0.52) and the truncated 3000-epoch reading
+(G > A ~= T > C with C at -1.176).
+
+### eta2 vs depth: the trade-off is real, and both positions were half right
+
+| L | eta2 (4 seeds) | eta2 mean | best-val |
+|---|---|---|---|
+| 1 | 0.495, 0.497, 0.277, 0.517 | **0.446** | 0.7532 |
+| 2 | 0.090, 0.354, 0.030, 0.165 | 0.160 | 0.6651 |
+| 3 | 0.073, 0.140, 0.144, 0.106 | 0.115 | 0.6171 |
+| 4 | 0.079, 0.158, 0.058       | 0.098 | 0.5778 |
+
+**Depth costs base-identity structure** (L1 0.446 vs L4 0.098, ~2.8 sigma) **and improves fit**
+(0.753 -> 0.578, monotonic, every step clearing the 0.017 bar). Both are true. willll was right
+that depth helps fit; the receptive-field argument was right that it costs per-base structure.
+
+**But high eta2 does not mean "more interpretable".** L1's actual onsite values are extreme --
+`L1_s45` gives G -11.5, C -12.1; `L1_s43` gives G -10.3. eta2 is a variance *ratio*, so L1 buys
+base-determinism by making everything large, not by making it physical. Do not read the eta2
+column as an interpretability score on its own.
+
+### alpha=1.0 penalty, and a truncation caveat that limits all of the above
+
+| alpha | final | best-val | best epochs |
+|-------|-------|----------|-------------|
+| 0     | 0.6267 +/- 0.0210 | 0.5794 +/- 0.0033 | 999, 1320, 2315 |
+| 1.0   | 0.8640 +/- 0.0686 | 0.7950 +/- 0.0632 | 2857, 4788, 4864 |
+
+Penalty 0.216 at ~3.4 sigma -- significant again, having read as 1.5 sigma on the truncated
+3000-epoch set.
+
+**CAVEAT: two arms are still truncated at 5000 epochs.**
+- alpha=1.0 peaks at 2857 / 4788 / 4864 (vs alpha=0's 999-2315). The per-base constraint
+  converges far more slowly, so 0.795 is an UPPER bound and the penalty may be overstated.
+- L1 peaks at 4156 / 4857 / 4927 / 4982 -- every cell at the cap. Shallow models also converge
+  slowly, so 0.7532 is an upper bound and the L1->L2 gap may be smaller than it looks.
+
+General pattern worth noting: **more constrained or shallower models converge more slowly**, so
+a fixed epoch budget systematically penalises exactly the arms we are trying to evaluate
+fairly. Any future comparison involving alpha=1.0 or L1 needs a longer budget, not 5000.
+
+## Best-val WEIGHTS (2026-07-24) -- superseded by the converged results above
 
 First measurement of any model-derived quantity on best-val weights. Everything before this
 was read off models that had been overfitting for thousands of epochs.
