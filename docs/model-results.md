@@ -397,6 +397,58 @@ is what brings onsite into the DFT band.
    compatible with arbitrary geometry (fraying, flipped/twisted bases must produce different
    onsite and coupling). Generate a table *from* the trained model post hoc instead.
 
+## BEST-VAL correction (2026-07-24) -- read this before any table below
+
+Every number below this line, and everywhere above it, is **final-epoch**. That metric is
+substantially noise. Six runs at identical config and identical `--split_seed 42`, differing
+only in (unseeded) init:
+
+| metric | mean | std (ddof=1) | range |
+|---|---|---|---|
+| final-epoch | 0.6281 | 0.0286 | 0.076 |
+| **best-val** | **0.5679** | **0.0084** | 0.025 |
+
+Best val is reached at epoch **549-1900 of 5000**; the models then overfit for the remaining
+3000-4500 epochs, ending a mean of 0.060 worse. So run-to-run scatter is mostly drift past
+each run's own optimum. Use best-val; the bar for a meaningful difference is ~2 x 0.0084 =
+**0.017** (on final-epoch it is ~0.057). Regenerate any table with
+`scripts/collect_bestval.py` -- it costs no compute, since `val_losses` is stored in every
+checkpoint.
+
+### Both sweeps, recomputed at best-val
+
+| alpha | final-epoch | best-val |
+|-------|-------------|----------|
+| 0     | 0.5920 +/- 0.0121 | **0.5685 +/- 0.0052** |
+| 0.25  | 0.6251 +/- 0.0450 | 0.5829 +/- 0.0299 |
+| 0.5   | 0.6197 +/- 0.0534 | 0.5832 +/- 0.0471 |
+| 0.75  | 0.5991 +/- 0.0155 (n=2) | 0.5612 +/- 0.0345 (n=2) |
+| 0.9   | 0.6465 +/- 0.0452 | 0.6242 +/- 0.0466 |
+| 1.0   | 0.7331 +/- 0.0599 | 0.6915 +/- 0.0806 |
+
+| layers | final-epoch | best-val | overfit gap |
+|--------|-------------|----------|-------------|
+| 1 | 0.7747 +/- 0.0139 | **0.7662 +/- 0.0116** | 0.009 |
+| 2 | 0.7860 +/- 0.0749 | **0.7160 +/- 0.0355** | 0.070 |
+| 3 | 0.6498 +/- 0.0548 | **0.6018 +/- 0.0226** | 0.048 |
+| 4 | 0.6135 +/- 0.0367 | **0.5630 +/- 0.0141** | 0.051 |
+
+**Two conclusions move:**
+
+1. **The layers trend IS monotonic** (0.766 > 0.716 > 0.602 > 0.563), and every step clears
+   the 0.017 bar. The earlier "L2 is worse than L1, so it isn't monotonic" was an artifact:
+   overfitting is capacity-dependent (gaps 0.009 / 0.070 / 0.048 / 0.051), so final-epoch
+   penalises deeper cells and inverted the ordering. Depth genuinely helps fit, 0.766 -> 0.563.
+2. **The alpha=1.0 penalty weakens.** 0.5685 vs 0.6915 is 0.123 against a pooled scatter of
+   ~0.081, about **1.5 sigma** -- suggestive, not established. The earlier "pure per-base
+   costs 24% of fit" was a final-epoch reading and overstates it.
+
+**Caveat that this correction cannot fix:** stored weights before 2026-07-24 are final-epoch
+only. Loss numbers are recoverable from the curves; anything measured *from the model* --
+the per-base baselines, eta2, window fractions, the LDOS spectral weights -- was computed on
+overfit weights and would need retraining with best-val checkpointing to correct.
+`scripts/train.py` now saves `<model>_best.pth`.
+
 ## Replication across seeds (2026-07-24) -- four conclusions changed
 
 Collected by `scripts/collect_all_runs.py` (checkpoint metadata only, no forward passes, so

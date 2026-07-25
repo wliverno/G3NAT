@@ -203,10 +203,40 @@ def main():
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
     # Train
+    #
+    # BEST-VAL CHECKPOINTING (added 2026-07-24). The final-epoch weights are NOT the best
+    # weights. Measured over six runs at identical config and identical split_seed: best val
+    # is reached at epoch 549-1900 of 5000, and the model then overfits for the remaining
+    # 3000-4500 epochs, ending a mean of 0.060 worse (max 0.115). That drift is also the
+    # dominant source of run-to-run scatter -- final-epoch std 0.0286 vs best-val std 0.0084,
+    # 3.4x tighter -- and it is capacity-dependent, so it penalises deeper models more and
+    # can invert an ordering (it inverted the num_layers trend). See docs/metrics.md.
+    #
+    # Granularity: this fires with the checkpoint callback (every checkpoint_frequency
+    # epochs), so the saved weights are within that many epochs of the true optimum, not
+    # exactly at it.
+    # NOTE: seeded from resume_val_losses AFTER the resume block below, which is where
+    # that variable is defined. Do not move this initialisation down into the callback.
+    best_val = {'value': float('inf')}
+
     def checkpoint_cb(model, opt, epoch, train_losses, val_losses):
         save_checkpoint(model, opt, epoch, train_losses, val_losses,
                        vars(args), energy_grid,
                        os.path.join(args.checkpoint_dir, 'checkpoint_latest.pth'))
+        # Save only when THIS epoch is the running minimum, so the stored weights actually
+        # correspond to the stored value. Testing min(val_losses) instead would fire at the
+        # next checkpoint after a dip and save weights from a worse epoch under the name
+        # "best" (observed: best at epoch 44, weights saved from epoch 50).
+        # Consequence: this is the best among CHECKPOINTED epochs, not the global best
+        # epoch. With checkpoint_frequency=10 we sample every 10th epoch. The reported
+        # 'best_val' below is the true global minimum of the curve and may be slightly
+        # lower than the val loss of these weights; both are stored so the gap is visible.
+        if val_losses and float(val_losses[-1]) <= float(min(val_losses)) + 1e-12 \
+                and float(val_losses[-1]) < best_val['value'] - 1e-12:
+            best_val['value'] = float(val_losses[-1])
+            save_checkpoint(model, opt, epoch, train_losses, val_losses,
+                           vars(args), energy_grid,
+                           os.path.join(args.checkpoint_dir, 'checkpoint_best.pth'))
 
     def progress_cb(epoch, train_loss, val_loss):
         save_progress_file(epoch, train_loss, val_loss, args.checkpoint_dir, vars(args))
@@ -227,6 +257,11 @@ def main():
         resume_optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
         resume_optimizer.load_state_dict(ckpt['optimizer_state_dict'])
         print(f"Resuming from epoch {start_epoch}")
+        # Carry the running best across a requeue, or the first post-resume checkpoint
+        # would overwrite a genuinely better earlier one.
+        if resume_val_losses:
+            best_val['value'] = float(min(resume_val_losses))
+            print(f"Resuming best val: {best_val['value']:.4f}")
 
     print("Training...")
     train_losses, val_losses = train_model(
@@ -255,10 +290,32 @@ def main():
         'energy_grid': energy_grid
     }, model_path)
 
+    # Also publish the BEST-val weights next to the final ones. Analysis that reads the
+    # model (onsite values, eta2, LDOS) should prefer these -- the final weights are
+    # thousands of epochs past the optimum. Loss comparisons can use either, since
+    # val_losses is stored in both.
+    best_ckpt = os.path.join(args.checkpoint_dir, 'checkpoint_best.pth')
+    best_path = model_path.replace('.pth', '_best.pth')
+    if os.path.exists(best_ckpt):
+        bc = torch.load(best_ckpt, map_location='cpu', weights_only=False)
+        torch.save({
+            'model_state_dict': bc['model_state_dict'],
+            'args': vars(args),
+            'train_losses': train_losses,
+            'val_losses': val_losses,
+            'energy_grid': energy_grid,
+            'best_val': float(min(val_losses)),
+            'best_val_epoch': int(np.argmin(val_losses)),
+            'saved_at_epoch': bc.get('epoch'),
+        }, best_path)
+
     print(f"Training complete!")
     print(f"Model saved: {model_path}")
     print(f"Final train loss: {train_losses[-1]:.4f}")
     print(f"Final val loss: {val_losses[-1]:.4f}")
+    print(f"BEST val loss:  {min(val_losses):.4f} at epoch {int(np.argmin(val_losses))}")
+    if os.path.exists(best_path):
+        print(f"Best model saved: {best_path}")
     if os.path.exists(checkpoint_path):
         os.remove(checkpoint_path)
 
