@@ -519,7 +519,15 @@ checkpoint.
 **Two conclusions move:**
 
 1. **The layers trend IS monotonic** (0.766 > 0.716 > 0.602 > 0.563), and every step clears
-   the 0.017 bar. The earlier "L2 is worse than L1, so it isn't monotonic" was an artifact:
+   the 0.017 bar. **This is also what the literature predicts at our graph size** -- see
+   `docs/references.md`: Alon & Yahav (ICLR 2021) require depth >= diameter for information to
+   cross the graph, and Gilmer et al. (ICML 2017) found T>=3 message-passing steps necessary on
+   QM9 (up to 29 nodes, our order of magnitude), with 1-2 insufficient. The oversmoothing
+   folklore that motivated expecting the opposite is calibrated on node classification over
+   graphs 3-4 orders of magnitude larger and does not transfer here. Epping et al. (NeurIPS
+   2024) further show a non-oversmoothing phase exists at large weight-init variance, which
+   hidden_dim=256 plausibly sits in. The earlier "L2 is worse than L1, so it isn't monotonic"
+   was an artifact:
    overfitting is capacity-dependent (gaps 0.009 / 0.070 / 0.048 / 0.051), so final-epoch
    penalises deeper cells and inverted the ordering. Depth genuinely helps fit, 0.766 -> 0.563.
 2. **The alpha=1.0 penalty weakens.** 0.5685 vs 0.6915 is 0.123 against a pooled scatter of
