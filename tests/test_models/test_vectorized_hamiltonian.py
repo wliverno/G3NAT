@@ -63,6 +63,25 @@ class TestConstructHamiltonianNOrb1:
         assert torch.allclose(H_vec, H_ref, atol=1e-6), \
             f"Max diff: {(H_vec - H_ref).abs().max()}"
 
+    def test_single_graph_matches_reference_with_structured_onsite_mixing(self):
+        """Vectorized H matches reference implementation with structured_onsite mixing
+        turned on (interior alpha=0.6, so both baseline and context contribute).
+        Real ref-vs-vec equality check -- not just a Hermiticity sanity gate."""
+        _, model = _make_model(n_orb=1, structured_onsite=True,
+                                alpha_mode='fixed', alpha_value=0.6)
+        model.eval()
+        graph = sequence_to_graph("ACGT", "ACGT", 0, 3, 0.1, 0.1)
+        data = Batch.from_data_list([graph])
+        with torch.no_grad():
+            x, edge_attr, edge_index, batch, x_init, _ = _run_gnn_layers(model, data)
+            H_vec, size_vec = model.construct_hamiltonian_from_graph(
+                x, edge_attr, edge_index, batch, x_init)
+            H_ref, size_ref = model._construct_hamiltonian_reference(
+                x, edge_attr, edge_index, batch, x_init)
+        assert size_vec == size_ref
+        assert torch.allclose(H_vec, H_ref, atol=1e-6), \
+            f"Max diff: {(H_vec - H_ref).abs().max()}"
+
     def test_batched_graphs_match_reference(self):
         """Vectorized H matches reference for a batch of identical-length graphs."""
         _, model = _make_model(n_orb=1)

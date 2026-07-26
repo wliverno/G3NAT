@@ -133,6 +133,23 @@ outputs/
 outputs_fray/
 !tests/baseline/outputs/
 logs/
+
+# Training run artifacts: every sweep cell writes outputs_<prefix>_<tag>/ (final model)
+# and ckpt_<prefix>_<tag>/ (resume checkpoints + training_status.txt). Models are large and
+# reproducible from the runner scripts + recorded config, so they stay out of git.
+# Provenance lives in docs/model-results.md and the slurm-*.out logs.
+outputs_*/
+ckpt_*/
+checkpoint/
+checkpoint2/
+
+# DFT dataset (2058 pickles, ~500 seqs x 4 contact variants) and its archive.
+# Source of record is DNADataset/ upstream, not this repo.
+pickle_files/
+pickle_files.tar.gz
+
+# MATLAB / NEGF intermediates
+*.mat
 *.jpg
 *.jpeg
 *.pdf

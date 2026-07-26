@@ -1,11 +1,7 @@
 # tests/baseline/test_baseline_data.py
-import pickle
 import numpy as np
-from pathlib import Path
 from g3nat.data import create_dna_dataset
-
-BASELINE_DIR = Path(__file__).parent / "outputs"
-BASELINE_DIR.mkdir(exist_ok=True)
+from ._util import check_or_capture
 
 def test_capture_dataset_creation():
     """Capture current dataset creation behavior."""
@@ -35,10 +31,7 @@ def test_capture_dataset_creation():
         'graph0_transmission': graph0.transmission.clone()
     }
 
-    with open(BASELINE_DIR / "dataset.pkl", "wb") as f:
-        pickle.dump(baseline, f)
-
-    print(f"Dataset baseline: {len(dataset)} samples")
+    check_or_capture("dataset.pkl", baseline)
 
 if __name__ == "__main__":
     test_capture_dataset_creation()
