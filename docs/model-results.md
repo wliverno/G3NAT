@@ -397,7 +397,53 @@ is what brings onsite into the DFT band.
    compatible with arbitrary geometry (fraying, flipped/twisted bases must produce different
    onsite and coupling). Generate a table *from* the trained model post hoc instead.
 
-## CONVERGED best-val results (2026-07-25, 5000 epochs) -- supersedes everything below
+## RETRACTED at 15000 epochs (2026-07-26) -- the per-base result is NOT stable
+
+The section below claims the GC/AT base-pair split is "the first stable per-base result".
+**That claim is withdrawn.** It was measured at 5000 epochs, where alpha=1.0 had not
+converged (best epochs there: 2857/4788/4864, at the cap). At 15000 epochs the same cells
+peak at 8592/11492/13925 and give a different, unstable answer.
+
+alpha=1.0, 15000 epochs, 3 seeds:
+
+| seed | best-val | best epoch | C rel. G |
+|------|----------|------------|----------|
+| 42   | **0.6600** | 11492    | **-1.1898** |
+| 43   | 0.7858   | 13925      | +0.0120  |
+| 44   | 0.7544   | 8592       | -0.0032  |
+
+**The seeds land in different-quality basins**, not scattered around one optimum: 0.660 vs
+0.754/0.786 is 11-15 sigma against the 0.0084 best-val noise floor. And the BEST solution is
+the one that does NOT show the GC/AT split -- seed 42 puts C at -1.19 relative to G, close to
+Roche's -1.12, while the two seeds giving C ~= G are the worse fits. So the base-pair split
+came from runs stuck in the inferior basin.
+
+Cross-seed std for C: 0.045 at 5000 epochs, **0.690** at 15000. The apparent stability at 5000
+was an artifact of every run being stopped at a similar pre-convergence point.
+
+**eta2 vs depth also fails to survive.** At 15000: L1 0.221 +/- 0.180, L2 0.181 +/- 0.093,
+L3 0.159 +/- 0.075, L4 0.072 +/- 0.029. L1 vs L4 falls from 2.8 sigma to **0.8 sigma -- not
+resolved**. L1's four seeds are bimodal (0.058, 0.069 | 0.373, 0.381), the same
+two-basin behaviour.
+
+**What DOES survive at 15000:**
+- The depth ordering on FIT is robust and monotonic at n=4: L1 0.7737, L2 0.6704, L3 0.6136,
+  L4 0.5814, every step clearing the 0.017 bar.
+- alpha=1.0 was genuinely truncated at 5000. Its penalty drops from 0.216 (3.4 sigma) to
+  0.138 (2.1 sigma) with the longer budget -- the shorter run was penalising it unfairly.
+  It may STILL be truncated; s43 peaked at 13925 of 15000.
+
+**Honest state: there is no converged, reproducible per-base answer.** The pure per-base model
+is pathologically slow to converge and lands wherever initialization sends it. Any per-base
+number quoted from this project so far has depended on the training budget, and the story has
+changed three times (final-epoch, 3000, 5000, 15000). Do not quote one without stating the
+budget and the seed spread.
+
+This is also the clearest empirical sign yet of the under-determination the project has been
+chasing -- not a clean degeneracy (the basins differ in loss), but a rugged landscape with
+multiple distinct solutions that a fixed budget cannot distinguish between.
+
+## Superseded: 5000-epoch results (2026-07-25) -- read the retraction above first
 
 22 cells, 5000 epochs, best-val checkpointing, `--exclude=g3070`, zero failures.
 `outputs_bv5k_*`, collected by `scripts/collect_bestval_runs.py bv5k`. This is the first
