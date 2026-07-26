@@ -59,6 +59,13 @@ def parse_args():
                             'Requires a geometry cache built via GeomCacheJob.')
     parser.add_argument('--geom_cache', type=str, default='geom_cache/geometry.pkl',
                        help='Path to the per-sequence geometry cache (used with --use_geometry).')
+    parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'adamw'],
+                       help="Optimizer. 'adam' (default) reproduces historical runs exactly. "
+                            "'adamw' decouples weight decay -- Loshchilov & Hutter ICLR 2019 "
+                            "show Adam's weight_decay is not true weight decay, so the "
+                            "effective regularization is weaker than the nominal value.")
+    parser.add_argument('--weight_decay', type=float, default=1e-5,
+                       help='Weight decay. Default 1e-5 matches the historical hardcoded value.')
     parser.add_argument('--split_seed', type=int, default=42,
                        help='Seed for the sequence-grouped train/val split.')
     parser.add_argument('--structured_onsite', action='store_true',
@@ -254,7 +261,11 @@ def main():
         start_epoch = ckpt['epoch'] + 1
         resume_train_losses = ckpt['train_losses']
         resume_val_losses = ckpt['val_losses']
-        resume_optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+        # Must match the optimizer the Trainer will build, or a requeue silently switches
+        # optimizer mid-run and the loaded state_dict is applied to the wrong type.
+        _Opt = torch.optim.AdamW if args.optimizer.lower() == 'adamw' else torch.optim.Adam
+        resume_optimizer = _Opt(model.parameters(), lr=args.learning_rate,
+                                weight_decay=args.weight_decay)
         resume_optimizer.load_state_dict(ckpt['optimizer_state_dict'])
         print(f"Resuming from epoch {start_epoch}")
         # Carry the running best across a requeue, or the first post-resume checkpoint
@@ -270,6 +281,8 @@ def main():
         val_loader=val_loader,
         num_epochs=args.num_epochs,
         learning_rate=args.learning_rate,
+        optimizer_name=args.optimizer,
+        weight_decay=args.weight_decay,
         device=str(device),
         checkpoint_frequency=10,
         checkpoint_callback=checkpoint_cb,
