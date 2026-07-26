@@ -12,6 +12,13 @@ class TrainingConfig:
     checkpoint_frequency: int = 10
     checkpoint_dir: Optional[str] = None
     warmup_epochs: int = 50
+    # Optimizer. Defaults reproduce the historical hardcoded Adam(weight_decay=1e-5) exactly.
+    # 'adamw' decouples the decay: Loshchilov & Hutter, ICLR 2019 (arXiv:1711.05101) show that
+    # Adam's `weight_decay` is NOT true weight decay -- it is folded into the gradient and then
+    # rescaled by Adam's per-parameter adaptive rates, so the effective regularization is
+    # weaker and parameter-dependent. See docs/references.md.
+    optimizer: str = 'adam'          # 'adam' | 'adamw'
+    weight_decay: float = 1e-5
 
     @classmethod
     def from_kwargs(cls, **kwargs):

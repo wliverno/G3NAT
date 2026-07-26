@@ -36,12 +36,18 @@ class Trainer:
 
         self.model = self.model.to(self.device)
 
-        # Initialize optimizer
-        self.optimizer = torch.optim.Adam(
-            self.model.parameters(),
-            lr=self.config.learning_rate,
-            weight_decay=1e-5
-        )
+        # Initialize optimizer. Default 'adam' + 1e-5 reproduces the historical hardcoded
+        # behaviour exactly, so existing comparisons are unaffected.
+        opt_name = getattr(self.config, 'optimizer', 'adam').lower()
+        wd = getattr(self.config, 'weight_decay', 1e-5)
+        if opt_name == 'adamw':
+            self.optimizer = torch.optim.AdamW(
+                self.model.parameters(), lr=self.config.learning_rate, weight_decay=wd)
+        elif opt_name == 'adam':
+            self.optimizer = torch.optim.Adam(
+                self.model.parameters(), lr=self.config.learning_rate, weight_decay=wd)
+        else:
+            raise ValueError(f"unknown optimizer {opt_name!r}; expected 'adam' or 'adamw'")
 
         # Loss function
         self.criterion = nn.HuberLoss()
@@ -205,7 +211,8 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
                start_epoch: int = 0, train_losses: List[float] = None,
                val_losses: List[float] = None, optimizer: torch.optim.Optimizer = None,
                checkpoint_callback=None, progress_callback=None, max_grad_norm: float = 1.0,
-               warmup_epochs: int = 50):
+               warmup_epochs: int = 50, optimizer_name: str = 'adam',
+               weight_decay: float = 1e-5):
     """
     Train the DNA Transport GNN model (backward-compatible function).
 
@@ -237,7 +244,10 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         max_grad_norm=max_grad_norm,
         checkpoint_frequency=checkpoint_frequency,
         checkpoint_dir=checkpoint_dir,
-        warmup_epochs=warmup_epochs
+        warmup_epochs=warmup_epochs,
+        # `optimizer_name`, not `optimizer` -- the latter is the resume OBJECT below.
+        optimizer=optimizer_name,
+        weight_decay=weight_decay
     )
 
     # Create trainer
