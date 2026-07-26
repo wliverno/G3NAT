@@ -40,6 +40,20 @@ source /gscratch/anantram/willll/miniconda3/etc/profile.d/conda.sh
 conda activate g3nat
 cd /mmfs1/gscratch/anantram/willll/G3NAT
 
+# --- disk guard -------------------------------------------------------------
+# 2026-07-25: 15 of 22 cells in the 15000-epoch run died within 60s across 11
+# different nodes, with logs truncated mid-traceback, because /mmfs1 was 100%
+# full. Failed writes look like a crash, not a disk error, and burn GPU time
+# before dying. Fail loudly and early instead.
+MIN_FREE_GB=${MIN_FREE_GB:-50}
+FREE_GB=$(df -BG --output=avail . | tail -1 | tr -dc '0-9')
+if [ "${FREE_GB:-0}" -lt "$MIN_FREE_GB" ]; then
+  echo "ABORT: only ${FREE_GB}GB free on $(df -h . | tail -1 | awk '{print $6}'), need ${MIN_FREE_GB}GB."
+  echo "       Checkpoint writes will fail mid-run and the job will die looking like a crash."
+  exit 1
+fi
+echo "disk check: ${FREE_GB}GB free (min ${MIN_FREE_GB}GB) -- ok"
+
 IFS=' ' read -ra ALPHA_ARR <<< "${ALPHAS:-0 0.25 0.5 0.75 0.9 1.0}"
 IFS=' ' read -ra SEED_ARR  <<< "${SEEDS:-42 43 44}"
 NA=${#ALPHA_ARR[@]}
