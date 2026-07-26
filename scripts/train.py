@@ -19,7 +19,6 @@ from g3nat.training.callbacks import save_checkpoint, save_progress_file
 from g3nat.utils import setup_device
 
 from torch_geometric.loader import DataLoader
-from sklearn.model_selection import train_test_split
 from torch.utils.data import Subset
 
 def parse_args():
@@ -60,6 +59,23 @@ def parse_args():
                             'Requires a geometry cache built via GeomCacheJob.')
     parser.add_argument('--geom_cache', type=str, default='geom_cache/geometry.pkl',
                        help='Path to the per-sequence geometry cache (used with --use_geometry).')
+    parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'adamw'],
+                       help="Optimizer. 'adam' (default) reproduces historical runs exactly. "
+                            "'adamw' decouples weight decay -- Loshchilov & Hutter ICLR 2019 "
+                            "show Adam's weight_decay is not true weight decay, so the "
+                            "effective regularization is weaker than the nominal value.")
+    parser.add_argument('--weight_decay', type=float, default=1e-5,
+                       help='Weight decay. Default 1e-5 matches the historical hardcoded value.')
+    parser.add_argument('--split_seed', type=int, default=42,
+                       help='Seed for the sequence-grouped train/val split.')
+    parser.add_argument('--structured_onsite', action='store_true',
+                       help='Mix a per-base onsite baseline with the context head.')
+    parser.add_argument('--alpha_granularity', choices=['global', 'per_base'], default='global')
+    parser.add_argument('--alpha_mode', choices=['fixed', 'learned'], default='fixed')
+    parser.add_argument('--alpha_value', type=float, default=0.0,
+                       help='Fixed mixing factor in [0,1] (alpha_mode=fixed).')
+    parser.add_argument('--alpha_init', type=float, default=0.9,
+                       help='Initial mixing factor (alpha_mode=learned).')
 
     # Training parameters
     parser.add_argument('--num_epochs', type=int, default=100)
@@ -75,6 +91,8 @@ def parse_args():
 
 def main():
     args = parse_args()
+    assert not (args.alpha_granularity == 'per_base' and args.alpha_mode == 'fixed'), \
+        "per_base+fixed needs 4 alphas; use learned or global"
 
     os.makedirs(args.output_dir, exist_ok=True)
     os.makedirs(args.checkpoint_dir, exist_ok=True)
@@ -146,10 +164,9 @@ def main():
             geometry_cache=geom_cache
         )
 
-    # Split dataset
-    train_indices, val_indices = train_test_split(
-        range(len(dataset)), test_size=0.2, random_state=42
-    )
+    # Split dataset -- GROUPED by sequence so no sequence appears in both train and val.
+    from g3nat.data.splits import grouped_split
+    train_indices, val_indices = grouped_split(seqs, test_size=0.2, seed=args.split_seed)
     train_dataset = Subset(dataset, train_indices)
     val_dataset = Subset(dataset, val_indices)
 
@@ -182,16 +199,51 @@ def main():
             n_orb=args.n_orb,
             conv_type=args.conv_type,
             use_geometry=args.use_geometry,
-            geom_norm_stats=geom_norm_stats
+            geom_norm_stats=geom_norm_stats,
+            structured_onsite=args.structured_onsite,
+            alpha_granularity=args.alpha_granularity,
+            alpha_mode=args.alpha_mode,
+            alpha_value=args.alpha_value,
+            alpha_init=args.alpha_init,
         )
 
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
     # Train
+    #
+    # BEST-VAL CHECKPOINTING (added 2026-07-24). The final-epoch weights are NOT the best
+    # weights. Measured over six runs at identical config and identical split_seed: best val
+    # is reached at epoch 549-1900 of 5000, and the model then overfits for the remaining
+    # 3000-4500 epochs, ending a mean of 0.060 worse (max 0.115). That drift is also the
+    # dominant source of run-to-run scatter -- final-epoch std 0.0286 vs best-val std 0.0084,
+    # 3.4x tighter -- and it is capacity-dependent, so it penalises deeper models more and
+    # can invert an ordering (it inverted the num_layers trend). See docs/metrics.md.
+    #
+    # Granularity: this fires with the checkpoint callback (every checkpoint_frequency
+    # epochs), so the saved weights are within that many epochs of the true optimum, not
+    # exactly at it.
+    # NOTE: seeded from resume_val_losses AFTER the resume block below, which is where
+    # that variable is defined. Do not move this initialisation down into the callback.
+    best_val = {'value': float('inf')}
+
     def checkpoint_cb(model, opt, epoch, train_losses, val_losses):
         save_checkpoint(model, opt, epoch, train_losses, val_losses,
                        vars(args), energy_grid,
                        os.path.join(args.checkpoint_dir, 'checkpoint_latest.pth'))
+        # Save only when THIS epoch is the running minimum, so the stored weights actually
+        # correspond to the stored value. Testing min(val_losses) instead would fire at the
+        # next checkpoint after a dip and save weights from a worse epoch under the name
+        # "best" (observed: best at epoch 44, weights saved from epoch 50).
+        # Consequence: this is the best among CHECKPOINTED epochs, not the global best
+        # epoch. With checkpoint_frequency=10 we sample every 10th epoch. The reported
+        # 'best_val' below is the true global minimum of the curve and may be slightly
+        # lower than the val loss of these weights; both are stored so the gap is visible.
+        if val_losses and float(val_losses[-1]) <= float(min(val_losses)) + 1e-12 \
+                and float(val_losses[-1]) < best_val['value'] - 1e-12:
+            best_val['value'] = float(val_losses[-1])
+            save_checkpoint(model, opt, epoch, train_losses, val_losses,
+                           vars(args), energy_grid,
+                           os.path.join(args.checkpoint_dir, 'checkpoint_best.pth'))
 
     def progress_cb(epoch, train_loss, val_loss):
         save_progress_file(epoch, train_loss, val_loss, args.checkpoint_dir, vars(args))
@@ -209,9 +261,18 @@ def main():
         start_epoch = ckpt['epoch'] + 1
         resume_train_losses = ckpt['train_losses']
         resume_val_losses = ckpt['val_losses']
-        resume_optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+        # Must match the optimizer the Trainer will build, or a requeue silently switches
+        # optimizer mid-run and the loaded state_dict is applied to the wrong type.
+        _Opt = torch.optim.AdamW if args.optimizer.lower() == 'adamw' else torch.optim.Adam
+        resume_optimizer = _Opt(model.parameters(), lr=args.learning_rate,
+                                weight_decay=args.weight_decay)
         resume_optimizer.load_state_dict(ckpt['optimizer_state_dict'])
         print(f"Resuming from epoch {start_epoch}")
+        # Carry the running best across a requeue, or the first post-resume checkpoint
+        # would overwrite a genuinely better earlier one.
+        if resume_val_losses:
+            best_val['value'] = float(min(resume_val_losses))
+            print(f"Resuming best val: {best_val['value']:.4f}")
 
     print("Training...")
     train_losses, val_losses = train_model(
@@ -220,6 +281,8 @@ def main():
         val_loader=val_loader,
         num_epochs=args.num_epochs,
         learning_rate=args.learning_rate,
+        optimizer_name=args.optimizer,
+        weight_decay=args.weight_decay,
         device=str(device),
         checkpoint_frequency=10,
         checkpoint_callback=checkpoint_cb,
@@ -240,10 +303,32 @@ def main():
         'energy_grid': energy_grid
     }, model_path)
 
+    # Also publish the BEST-val weights next to the final ones. Analysis that reads the
+    # model (onsite values, eta2, LDOS) should prefer these -- the final weights are
+    # thousands of epochs past the optimum. Loss comparisons can use either, since
+    # val_losses is stored in both.
+    best_ckpt = os.path.join(args.checkpoint_dir, 'checkpoint_best.pth')
+    best_path = model_path.replace('.pth', '_best.pth')
+    if os.path.exists(best_ckpt):
+        bc = torch.load(best_ckpt, map_location='cpu', weights_only=False)
+        torch.save({
+            'model_state_dict': bc['model_state_dict'],
+            'args': vars(args),
+            'train_losses': train_losses,
+            'val_losses': val_losses,
+            'energy_grid': energy_grid,
+            'best_val': float(min(val_losses)),
+            'best_val_epoch': int(np.argmin(val_losses)),
+            'saved_at_epoch': bc.get('epoch'),
+        }, best_path)
+
     print(f"Training complete!")
     print(f"Model saved: {model_path}")
     print(f"Final train loss: {train_losses[-1]:.4f}")
     print(f"Final val loss: {val_losses[-1]:.4f}")
+    print(f"BEST val loss:  {min(val_losses):.4f} at epoch {int(np.argmin(val_losses))}")
+    if os.path.exists(best_path):
+        print(f"Best model saved: {best_path}")
     if os.path.exists(checkpoint_path):
         os.remove(checkpoint_path)
 

@@ -30,7 +30,12 @@ class DNATransportHamiltonianGNN(nn.Module):
                  conv_type: str = 'gat',
                  use_geometry: bool = False,
                  geom_dim: int = 7,
-                 geom_norm_stats: Optional[Dict] = None):
+                 geom_norm_stats: Optional[Dict] = None,
+                 structured_onsite: bool = False,
+                 alpha_granularity: str = 'global',   # 'global' | 'per_base'
+                 alpha_mode: str = 'fixed',           # 'fixed' | 'learned'
+                 alpha_value: float = 0.0,
+                 alpha_init: float = 0.9):
         super().__init__()
         # Use features specified in dataset.py
         node_features = 4  # 4 one-hot features (A, T, G, C)
@@ -124,6 +129,47 @@ class DNATransportHamiltonianGNN(nn.Module):
             self.register_buffer("geom_mean", mean)
             self.register_buffer("geom_std", std)
 
+        # Optional structured onsite head. Default off = no new params (RNG stream and
+        # existing checkpoints unchanged). onsite = alpha*baseline[base] + (1-alpha)*context.
+        self.structured_onsite = structured_onsite
+        self.alpha_granularity = alpha_granularity
+        self.alpha_mode = alpha_mode
+        if structured_onsite:
+            n_alpha = 4 if alpha_granularity == 'per_base' else 1
+            # 4 per-base onsite blocks; near-zero init keeps early (E*I - H) well-conditioned.
+            self.onsite_baseline = nn.Parameter(torch.empty(4, n_orb * n_orb))
+            nn.init.normal_(self.onsite_baseline, std=0.01)
+            if alpha_mode == 'learned':
+                theta0 = float(np.log(alpha_init / (1.0 - alpha_init)))  # logit(alpha_init)
+                self.onsite_alpha_theta = nn.Parameter(torch.full((n_alpha,), theta0))
+            else:  # fixed: store alpha DIRECTLY (exact 0.0/1.0, no logit/sigmoid round-trip)
+                self.register_buffer('onsite_alpha_fixed', torch.full((n_alpha,), float(alpha_value)))
+
+    def _onsite_alpha(self) -> torch.Tensor:
+        """Mixing factor in [0,1], shape [1] (global) or [4] (per_base)."""
+        if self.alpha_mode == 'learned':
+            return torch.sigmoid(self.onsite_alpha_theta)
+        return self.onsite_alpha_fixed
+
+    def _mix_onsite(self, dna_features: torch.Tensor, original_dna_onehot: torch.Tensor) -> torch.Tensor:
+        """onsite_raw before reshape. dna_features: post-conv [D, hidden];
+        original_dna_onehot: [D, 4] base one-hot in the SAME order.
+
+        onsite = alpha*baseline[base] + (1-alpha)*context, via a differentiable
+        soft-matmul (one-hot @ baseline table) so gradients flow to onsite_baseline.
+        When structured_onsite is off, returns onsite_proj(dna_features) unchanged.
+        """
+        context = self.onsite_proj(dna_features)                 # [D, n_orb^2]
+        if not self.structured_onsite:
+            return context
+        baseline = original_dna_onehot @ self.onsite_baseline    # [D, n_orb^2] soft-matmul
+        alpha = self._onsite_alpha()                             # [1] or [4]
+        if self.alpha_granularity == 'per_base':
+            a = original_dna_onehot @ alpha.view(4, 1)           # [D, 1] per-node
+        else:
+            a = alpha.view(1, 1)                                 # broadcast scalar
+        return a * baseline + (1.0 - a) * context
+
     def _fuse_geometry(self, edge_attr_proj, edge_attr_initial, data):
         """Add per-edge-type-normalized geometry to the projected edge embedding.
 
@@ -196,7 +242,7 @@ class DNATransportHamiltonianGNN(nn.Module):
 
         # Get onsite energies for DNA nodes only
         dna_node_features = node_features[dna_node_mask]  # [num_dna_nodes, hidden_dim]
-        onsite_blocks = self.onsite_proj(dna_node_features)  # [num_dna_nodes, n_orb²]
+        onsite_blocks = self._mix_onsite(dna_node_features, original_node_features[dna_node_mask])  # [num_dna_nodes, n_orb²]
         onsite_blocks = onsite_blocks.view(-1, self.n_orb, self.n_orb)  # [num_dna_nodes, n_orb, n_orb]
         if self.enforce_hermiticity:
             # Symmetrize onsite blocks to ensure Hermiticity (real symmetric here)
@@ -340,7 +386,7 @@ class DNATransportHamiltonianGNN(nn.Module):
 
         # --- Step 4: Compute onsite blocks and fill diagonal ---
         dna_features = node_features[dna_mask]
-        onsite_raw = self.onsite_proj(dna_features)                  # [total_dna, n_orb²]
+        onsite_raw = self._mix_onsite(dna_features, original_node_features[dna_mask])  # [total_dna, n_orb²]
         onsite_blocks = onsite_raw.view(-1, n_orb, n_orb)           # [total_dna, n_orb, n_orb]
         if self.enforce_hermiticity:
             onsite_blocks = 0.5 * (onsite_blocks + onsite_blocks.transpose(-1, -2))
@@ -503,6 +549,11 @@ class DNATransportHamiltonianGNN(nn.Module):
         dos_safe = torch.clamp(dos_raw, min=1e-16)  # Ensure positive values without abs()
         DOS = torch.log10(dos_safe)
 
+        # Per-site local DOS (LDOS): diagonal of the same spectral quantity whose
+        # trace gives dos_raw above. Linear units, unclamped -- side channel only,
+        # does not feed back into DOS/T/H. Shape [batch, n_energy, H_size].
+        ldos_lin = -1 * torch.diagonal(Gr_imag, dim1=-2, dim2=-1) / np.pi
+
         # Calculate transmission
         # Convert gamma vectors to diagonal matrices for matrix multiplication
         # [batch, H_size] -> [batch, energy, H_size, 1]
@@ -527,8 +578,10 @@ class DNATransportHamiltonianGNN(nn.Module):
         T = torch.log10(T_safe)
 
         if squeeze_output:
+            self.ldos = ldos_lin.squeeze(0)
             return T.squeeze(0), DOS.squeeze(0), H_matrix.squeeze(0)
         else:
+            self.ldos = ldos_lin
             return T, DOS, H_matrix
 
     def NEGFProjectionComplex(self,
@@ -587,6 +640,11 @@ class DNATransportHamiltonianGNN(nn.Module):
         DOS_lin = (-1/np.pi) * torch.imag(torch.einsum('benn->be', Gr))
         DOS_lin = torch.clamp(DOS_lin, min=self.log_floor)
 
+        # Per-site local DOS (LDOS): diagonal of the same Gr whose trace gives
+        # DOS_lin above. Linear units, unclamped -- side channel only, does not
+        # feed back into DOS/T/H. Shape [batch, n_energy, H_size].
+        ldos_lin = (-1/np.pi) * torch.imag(torch.diagonal(Gr, dim1=-2, dim2=-1))
+
         # Transmission: Tr[GammaL Gr GammaR Ga]
         GammaL_mat = torch.diag_embed(GammaL).to(Gr.dtype).unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)
         GammaR_mat = torch.diag_embed(GammaR).to(Gr.dtype).unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)
@@ -598,8 +656,10 @@ class DNATransportHamiltonianGNN(nn.Module):
         T = maybe_log10(T_lin)
 
         if squeeze_output:
+            self.ldos = ldos_lin.squeeze(0)
             return T.squeeze(0), DOS.squeeze(0), H_matrix.squeeze(0)
         else:
+            self.ldos = ldos_lin
             return T, DOS, H_matrix
 
 
