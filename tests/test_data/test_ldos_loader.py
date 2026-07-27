@@ -96,3 +96,21 @@ def test_nonpositive_aggregate_raises_rather_than_producing_nan(tmp_path):
 
     with pytest.raises(ValueError, match="non-positive"):
         load_single_pickle(str(path))
+
+
+def test_stored_complementary_sequence_is_uppercased(tmp_path):
+    # v2 records store complementary_sequence in lowercase. BASE_FEATURES in
+    # g3nat/graph/construction.py is keyed 'A'/'T'/'G'/'C' and that module does
+    # no case normalisation, so a lowercase value reaching graph construction
+    # raises KeyError. The fallback branch (no stored complementary_sequence)
+    # is uppercase by accident, built from the already-uppercased primary
+    # sequence -- which is why v1 data never hit this. _write_record's
+    # 'complementary_sequence': 't' is deliberately lowercase, matching the
+    # real v2 record shape; do not "fix" the fixture to uppercase or this
+    # test stops proving anything.
+    path = _write_record(tmp_path, with_dosatom=False)
+
+    out = load_single_pickle(str(path))
+
+    assert out['sequence'] == 'A'
+    assert out['complementary_sequence'] == 'T'
