@@ -158,6 +158,11 @@ pickle_files.tar.gz
 basic_example_results.png
 training_results.png
 training_curves.png
+
+# Dataset regeneration: outputs stay out of the repo, the test fixture does not
+pickle_files_v2/
+*.h5
+!tests/fixtures/dataset/**/*.mat
 sample_predictions.png
 
 # IDE
