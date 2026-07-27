@@ -6,6 +6,7 @@ from typing import List, Optional, Callable
 from torch_geometric.loader import DataLoader
 
 from .config import TrainingConfig
+from g3nat.models.hamiltonian import site_ldos_log10
 
 
 class Trainer:
@@ -134,6 +135,74 @@ class Trainer:
 
         return self.train_losses, self.val_losses
 
+    def _compute_losses(self, batch, dos_pred, transmission_pred):
+        """Compose the loss for one batch.
+
+        Returns a dict with 'total' (the optimized scalar), the individual
+        'dos'/'transmission'/'ldos' terms, and 'dos_t_unweighted' -- the only
+        quantity comparable across different loss_b values and back to the
+        v1 record, because 'total' is loss_b-weighted and so differently
+        scaled at each b.
+        """
+        batch_size = dos_pred.size(0)
+        num_energy_points = dos_pred.size(1)
+
+        dos_target = batch.dos.view(batch_size, num_energy_points)
+        transmission_target = batch.transmission.view(batch_size, num_energy_points)
+
+        dos_loss = self.criterion(dos_pred, dos_target)
+        transmission_loss = self.criterion(transmission_pred, transmission_target)
+
+        a = self.config.loss_a
+        b = self.config.loss_b
+
+        ldos_loss = None
+        if b != 0.0:
+            # PyG drops an attribute assigned None, so presence is hasattr,
+            # never `is not None`.
+            if not hasattr(batch, 'ldos'):
+                raise ValueError(
+                    "loss_b > 0 but the batch carries no LDOS target. The data "
+                    "directory has no DOSAtom (a v1 dataset); use pickle_files_v2 "
+                    "or set loss_b = 0."
+                )
+            if not hasattr(self.model, 'ldos'):
+                raise ValueError(
+                    f"loss_b > 0 but {type(self.model).__name__} exposes no "
+                    "'ldos' attribute after a forward pass. Only the Hamiltonian "
+                    "model supports the LDOS term."
+                )
+
+            # Target [batch * 2L, n_energy] -> [batch, 2L, n_energy]
+            n_sites = batch.ldos.size(0) // batch_size
+            ldos_target = batch.ldos.view(batch_size, n_sites, num_energy_points)
+
+            # Prediction [batch, n_energy, n_sites*n_orb] -> [batch, n_energy, n_sites]
+            ldos_pred = site_ldos_log10(self.model.ldos, n_sites, self.model.log_floor)
+            # ... then transpose to match the target's [batch, n_sites, n_energy].
+            ldos_pred = ldos_pred.transpose(1, 2)
+
+            if ldos_pred.shape != ldos_target.shape:
+                raise ValueError(
+                    f"LDOS shape mismatch: prediction {tuple(ldos_pred.shape)} vs "
+                    f"target {tuple(ldos_target.shape)}"
+                )
+
+            ldos_loss = self.criterion(ldos_pred, ldos_target)
+            total = a * transmission_loss + b * ldos_loss + (1.0 - b) * dos_loss
+        else:
+            # Skipped by branch, never multiplied by zero, so a dataset with no
+            # LDOS target still trains and no backward pass is built for it.
+            total = a * transmission_loss + dos_loss
+
+        return {
+            'total': total,
+            'dos': dos_loss,
+            'transmission': transmission_loss,
+            'ldos': ldos_loss,
+            'dos_t_unweighted': dos_loss + transmission_loss,
+        }
+
     def _train_epoch(self, train_loader: DataLoader) -> float:
         """Train for one epoch."""
         self.model.train()
@@ -145,17 +214,8 @@ class Trainer:
 
             dos_pred, transmission_pred = self.model(batch)
 
-            # Reshape batched targets to match predictions
-            batch_size = dos_pred.size(0)
-            num_energy_points = dos_pred.size(1)
-
-            dos_target = batch.dos.view(batch_size, num_energy_points)
-            transmission_target = batch.transmission.view(batch_size, num_energy_points)
-
-            # Combined loss for DOS and transmission
-            dos_loss = self.criterion(dos_pred, dos_target)
-            transmission_loss = self.criterion(transmission_pred, transmission_target)
-            total_loss = dos_loss + transmission_loss
+            losses = self._compute_losses(batch, dos_pred, transmission_pred)
+            total_loss = losses['total']
 
             total_loss.backward()
 
@@ -179,16 +239,8 @@ class Trainer:
                 batch = batch.to(self.device)
                 dos_pred, transmission_pred = self.model(batch)
 
-                # Reshape batched targets to match predictions
-                batch_size = dos_pred.size(0)
-                num_energy_points = dos_pred.size(1)
-
-                dos_target = batch.dos.view(batch_size, num_energy_points)
-                transmission_target = batch.transmission.view(batch_size, num_energy_points)
-
-                dos_loss = self.criterion(dos_pred, dos_target)
-                transmission_loss = self.criterion(transmission_pred, transmission_target)
-                total_loss = dos_loss + transmission_loss
+                losses = self._compute_losses(batch, dos_pred, transmission_pred)
+                total_loss = losses['total']
 
                 val_loss += total_loss.item()
 
