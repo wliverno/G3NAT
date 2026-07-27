@@ -11,6 +11,8 @@ from typing import List, Tuple, Dict, Optional
 import os
 import glob
 
+from g3nat.data.ldos import aggregate_by_residue
+
 complementary_bases = {'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G'}
 
 def load_single_pickle(pickle_path: str) -> Optional[Dict]:
@@ -54,6 +56,28 @@ def load_single_pickle(pickle_path: str) -> Optional[Dict]:
         contact_type = contacts.get('contact_type', 'same')  # default to 'same'
         coupling = contacts.get('coupling_eV', 0.1)  # default coupling
 
+        # Per-residue LDOS, both aggregations. None for v1 records, which have
+        # no DOSAtom -- pickle_files/ must keep loading unchanged.
+        ldos_residue = None
+        ldos_base_only = None
+        if 'DOSAtom' in data and 'atoms' in data:
+            atoms = data['atoms']
+            resseq = atoms['resseq']
+            names = atoms['name']
+            residue_lin = aggregate_by_residue(data['DOSAtom'], resseq)
+            base_lin = aggregate_by_residue(data['DOSAtom'], resseq, names, base_only=True)
+            # No clamp: the measured minimum over 4,852,542 values is 1.76e-10
+            # with zero exact zeros and zero negatives. A non-positive value
+            # here means the input is wrong, so raise instead of making a nan.
+            for label, arr in (('ldos_residue', residue_lin), ('ldos_base_only', base_lin)):
+                if not np.all(arr > 0.0):
+                    raise ValueError(
+                        f"{label} contains a non-positive aggregate in {pickle_path}; "
+                        f"min={arr.min()!r}. Expected strictly positive LDOS."
+                    )
+            ldos_residue = np.log10(residue_lin)
+            ldos_base_only = np.log10(base_lin)
+
         # Determine contact positions based on contact_type
         # 'same': both contacts on primary strand (5' to 3')
         # 'cross': left on primary 5', right on complementary 5'
@@ -84,9 +108,15 @@ def load_single_pickle(pickle_path: str) -> Optional[Dict]:
             'coupling': coupling,
             'left_contact_pos': (left_strand, left_contact_pos),
             'right_contact_pos': (right_strand, right_contact_pos),
+            'ldos_residue': ldos_residue,
+            'ldos_base_only': ldos_base_only,
             'filename': os.path.basename(pickle_path)
         }
 
+    except ValueError:
+        # Data-integrity failures (e.g. non-positive LDOS) must not be silently
+        # skipped -- they mean the inputs are wrong, not that a file is missing.
+        raise
     except Exception as e:
         print(f"Error loading {pickle_path}: {e}")
         return None
