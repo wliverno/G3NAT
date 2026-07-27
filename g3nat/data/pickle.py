@@ -124,7 +124,8 @@ def load_single_pickle(pickle_path: str) -> Optional[Dict]:
 
 def load_pickle_directory(directory: str, pattern: str = "*.pkl") -> Tuple[List[str], List[str],
                                                                             np.ndarray, np.ndarray,
-                                                                            np.ndarray, List[Dict]]:
+                                                                            np.ndarray, List[Dict],
+                                                                            Optional[Dict]]:
     """
     Load all pickle files from a directory.
 
@@ -140,6 +141,8 @@ def load_pickle_directory(directory: str, pattern: str = "*.pkl") -> Tuple[List[
         - transmission_data: Array of transmission data [num_samples, num_energy_points]
         - energy_grid: Energy grid array [num_energy_points] (from first file)
         - contact_configs: List of contact configuration dictionaries
+        - ldos_data: dict with 'residue' and 'base_only' lists of
+          [2L, n_energy] log10 arrays, or None when no record carries DOSAtom
     """
     # Find all pickle files
     pickle_files = glob.glob(os.path.join(directory, pattern))
@@ -154,6 +157,8 @@ def load_pickle_directory(directory: str, pattern: str = "*.pkl") -> Tuple[List[
     dos_list = []
     transmission_list = []
     contact_configs = []
+    ldos_residue_list = []
+    ldos_base_only_list = []
     energy_grid = None
 
     # Load each file
@@ -187,6 +192,10 @@ def load_pickle_directory(directory: str, pattern: str = "*.pkl") -> Tuple[List[
             'filename': data['filename']
         })
 
+        if data['ldos_residue'] is not None:
+            ldos_residue_list.append(data['ldos_residue'])
+            ldos_base_only_list.append(data['ldos_base_only'])
+
     if len(sequences) == 0:
         raise ValueError(f"No valid data loaded from {directory}")
 
@@ -194,12 +203,26 @@ def load_pickle_directory(directory: str, pattern: str = "*.pkl") -> Tuple[List[
     dos_data = np.array(dos_list)
     transmission_data = np.array(transmission_list)
 
+    # All-or-nothing. A ragged mix cannot be trained coherently.
+    n_with_ldos = len(ldos_residue_list)
+    if n_with_ldos == 0:
+        ldos_data = None
+    elif n_with_ldos == len(sequences):
+        ldos_data = {'residue': ldos_residue_list, 'base_only': ldos_base_only_list}
+    else:
+        raise ValueError(
+            f"some records in {directory} carry DOSAtom and some do not "
+            f"({n_with_ldos} of {len(sequences)}). Point --data_dir at a "
+            f"directory that is uniformly v1 or uniformly v2."
+        )
+
     print(f"Successfully loaded {len(sequences)} samples")
     print(f"Energy grid: {len(energy_grid)} points from {energy_grid[0]:.2f} to {energy_grid[-1]:.2f} eV")
     print(f"DOS shape: {dos_data.shape}")
     print(f"Transmission shape: {transmission_data.shape}")
 
-    return sequences, complementary_sequences, dos_data, transmission_data, energy_grid, contact_configs
+    return (sequences, complementary_sequences, dos_data, transmission_data,
+            energy_grid, contact_configs, ldos_data)
 
 
 if __name__ == "__main__":
@@ -224,7 +247,7 @@ if __name__ == "__main__":
                 print(f"Transmission shape: {data['transmission'].shape}")
         elif os.path.isdir(path):
             print(f"Loading directory: {path}")
-            sequences, comp_seqs, dos, trans, egrid, configs = load_pickle_directory(path)
+            sequences, comp_seqs, dos, trans, egrid, configs, ldos_data = load_pickle_directory(path)
             print(sequences)
             print(comp_seqs)
             print(dos)

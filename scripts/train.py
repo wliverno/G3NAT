@@ -39,6 +39,9 @@ def parse_args():
                        help='Minimum sequence length for TB source (-1 = same as seq_length)')
     parser.add_argument('--num_energy_points', type=int, default=100,
                        help='Number of energy points')
+    parser.add_argument('--ldos_target', type=str, default='residue',
+                       choices=['residue', 'base_only'],
+                       help='which LDOS aggregation to train against')
 
     # Model parameters
     parser.add_argument('--model_type', type=str, default='hamiltonian',
@@ -113,11 +116,12 @@ def main():
             num_energy_points=args.num_energy_points,
             min_length=args.min_length
         )
+        ldos_data = None
     else:  # pickle
         if args.data_dir is None:
             raise ValueError("--data_dir required for pickle data source")
         print(f"Loading pickle files from {args.data_dir}...")
-        seqs, comp_seqs, dos_data, trans_data, energy_grid, contact_configs = \
+        seqs, comp_seqs, dos_data, trans_data, energy_grid, contact_configs, ldos_data = \
             load_pickle_directory(args.data_dir)
 
         # Extract contact configurations for pickle data
@@ -152,7 +156,9 @@ def main():
             right_contact_positions_list=right_contact_pos_list,
             left_contact_coupling_list=left_coupling_list,
             right_contact_coupling_list=right_coupling_list,
-            geometry_cache=geom_cache
+            geometry_cache=geom_cache,
+            ldos_data=ldos_data,
+            ldos_target=args.ldos_target
         )
     else:
         dataset = create_dna_dataset(
