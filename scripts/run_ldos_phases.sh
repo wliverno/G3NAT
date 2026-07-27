@@ -1,16 +1,29 @@
 #!/bin/bash
+#SBATCH --job-name=g3nat-ldos-phases
 #SBATCH --account=anantram-ckpt
 #SBATCH --partition=ckpt-all
+#SBATCH --nodes=1
+#SBATCH --gpus=1
+#SBATCH --ntasks-per-node=8
+#SBATCH --mem=32G
+#SBATCH --time=24:00:00
 #SBATCH --exclude=g3070
 #SBATCH --requeue
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=32G
-#SBATCH --time=6:00:00
 #SBATCH --output=slurm-ldos-%A_%a.out
 set -euo pipefail
 
 # Four-phase LDOS experiment. Phase is chosen by PHASE=... in the sbatch env.
 # This script covers phases A, B and C only (see Phase D note below).
+#
+# Header, environment setup and python invocation deliberately match the
+# other sweep runners in this repo (scripts/run_layers_sweep.sh,
+# run_onsite_sweep.sh, run_optimizer_sweep.sh): --gpus=1, --nodes=1,
+# --ntasks-per-node=8, --time=24:00:00, module load + conda activate, and a
+# direct `python -u` invocation (no srun/conda-run wrapper). Training at
+# hidden_dim=256/num_layers=4 for 15000 epochs needs a GPU and far more than
+# 6 hours; those precedent scripts are the ones known to actually work here.
+# --exclude=g3070 (uncorrectable ECC) and --requeue (preemptible partition)
+# are ours -- none of the precedent scripts have the g3070 exclusion.
 #
 #   A  3 runs   b=0 re-baseline on v2. Establishes cross-seed scatter on both
 #               DOS+T and the UNTRAINED LDOS agreement.
@@ -29,6 +42,11 @@ set -euo pipefail
 #   PHASE=A sbatch --array=0-2  scripts/run_ldos_phases.sh
 #   PHASE=B sbatch --array=0-14 scripts/run_ldos_phases.sh
 #   PHASE=C B_BEST=<b> B_NEIGHBOUR=<b> sbatch --array=0-5 scripts/run_ldos_phases.sh
+
+module load cuda
+source /gscratch/anantram/willll/miniconda3/etc/profile.d/conda.sh
+conda activate g3nat
+cd /mmfs1/gscratch/anantram/willll/G3NAT
 
 : "${PHASE:?set PHASE=A|B|C in the sbatch environment}"
 : "${SLURM_ARRAY_TASK_ID:?run this via sbatch --array, not directly}"
@@ -90,27 +108,33 @@ case "${PHASE}" in
     ;;
 esac
 
-# Per-run directory, always under the repo tree on /gscratch -- never /tmp,
-# which is node-local on this cluster and disappears once the job ends.
+# Per-cell directories, always under the repo tree on /gscratch -- never
+# /tmp, which is node-local on this cluster and disappears once the job ends.
 #
-# Used as BOTH --checkpoint_dir and --output_dir so this run's
-# checkpoint_latest.pth / checkpoint_best.pth and its final saved model file
-# never collide with another run's files. scripts/train.py auto-resumes from
-# <checkpoint_dir>/checkpoint_latest.pth when present, so two phase runs
-# sharing a directory would silently resume each other's weights; leaving
-# --output_dir at its shared default would let concurrent array tasks
-# clobber the same final-model file instead.
-OUT="outputs_ldos/${PHASE}/${TAG}"
-mkdir -p "${OUT}"
+# Separate OUT (final model) and CKPT (resume checkpoints), each unique to
+# this (phase, b, seed) cell, matching outputs_<prefix>_<tag> / ckpt_<prefix>
+# _<tag> in the other repo sweep scripts. scripts/train.py auto-resumes from
+# <checkpoint_dir>/checkpoint_latest.pth when present, so two cells sharing a
+# checkpoint dir would silently resume each other's weights; a shared output
+# dir would let concurrent array tasks clobber the same final-model file.
+# The outputs_*/ and ckpt_*/ gitignore patterns already cover this "outputs_
+# ldos_..." / "ckpt_ldos_..." naming, so these directories never enter the
+# repo, same as the other sweep scripts' run artifacts.
+OUT="outputs_ldos_${TAG}"
+CKPT="ckpt_ldos_${TAG}"
+mkdir -p "${OUT}" "${CKPT}"
 
-echo "PHASE=${PHASE} task=${i} tag=${TAG} b=${B_VAL} target=${TARGET} seed=${SEED}"
-
-srun conda run -n g3nat python scripts/train.py \
+echo "=== ldos cell: phase=${PHASE} task=${i} tag=${TAG} b=${B_VAL} target=${TARGET} seed=${SEED} -> ${OUT} ==="
+SECONDS=0
+python -u scripts/train.py \
   "${COMMON[@]}" \
   --loss_a 1.0 \
   --loss_b "${B_VAL}" \
   --ldos_target "${TARGET}" \
   --split_seed "${SEED}" \
-  --checkpoint_dir "${OUT}" \
   --output_dir "${OUT}" \
+  --checkpoint_dir "${CKPT}" \
   ${EXTRA[@]+"${EXTRA[@]}"}
+RC=$?
+echo "=== cell done: phase=${PHASE} tag=${TAG} rc=${RC} wall=${SECONDS}s ($(( SECONDS / 60 ))m) model=${OUT}/hamiltonian_pickle_model.pth ==="
+exit $RC
