@@ -2,7 +2,7 @@
 
 import torch
 import torch.nn as nn
-from typing import List, Optional, Callable
+from typing import Dict, List, Optional, Callable
 from torch_geometric.loader import DataLoader
 
 from .config import TrainingConfig
@@ -56,6 +56,7 @@ class Trainer:
         # Training history
         self.train_losses = []
         self.val_losses = []
+        self.metric_history: List[Dict[str, float]] = []
 
     def fit(
         self,
@@ -203,6 +204,22 @@ class Trainer:
             'dos_t_unweighted': dos_loss + transmission_loss,
         }
 
+    def _ldos_agreement(self, batch, n_sites_hint=None):
+        """Held-out LDOS Huber, measured whether or not it is being trained.
+
+        Returns nan when the batch carries no target. Presence of the target
+        governs this metric; loss_b governs only the loss.
+        """
+        if not hasattr(batch, 'ldos') or not hasattr(self.model, 'ldos'):
+            return float('nan')
+        batch_size = int(batch.batch.max().item() + 1)
+        n_energy = self.model.ldos.size(1)
+        n_sites = batch.ldos.size(0) // batch_size
+        target = batch.ldos.view(batch_size, n_sites, n_energy)
+        pred = site_ldos_log10(self.model.ldos, n_sites, self.model.log_floor)
+        pred = pred.transpose(1, 2)
+        return self.criterion(pred, target).item()
+
     def _train_epoch(self, train_loader: DataLoader) -> float:
         """Train for one epoch."""
         self.model.train()
@@ -233,6 +250,11 @@ class Trainer:
         """Validate for one epoch."""
         self.model.eval()
         val_loss = 0.0
+        agg_dos = 0.0
+        agg_trans = 0.0
+        agg_unweighted = 0.0
+        agg_ldos = 0.0
+        n_batches = 0
 
         with torch.no_grad():
             for batch in val_loader:
@@ -243,8 +265,20 @@ class Trainer:
                 total_loss = losses['total']
 
                 val_loss += total_loss.item()
+                agg_dos += losses['dos'].item()
+                agg_trans += losses['transmission'].item()
+                agg_unweighted += losses['dos_t_unweighted'].item()
+                agg_ldos += self._ldos_agreement(batch)
+                n_batches += 1
 
         val_loss /= len(val_loader)
+        self.metric_history.append({
+            'val_dos': agg_dos / n_batches,
+            'val_transmission': agg_trans / n_batches,
+            'val_dos_t_unweighted': agg_unweighted / n_batches,
+            'val_ldos_residue': agg_ldos / n_batches,
+            'val_ldos_base_only': float('nan'),
+        })
         return val_loss
 
     def set_optimizer(self, optimizer: torch.optim.Optimizer):
@@ -264,7 +298,8 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
                val_losses: List[float] = None, optimizer: torch.optim.Optimizer = None,
                checkpoint_callback=None, progress_callback=None, max_grad_norm: float = 1.0,
                warmup_epochs: int = 50, optimizer_name: str = 'adam',
-               weight_decay: float = 1e-5):
+               weight_decay: float = 1e-5, loss_a: float = 1.0, loss_b: float = 0.0,
+               metric_history_out: Optional[List[Dict[str, float]]] = None):
     """
     Train the DNA Transport GNN model (backward-compatible function).
 
@@ -284,6 +319,12 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         checkpoint_callback: Function to call for saving checkpoints (optional)
         progress_callback: Function to call for saving progress (optional)
         max_grad_norm: Maximum gradient norm for gradient clipping (default: 1.0)
+        loss_a: weight on the transmission loss term (default 1.0 reproduces history)
+        loss_b: convex mixing weight b*LDOS + (1-b)*DOS (default 0.0 reproduces history)
+        metric_history_out: if provided, filled in-place with the trainer's
+            per-epoch metric_history (val_dos/val_transmission/val_ldos_residue/...)
+            so a caller that only unpacks (train_losses, val_losses) can still
+            recover it without changing this function's return arity.
 
     Returns:
         Tuple of (train_losses, val_losses) lists
@@ -299,7 +340,9 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         warmup_epochs=warmup_epochs,
         # `optimizer_name`, not `optimizer` -- the latter is the resume OBJECT below.
         optimizer=optimizer_name,
-        weight_decay=weight_decay
+        weight_decay=weight_decay,
+        loss_a=loss_a,
+        loss_b=loss_b
     )
 
     # Create trainer
@@ -323,5 +366,8 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         progress_callback=progress_callback,
         start_epoch=start_epoch
     )
+
+    if metric_history_out is not None:
+        metric_history_out.extend(trainer.metric_history)
 
     return train_losses, val_losses
