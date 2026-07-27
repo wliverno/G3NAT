@@ -10,20 +10,24 @@
 #SBATCH --exclude=g3070
 #SBATCH --requeue
 #SBATCH --output=slurm-ldos-%A_%a.out
-set -euo pipefail
 
 # Four-phase LDOS experiment. Phase is chosen by PHASE=... in the sbatch env.
 # This script covers phases A, B and C only (see Phase D note below).
 #
-# Header, environment setup and python invocation deliberately match the
-# other sweep runners in this repo (scripts/run_layers_sweep.sh,
-# run_onsite_sweep.sh, run_optimizer_sweep.sh): --gpus=1, --nodes=1,
-# --ntasks-per-node=8, --time=24:00:00, module load + conda activate, and a
-# direct `python -u` invocation (no srun/conda-run wrapper). Training at
-# hidden_dim=256/num_layers=4 for 15000 epochs needs a GPU and far more than
-# 6 hours; those precedent scripts are the ones known to actually work here.
-# --exclude=g3070 (uncorrectable ECC) and --requeue (preemptible partition)
-# are ours -- none of the precedent scripts have the g3070 exclusion.
+# Header, environment setup, disk guard, error-handling posture and python
+# invocation deliberately match the other sweep runners in this repo
+# (scripts/run_layers_sweep.sh, run_onsite_sweep.sh, run_optimizer_sweep.sh):
+# --gpus=1, --nodes=1, --ntasks-per-node=8, --time=24:00:00, module load +
+# conda activate, the disk-space guard, and a direct `python -u` invocation
+# (no srun/conda-run wrapper, no `set -e`). Training at hidden_dim=256/
+# num_layers=4 for 15000 epochs needs a GPU and far more than 6 hours; those
+# precedent scripts are the ones known to actually work here. None of them
+# use `set -e`: this script does not either, so a failed training cell still
+# falls through to log its own exit code and tag (see "cell done" below)
+# instead of the script dying silently mid-command with no record of which
+# cell failed. --exclude=g3070 (uncorrectable ECC) and --requeue (preemptible
+# partition) are ours -- none of the precedent scripts have the g3070
+# exclusion.
 #
 #   A  3 runs   b=0 re-baseline on v2. Establishes cross-seed scatter on both
 #               DOS+T and the UNTRAINED LDOS agreement.
@@ -47,6 +51,20 @@ module load cuda
 source /gscratch/anantram/willll/miniconda3/etc/profile.d/conda.sh
 conda activate g3nat
 cd /mmfs1/gscratch/anantram/willll/G3NAT
+
+# --- disk guard -------------------------------------------------------------
+# 2026-07-25: 15 of 22 cells in the 15000-epoch run died within 60s across 11
+# different nodes, with logs truncated mid-traceback, because /mmfs1 was 100%
+# full. Failed writes look like a crash, not a disk error, and burn GPU time
+# before dying. Fail loudly and early instead.
+MIN_FREE_GB=${MIN_FREE_GB:-50}
+FREE_GB=$(df -BG --output=avail . | tail -1 | tr -dc '0-9')
+if [ "${FREE_GB:-0}" -lt "$MIN_FREE_GB" ]; then
+  echo "ABORT: only ${FREE_GB}GB free on $(df -h . | tail -1 | awk '{print $6}'), need ${MIN_FREE_GB}GB."
+  echo "       Checkpoint writes will fail mid-run and the job will die looking like a crash."
+  exit 1
+fi
+echo "disk check: ${FREE_GB}GB free (min ${MIN_FREE_GB}GB) -- ok"
 
 : "${PHASE:?set PHASE=A|B|C in the sbatch environment}"
 : "${SLURM_ARRAY_TASK_ID:?run this via sbatch --array, not directly}"
