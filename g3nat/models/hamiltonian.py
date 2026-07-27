@@ -13,6 +13,33 @@ from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 
 
+def site_ldos_log10(ldos_raw: torch.Tensor, n_sites: int, log_floor: float) -> torch.Tensor:
+    """Reduce raw per-orbital LDOS to per-site log10 LDOS.
+
+    Args:
+        ldos_raw: [batch, n_energy, n_sites * n_orb], LINEAR units, as set on
+            self.ldos by NEGFProjection and NEGFProjectionComplex.
+        n_sites: number of tight-binding sites (2L for an L-mer duplex).
+        log_floor: NaN guard against log10 of a non-positive prediction. This
+            is NOT a modelling floor -- the measured target minimum is 1.76e-10,
+            nine decades above the 1e-16 default, so it never binds on real data.
+
+    Returns:
+        [batch, n_energy, n_sites], log10 units.
+    """
+    batch, n_energy, width = ldos_raw.shape
+    if width % n_sites != 0:
+        raise ValueError(
+            f"LDOS width {width} is not divisible by n_sites {n_sites}"
+        )
+    n_orb = width // n_sites
+    # Site-major / orbital-minor: row_orb[i, o] = i * n_orb + o (see
+    # construct_hamiltonian_from_graph, lines 401-403). Use reshape, not view:
+    # torch.diagonal returns a non-contiguous view and view() raises on it.
+    per_site = ldos_raw.reshape(batch, n_energy, n_sites, n_orb).sum(dim=-1)
+    return torch.log10(torch.clamp(per_site, min=log_floor))
+
+
 class DNATransportHamiltonianGNN(nn.Module):
     """Graph Neural Network for DNA transport Hamiltonian prediction."""
 
