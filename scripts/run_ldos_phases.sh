@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=g3nat-ldos-phases
 #SBATCH --account=anantram-ckpt
-#SBATCH --partition=ckpt-all
+#SBATCH --partition=ckpt-g2
 #SBATCH --nodes=1
 #SBATCH --gpus=1
 #SBATCH --ntasks-per-node=8
