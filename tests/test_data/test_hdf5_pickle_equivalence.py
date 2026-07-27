@@ -94,6 +94,7 @@ def test_every_record_is_present_in_the_archive_with_the_expected_shape():
             )
 
     n_pkl = len(list(PKL_DIR.glob('*_run*.pkl')))
+    assert n_groups > 0, "no run groups found in the archive -- H5_PATH or PKL_DIR may be misconfigured"
     assert n_groups == n_pkl, (
         f"archive has {n_groups} run groups but pickle_files_v2 has {n_pkl} "
         f"*_run*.pkl files -- export may be truncated or partial"
