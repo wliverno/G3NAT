@@ -263,6 +263,7 @@ def main():
     resume_train_losses = None
     resume_val_losses = None
     resume_optimizer = None
+    resume_metric_history = None
     checkpoint_path = os.path.join(args.checkpoint_dir, 'checkpoint_latest.pth')
     if os.path.exists(checkpoint_path):
         print(f"Resuming from checkpoint: {checkpoint_path}")
@@ -271,6 +272,12 @@ def main():
         start_epoch = ckpt['epoch'] + 1
         resume_train_losses = ckpt['train_losses']
         resume_val_losses = ckpt['val_losses']
+        # save_checkpoint() (g3nat/training/callbacks.py, outside this task's
+        # scope) does not write 'metric_history' into checkpoint_latest.pth, so
+        # older checkpoints -- and every checkpoint written via that path --
+        # will not carry this key. Guard with .get() and start empty rather
+        # than KeyError.
+        resume_metric_history = ckpt.get('metric_history')
         # Must match the optimizer the Trainer will build, or a requeue silently switches
         # optimizer mid-run and the loaded state_dict is applied to the wrong type.
         _Opt = torch.optim.AdamW if args.optimizer.lower() == 'adamw' else torch.optim.Adam
@@ -304,6 +311,7 @@ def main():
         optimizer=resume_optimizer,
         loss_a=args.loss_a,
         loss_b=args.loss_b,
+        metric_history=resume_metric_history,
         metric_history_out=metric_history
     )
 
