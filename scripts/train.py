@@ -42,6 +42,10 @@ def parse_args():
     parser.add_argument('--ldos_target', type=str, default='residue',
                        choices=['residue', 'base_only'],
                        help='which LDOS aggregation to train against')
+    parser.add_argument('--loss_a', type=float, default=1.0,
+                        help='weight on the transmission loss term')
+    parser.add_argument('--loss_b', type=float, default=0.0,
+                        help='convex mixing weight: b*LDOS + (1-b)*DOS')
 
     # Model parameters
     parser.add_argument('--model_type', type=str, default='hamiltonian',
@@ -281,6 +285,7 @@ def main():
             print(f"Resuming best val: {best_val['value']:.4f}")
 
     print("Training...")
+    metric_history = []
     train_losses, val_losses = train_model(
         model=model,
         train_loader=train_loader,
@@ -296,7 +301,10 @@ def main():
         start_epoch=start_epoch,
         train_losses=resume_train_losses,
         val_losses=resume_val_losses,
-        optimizer=resume_optimizer
+        optimizer=resume_optimizer,
+        loss_a=args.loss_a,
+        loss_b=args.loss_b,
+        metric_history_out=metric_history
     )
 
     # Save final model
@@ -306,7 +314,8 @@ def main():
         'args': vars(args),
         'train_losses': train_losses,
         'val_losses': val_losses,
-        'energy_grid': energy_grid
+        'energy_grid': energy_grid,
+        'metric_history': metric_history
     }, model_path)
 
     # Also publish the BEST-val weights next to the final ones. Analysis that reads the
@@ -323,6 +332,7 @@ def main():
             'train_losses': train_losses,
             'val_losses': val_losses,
             'energy_grid': energy_grid,
+            'metric_history': metric_history,
             'best_val': float(min(val_losses)),
             'best_val_epoch': int(np.argmin(val_losses)),
             'saved_at_epoch': bc.get('epoch'),
