@@ -202,3 +202,16 @@ across that boundary. Re-baseline deliberately rather than swapping in place.
   Cartesian polarization functions. `validate_record` checks every atom against this map.
 - `resseq` is monotonic non-decreasing in every sequence, so the atom table is always
   grouped by residue in PDB file order -- which is also `DOSAtom` row order.
+- Full residue-numbering verification, run over all 2077 records (762,410 atoms) on
+  2026-07-26:
+
+  | check | result |
+  |---|---|
+  | sorted unique `resseq` == contiguous `1..2L` | 2077 pass, 0 fail |
+  | residues `1..L` resname match `sequence` | 2077 pass, 0 fail |
+  | residues `L+1..2L` resname match `complementary_sequence` | 2077 pass, 0 fail |
+  | `resseq` non-decreasing down the atom table | 2077 pass, 0 fail |
+
+  Distinct resnames across all atoms: exactly `DA`, `DC`, `DG`, `DT` -- no terminal variants
+  (`DA5`/`DA3`), no waters, no ions. This is the basis for `H index = resseq - 1`, used by
+  `aggregate_by_residue` in `g3nat/data/ldos.py`.
