@@ -51,6 +51,7 @@ def test_ldos_agreement_reported_even_at_b_zero():
     entry = trainer.metric_history[-1]
     assert math.isfinite(entry['val_ldos_residue'])
     assert math.isfinite(entry['val_dos_t_unweighted'])
+    assert entry['epoch'] == 0
 
 
 def test_metric_skipped_not_crashed_on_v1_data():
@@ -64,3 +65,24 @@ def test_metric_skipped_not_crashed_on_v1_data():
     entry = trainer.metric_history[-1]
     assert math.isnan(entry['val_ldos_residue'])
     assert math.isfinite(entry['val_dos_t_unweighted'])
+    assert entry['epoch'] == 0
+
+
+def test_metric_history_epoch_is_absolute_not_list_index():
+    # Fix round 1, finding 1: on a resumed run, fit() is called with
+    # start_epoch > 0 and metric_history starts empty (nothing carried over
+    # in this test), so the FIRST entry appended lands at list index 0 but
+    # must record absolute epoch 5, not 0. A consumer that aligns by epoch
+    # number (e.g. matching argmin(val_losses) to the epoch that produced it)
+    # stays correct only if this key is present and absolute; aligning by list
+    # position would silently read the wrong epoch's diagnostics once
+    # metric_history and val_losses have different lengths after a resume.
+    trainer = _trainer(loss_b=0.0)
+    trainer.config.num_epochs = 7
+    loader = _loader(with_ldos=True)
+
+    trainer.fit(loader, loader, start_epoch=5)
+
+    assert len(trainer.metric_history) == 2
+    assert trainer.metric_history[0]['epoch'] == 5
+    assert trainer.metric_history[1]['epoch'] == 6
