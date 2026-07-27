@@ -39,8 +39,8 @@ def load_single_pickle(pickle_path: str) -> Optional[Dict]:
         sequence = data['sequence'].upper()
 
         # Extract complementary sequence if available, otherwise generate it using complementary_bases
-        complementary_sequence = data.get('complementary_sequence', 
-                                          ''.join(complementary_bases[base] for base in sequence)[::-1])
+        complementary_sequence = data.get('complementary_sequence',
+                                          ''.join(complementary_bases[base] for base in sequence)[::-1]).upper()
 
                                           
         
