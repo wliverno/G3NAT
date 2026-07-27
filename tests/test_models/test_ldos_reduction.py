@@ -37,15 +37,23 @@ def test_log_floor_guards_nonpositive_predictions():
 
 
 def test_works_on_a_noncontiguous_input():
-    # torch.diagonal returns a non-contiguous view; .view() would raise on it
-    # while .reshape() copies. Guard against a regression to .view().
+    # torch.diagonal returns a non-contiguous view; .view() raises on it
+    # while .reshape() copies. This test guards against a regression to
+    # .view() in site_ldos_log10.
+    #
+    # Do NOT post-process the diagonal here. Any elementwise op (.abs(),
+    # + 1.0, etc.) materialises a fresh CONTIGUOUS tensor and silently
+    # destroys the property this test exists to exercise -- an earlier
+    # version of this test did exactly that and never called the function
+    # at all.
     gr = torch.arange(2 * 3 * 4 * 4, dtype=torch.float).reshape(2, 3, 4, 4)
-    raw = torch.diagonal(gr, dim1=-2, dim2=-1).abs() + 1.0
+    raw = torch.diagonal(gr, dim1=-2, dim2=-1)
     assert not raw.is_contiguous()
 
     out = site_ldos_log10(raw, n_sites=4, log_floor=1e-16)
 
     assert out.shape == (2, 3, 4)
+    assert torch.isfinite(out).all()
 
 
 def test_indivisible_site_count_raises():
