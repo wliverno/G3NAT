@@ -25,6 +25,11 @@ class TrainingConfig:
     # the model cannot rescale it, unlike alpha.
     loss_a: float = 1.0
     loss_b: float = 0.0
+    # Which LDOS aggregation this run is trained/measured against. Controls
+    # only which of val_ldos_residue / val_ldos_base_only in metric_history
+    # holds the measured value (the other stays nan) -- it does not change
+    # what any loss or aggregation computes.
+    ldos_target: str = 'residue'  # 'residue' | 'base_only'
 
     @classmethod
     def from_kwargs(cls, **kwargs):

@@ -295,19 +295,28 @@ class Trainer:
                 n_batches += 1
 
         val_loss /= len(val_loader)
-        self.metric_history.append({
+
+        # Key the measured LDOS agreement under whichever aggregation this run
+        # is actually configured against (self.config.ldos_target); the other
+        # key is always nan. Both keys are always present so the schema is
+        # stable across runs regardless of ldos_target -- a consumer never has
+        # to check which key exists before reading it. Reporting the
+        # non-trained aggregation would require carrying BOTH the residue and
+        # base_only LDOS arrays on every Data object simultaneously, which is
+        # deliberately out of scope here. The experiment covers the other
+        # aggregation by running it directly in a later phase (Phase C), not
+        # through this trainer computing both at once.
+        measured_key = f"val_ldos_{self.config.ldos_target}"
+        other_key = 'val_ldos_base_only' if self.config.ldos_target == 'residue' else 'val_ldos_residue'
+        entry = {
             'epoch': epoch,
             'val_dos': agg_dos / n_batches,
             'val_transmission': agg_trans / n_batches,
             'val_dos_t_unweighted': agg_unweighted / n_batches,
-            'val_ldos_residue': agg_ldos / n_batches,
-            # Always nan: reporting the non-trained aggregation would require
-            # carrying BOTH the residue and base_only LDOS arrays on every
-            # Data object simultaneously, which is deliberately out of scope
-            # here. The experiment covers the other aggregation by running it
-            # directly in a later phase, not through this trainer.
-            'val_ldos_base_only': float('nan'),
-        })
+            measured_key: agg_ldos / n_batches,
+            other_key: float('nan'),
+        }
+        self.metric_history.append(entry)
         return val_loss
 
     def set_optimizer(self, optimizer: torch.optim.Optimizer):
@@ -328,6 +337,7 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
                checkpoint_callback=None, progress_callback=None, max_grad_norm: float = 1.0,
                warmup_epochs: int = 50, optimizer_name: str = 'adam',
                weight_decay: float = 1e-5, loss_a: float = 1.0, loss_b: float = 0.0,
+               ldos_target: str = 'residue',
                metric_history: Optional[List[Dict[str, float]]] = None,
                metric_history_out: Optional[List[Dict[str, float]]] = None):
     """
@@ -351,6 +361,9 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         max_grad_norm: Maximum gradient norm for gradient clipping (default: 1.0)
         loss_a: weight on the transmission loss term (default 1.0 reproduces history)
         loss_b: convex mixing weight b*LDOS + (1-b)*DOS (default 0.0 reproduces history)
+        ldos_target: which LDOS aggregation ('residue' or 'base_only') this run is
+            trained/measured against -- selects which key in each metric_history
+            entry holds the measured value; the other key is always nan.
         metric_history: existing per-epoch metric_history for resumption
             (optional), analogous to train_losses/val_losses. Each entry
             already carries an absolute 'epoch' key, so seeding here and then
@@ -378,7 +391,8 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         optimizer=optimizer_name,
         weight_decay=weight_decay,
         loss_a=loss_a,
-        loss_b=loss_b
+        loss_b=loss_b,
+        ldos_target=ldos_target
     )
 
     # Create trainer

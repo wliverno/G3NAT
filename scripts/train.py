@@ -311,6 +311,7 @@ def main():
         optimizer=resume_optimizer,
         loss_a=args.loss_a,
         loss_b=args.loss_b,
+        ldos_target=args.ldos_target,
         metric_history=resume_metric_history,
         metric_history_out=metric_history
     )
