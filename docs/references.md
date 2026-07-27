@@ -216,3 +216,49 @@ regime). This project's ML decisions must cite from here rather than be invented
   quoted, or replace them with the numbers above cited to their actual authors. The
   qualitative claim we actually lean on -- G has the lowest IP and therefore the highest hole
   on-site energy -- holds in every source found and is not at risk.
+
+## Published-dataset file format (EVIDENCED, retrieved 2026-07-26)
+
+Decision: publish the archive as HDF5, keep pickles as the internal working format.
+
+Reference class -- the closest published datasets in this sub-field all ship HDF5; the search
+found no published quantum-chemistry dataset distributed as pickle:
+
+- Smith, J.S., Isayev, O., Roitberg, A.E. (2017). "ANI-1, A data set of 20 million calculated
+  off-equilibrium conformations for organic molecules." *Scientific Data* 4, 170193.
+  doi:10.1038/sdata.2017.193 -- distributed as HDF5.
+  Title/authors/venue/year independently verified via the Crossref API, 2026-07-26.
+- Smith, J.S., Zubatyuk, R., Nebgen, B., Lubbers, N., Barros, K., Roitberg, A.E., Isayev, O.,
+  Tretiak, S. (2020). "The ANI-1ccx and ANI-1x data sets, coupled-cluster and density
+  functional theory properties for molecules." *Scientific Data* 7, 134.
+  doi:10.1038/s41597-020-0473-z -- distributed as HDF5.
+- Eastman, P., Behara, P.K., Dotson, D.L., Galvelis, R., Herr, J.E., Horton, J.T., Mao, Y.,
+  Chodera, J.D., Pritchard, B.P., Wang, Y., De Fabritiis, G., Markland, T.E. (2023).
+  "SPICE, A Dataset of Drug-like Molecules and Peptides for Training Machine Learning
+  Potentials." *Scientific Data* 10, 11. doi:10.1038/s41597-022-01882-6 -- single HDF5 file,
+  one top-level group per molecule. Title/authors/venue/year independently verified via the
+  Crossref API, 2026-07-26.
+
+Why not pickle, from the format owner rather than folklore:
+
+- Python Software Foundation, `pickle` module documentation: "The `pickle` module is not
+  secure. Only unpickle data you trust. It is possible to construct malicious pickle data
+  which will execute arbitrary code during unpickling."
+  https://docs.python.org/3/library/pickle.html
+- NumPy `numpy.load` documentation: `allow_pickle` defaults to `False`, changed specifically
+  because loading pickled object arrays "is not secure against erroneous or maliciously
+  constructed data." https://numpy.org/doc/stable/reference/generated/numpy.load.html
+  This matters MORE, not less, as Python becomes universal: a ubiquitous format is one
+  readers load reflexively without inspecting.
+
+- Wilkinson, M.D. et al. (2016). "The FAIR Guiding Principles for scientific data management
+  and stewardship." *Scientific Data* 3, 160018. doi:10.1038/sdata.2016.18 -- principle I1
+  requires "a formal, accessible, shared, and broadly applicable language for knowledge
+  representation"; R1.3 requires meeting "domain-relevant community standards." HDF5 satisfies
+  both (H5MD for molecular simulation, NeXus for neutron/X-ray are built on it); pickle
+  satisfies neither.
+
+NOT a factor in this decision: MATLAB's native `h5read` support. It is true, but willll
+notes the group's MATLAB code is legacy and the field has moved to Python (2026-07-26), so
+it carries no weight here. The decision rests on reference class and on pickle's security
+model.

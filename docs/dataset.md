@@ -159,3 +159,46 @@ Draft fields: `sequence`, `complementary_sequence`, `energy_grid` (centred) plus
 `residue_to_site` (the mapping whose failure mode is silent), `contact_type`,
 `coupling_eV`, `contact_sites`, `pdb` (structure), and provenance (method, basis,
 generation date, upstream path).
+
+## Dataset v2 (2026-07-26): per-atom LDOS
+
+Regenerated from the existing DFT and transport output -- pure parsing, nothing recomputed.
+The v2 records add `DOSAtom`, the atom-resolved density of states, shape
+`[n_atoms, n_energy]`.
+
+**2077 records across 520 sequences.** Output in `pickle_files_v2/` and the published
+archive `g3nat_dna_transport.h5`.
+
+| sequence length | sequences | records |
+|---|---|---|
+| 4 | 135 | 540 |
+| 5 | 113 | 451 |
+| 6 | 83  | 330 |
+| 7 | 93  | 372 |
+| 8 | 96  | 384 |
+
+Per run: run1 = 520, run2 = 519, run3 = 519, run4 = 519.
+
+`pickle_files/` (2058 records, no `DOSAtom`) is deliberately NOT replaced. Every recorded
+model result in `model-results.md` was trained against it, so switching the training path to
+`pickle_files_v2/` changes the dataset underneath the model and invalidates comparison
+across that boundary. Re-baseline deliberately rather than swapping in place.
+
+### Properties verified across the full set
+
+- `DOSAtom.sum(axis=0)` reproduces `DOS` to a worst-case relative deviation of **3.6e-15**
+  across all 2077 records, and **4.2e-15** read back out of the HDF5. Float64 noise. On the
+  single `aaac` fixture it was 1.4e-15, so the invariant holds across all five duplex
+  lengths and 250-510 atoms, not only where it was first measured. This is what makes the
+  per-atom LDOS usable as a training signal: it is exactly consistent with the DOS the model
+  already fits, not a second and disagreeing target.
+- The per-record HOMO reference is composition-driven, as expected: `aaat` (pure AT) sits at
+  -5.8120 eV while `aaacgacg` (GC-rich) sits at -4.8709 eV -- a 0.94 eV spread across five
+  consecutive records, consistent with the 0.813 eV / 13.6 sigma AT-vs-GC separation
+  measured earlier. This is why the published archive warns against comparing a fixed
+  relative energy across sequences.
+- Element-to-orbital mapping, measured over 55 sequences / 22781 atoms and one-to-one with
+  no exceptions: `H:5, C:15, N:15, O:15, P:19`, as expected for B3LYP/6-31G(d,p) with
+  Cartesian polarization functions. `validate_record` checks every atom against this map.
+- `resseq` is monotonic non-decreasing in every sequence, so the atom table is always
+  grouped by residue in PDB file order -- which is also `DOSAtom` row order.
