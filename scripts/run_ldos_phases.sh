@@ -98,6 +98,11 @@ i="${SLURM_ARRAY_TASK_ID}"
 
 case "${PHASE}" in
   A)
+    N=${#SEEDS[@]}
+    if [ "$i" -ge "$N" ]; then
+      echo "ERROR: array task $i out of range for phase A (valid range 0-$(( N - 1 )), $N cells = ${#SEEDS[@]} seeds)" >&2
+      exit 1
+    fi
     SEED="${SEEDS[$(( i % 3 ))]}"
     B_VAL=0.0
     TARGET=residue
@@ -105,6 +110,11 @@ case "${PHASE}" in
     ;;
   B)
     B_GRID=(0.1 0.25 0.5 0.75 0.9)
+    N=$(( ${#B_GRID[@]} * ${#SEEDS[@]} ))
+    if [ "$i" -ge "$N" ]; then
+      echo "ERROR: array task $i out of range for phase B (valid range 0-$(( N - 1 )), $N cells = ${#B_GRID[@]} b-values x ${#SEEDS[@]} seeds)" >&2
+      exit 1
+    fi
     B_VAL="${B_GRID[$(( i / 3 ))]}"
     SEED="${SEEDS[$(( i % 3 ))]}"
     TARGET=residue
@@ -113,7 +123,18 @@ case "${PHASE}" in
   C)
     : "${B_BEST:?Phase C needs B_BEST=<b> from Phase B}"
     : "${B_NEIGHBOUR:?Phase C needs B_NEIGHBOUR=<b> from Phase B}"
+    if [ "${B_BEST}" = "${B_NEIGHBOUR}" ]; then
+      echo "ERROR: B_BEST and B_NEIGHBOUR are both ${B_BEST}; phase C needs two" >&2
+      echo "       distinct b values, or cells i and i+3 (same seed) would share" >&2
+      echo "       the same TAG/OUT/CKPT and silently resume each other's weights." >&2
+      exit 1
+    fi
     C_GRID=("${B_BEST}" "${B_NEIGHBOUR}")
+    N=$(( ${#C_GRID[@]} * ${#SEEDS[@]} ))
+    if [ "$i" -ge "$N" ]; then
+      echo "ERROR: array task $i out of range for phase C (valid range 0-$(( N - 1 )), $N cells = ${#C_GRID[@]} b-values x ${#SEEDS[@]} seeds)" >&2
+      exit 1
+    fi
     B_VAL="${C_GRID[$(( i / 3 ))]}"
     SEED="${SEEDS[$(( i % 3 ))]}"
     TARGET=base_only
