@@ -50,9 +50,12 @@ def test_ldos_attached_with_expected_shape():
 def test_batching_concatenates_on_dim_zero_and_reshapes():
     # Verified against torch_geometric 2.6.1: a 2-D custom attribute defaults
     # to __cat_dim__ == 0, so a batch of B graphs gives [B*2L, n_energy].
+    # Every element is distinct (not a per-sample constant), so a row
+    # permutation or a transpose WITHIN a sample fails this test -- a
+    # constant-fill fixture would satisfy it either way.
     ldos = [
-        np.full((8, 5), 1.0),
-        np.full((8, 5), 2.0),
+        np.arange(8 * 5, dtype=np.float64).reshape(8, 5),
+        np.arange(8 * 5, dtype=np.float64).reshape(8, 5) + 100.0,
     ]
     dataset = _build(ldos_list=ldos)
 
@@ -60,8 +63,8 @@ def test_batching_concatenates_on_dim_zero_and_reshapes():
 
     assert batch.ldos.shape == (16, 5)
     reshaped = batch.ldos.view(2, 8, 5)
-    assert torch.allclose(reshaped[0], torch.ones(8, 5))
-    assert torch.allclose(reshaped[1], torch.full((8, 5), 2.0))
+    torch.testing.assert_close(reshaped[0], torch.as_tensor(ldos[0], dtype=torch.float))
+    torch.testing.assert_close(reshaped[1], torch.as_tensor(ldos[1], dtype=torch.float))
 
 
 def test_ldos_target_selects_the_named_aggregation():
