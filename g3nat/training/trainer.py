@@ -114,7 +114,7 @@ class Trainer:
             self.train_losses.append(train_loss)
 
             # Validation phase
-            val_loss = self._validate_epoch(val_loader)
+            val_loss = self._validate_epoch(val_loader, epoch)
             self.val_losses.append(val_loss)
 
             # Call progress callback if provided
@@ -174,20 +174,7 @@ class Trainer:
                     "model supports the LDOS term."
                 )
 
-            # Target [batch * 2L, n_energy] -> [batch, 2L, n_energy]
-            n_sites = batch.ldos.size(0) // batch_size
-            ldos_target = batch.ldos.view(batch_size, n_sites, num_energy_points)
-
-            # Prediction [batch, n_energy, n_sites*n_orb] -> [batch, n_energy, n_sites]
-            ldos_pred = site_ldos_log10(self.model.ldos, n_sites, self.model.log_floor)
-            # ... then transpose to match the target's [batch, n_sites, n_energy].
-            ldos_pred = ldos_pred.transpose(1, 2)
-
-            if ldos_pred.shape != ldos_target.shape:
-                raise ValueError(
-                    f"LDOS shape mismatch: prediction {tuple(ldos_pred.shape)} vs "
-                    f"target {tuple(ldos_target.shape)}"
-                )
+            ldos_pred, ldos_target = self._ldos_pred_and_target(batch, batch_size)
 
             ldos_loss = self.criterion(ldos_pred, ldos_target)
             total = a * transmission_loss + b * ldos_loss + (1.0 - b) * dos_loss
@@ -204,7 +191,37 @@ class Trainer:
             'dos_t_unweighted': dos_loss + transmission_loss,
         }
 
-    def _ldos_agreement(self, batch, n_sites_hint=None):
+    def _ldos_pred_and_target(self, batch, batch_size):
+        """Reshape/predict the LDOS pair shared by the loss and the metric.
+
+        Used by both `_compute_losses`'s b != 0 branch and `_ldos_agreement`,
+        so a fix to one path cannot silently diverge from the other -- the
+        whole point of the held-out metric is that it measures the same
+        quantity the loss trains. Callers must already have established
+        hasattr(batch, 'ldos') and hasattr(self.model, 'ldos').
+
+        Returns:
+            (pred, target), both [batch, n_sites, n_energy].
+        """
+        num_energy_points = self.model.ldos.size(1)
+
+        # Target [batch * 2L, n_energy] -> [batch, 2L, n_energy]
+        n_sites = batch.ldos.size(0) // batch_size
+        target = batch.ldos.view(batch_size, n_sites, num_energy_points)
+
+        # Prediction [batch, n_energy, n_sites*n_orb] -> [batch, n_energy, n_sites]
+        pred = site_ldos_log10(self.model.ldos, n_sites, self.model.log_floor)
+        # ... then transpose to match the target's [batch, n_sites, n_energy].
+        pred = pred.transpose(1, 2)
+
+        if pred.shape != target.shape:
+            raise ValueError(
+                f"LDOS shape mismatch: prediction {tuple(pred.shape)} vs "
+                f"target {tuple(target.shape)}"
+            )
+        return pred, target
+
+    def _ldos_agreement(self, batch):
         """Held-out LDOS Huber, measured whether or not it is being trained.
 
         Returns nan when the batch carries no target. Presence of the target
@@ -213,11 +230,7 @@ class Trainer:
         if not hasattr(batch, 'ldos') or not hasattr(self.model, 'ldos'):
             return float('nan')
         batch_size = int(batch.batch.max().item() + 1)
-        n_energy = self.model.ldos.size(1)
-        n_sites = batch.ldos.size(0) // batch_size
-        target = batch.ldos.view(batch_size, n_sites, n_energy)
-        pred = site_ldos_log10(self.model.ldos, n_sites, self.model.log_floor)
-        pred = pred.transpose(1, 2)
+        pred, target = self._ldos_pred_and_target(batch, batch_size)
         return self.criterion(pred, target).item()
 
     def _train_epoch(self, train_loader: DataLoader) -> float:
@@ -246,8 +259,18 @@ class Trainer:
         train_loss /= len(train_loader)
         return train_loss
 
-    def _validate_epoch(self, val_loader: DataLoader) -> float:
-        """Validate for one epoch."""
+    def _validate_epoch(self, val_loader: DataLoader, epoch: int) -> float:
+        """Validate for one epoch.
+
+        Args:
+            epoch: ABSOLUTE epoch number (already accounts for start_epoch on
+                a resumed run -- it is the loop variable from fit(), not a
+                loop-local index). Stored on each metric_history entry so a
+                consumer can align on epoch number rather than list position,
+                which matters once a resume makes metric_history shorter than
+                val_losses (see train_model's metric_history/metric_history_out
+                params).
+        """
         self.model.eval()
         val_loss = 0.0
         agg_dos = 0.0
@@ -273,10 +296,16 @@ class Trainer:
 
         val_loss /= len(val_loader)
         self.metric_history.append({
+            'epoch': epoch,
             'val_dos': agg_dos / n_batches,
             'val_transmission': agg_trans / n_batches,
             'val_dos_t_unweighted': agg_unweighted / n_batches,
             'val_ldos_residue': agg_ldos / n_batches,
+            # Always nan: reporting the non-trained aggregation would require
+            # carrying BOTH the residue and base_only LDOS arrays on every
+            # Data object simultaneously, which is deliberately out of scope
+            # here. The experiment covers the other aggregation by running it
+            # directly in a later phase, not through this trainer.
             'val_ldos_base_only': float('nan'),
         })
         return val_loss
@@ -299,6 +328,7 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
                checkpoint_callback=None, progress_callback=None, max_grad_norm: float = 1.0,
                warmup_epochs: int = 50, optimizer_name: str = 'adam',
                weight_decay: float = 1e-5, loss_a: float = 1.0, loss_b: float = 0.0,
+               metric_history: Optional[List[Dict[str, float]]] = None,
                metric_history_out: Optional[List[Dict[str, float]]] = None):
     """
     Train the DNA Transport GNN model (backward-compatible function).
@@ -321,9 +351,15 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         max_grad_norm: Maximum gradient norm for gradient clipping (default: 1.0)
         loss_a: weight on the transmission loss term (default 1.0 reproduces history)
         loss_b: convex mixing weight b*LDOS + (1-b)*DOS (default 0.0 reproduces history)
+        metric_history: existing per-epoch metric_history for resumption
+            (optional), analogous to train_losses/val_losses. Each entry
+            already carries an absolute 'epoch' key, so seeding here and then
+            letting fit() append more keeps the whole list self-describing
+            even though the seed and the appended entries come from different
+            process invocations.
         metric_history_out: if provided, filled in-place with the trainer's
-            per-epoch metric_history (val_dos/val_transmission/val_ldos_residue/...)
-            so a caller that only unpacks (train_losses, val_losses) can still
+            full (seeded + newly appended) per-epoch metric_history so a
+            caller that only unpacks (train_losses, val_losses) can still
             recover it without changing this function's return arity.
 
     Returns:
@@ -357,6 +393,11 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         trainer.train_losses = train_losses
     if val_losses is not None:
         trainer.val_losses = val_losses
+    if metric_history is not None:
+        # Copy rather than alias: the caller's list (e.g. scripts/train.py's
+        # resume_metric_history, read from a checkpoint) should not be mutated
+        # by this trainer's subsequent appends.
+        trainer.metric_history = list(metric_history)
 
     # Train
     train_losses, val_losses = trainer.fit(
