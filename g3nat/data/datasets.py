@@ -19,7 +19,8 @@ class DNATransportDataset(torch.utils.data.Dataset):
                  energy_grid: np.ndarray,
                  complementary_sequences: Optional[List[str]] = None,
                  gamma_l: Optional[np.ndarray] = None, gamma_r: Optional[np.ndarray] = None,
-                 graphs: Optional[List] = None):
+                 graphs: Optional[List] = None,
+                 ldos_list: Optional[List[np.ndarray]] = None):
         """
         Initialize the dataset.
 
@@ -32,6 +33,8 @@ class DNATransportDataset(torch.utils.data.Dataset):
             gamma_l: Left contact coupling strengths as vectors [num_samples, seq_length * 2] (optional, for debugging)
             gamma_r: Right contact coupling strengths as vectors [num_samples, seq_length * 2] (optional, for debugging)
             graphs: Pre-converted graphs (optional)
+            ldos_list: Per-residue LDOS targets, log10, one [2L, n_energy] array
+                per sample (optional)
         """
         self.sequences = sequences
         self.complementary_sequences = complementary_sequences
@@ -39,6 +42,21 @@ class DNATransportDataset(torch.utils.data.Dataset):
         self.transmission_data = transmission_data
         self.energy_grid = energy_grid
         self.graphs = graphs
+
+        # Per-residue LDOS targets, log10, one [2L, n_energy] array per sample.
+        # Ragged across samples (2L varies 8..16), so this stays a list of
+        # tensors rather than one stacked array.
+        if ldos_list is None:
+            self.ldos_tensors = None
+        else:
+            if len(ldos_list) != len(sequences):
+                raise ValueError(
+                    f"ldos_list has {len(ldos_list)} entries but there are "
+                    f"{len(sequences)} sequences"
+                )
+            self.ldos_tensors = [
+                torch.as_tensor(np.asarray(a), dtype=torch.float) for a in ldos_list
+            ]
 
         # Convert to tensors (use np.asarray to avoid slow list-of-ndarrays path)
         self.dos_tensor = torch.as_tensor(np.asarray(dos_data), dtype=torch.float)
@@ -96,6 +114,12 @@ class DNATransportDataset(torch.utils.data.Dataset):
                 data.edge_geom = graph.edge_geom
                 data.edge_geom_mask = graph.edge_geom_mask
 
+            # Assign ONLY when a target exists. PyG drops an attribute set to
+            # None -- it never becomes a key, and batch.ldos then raises
+            # AttributeError rather than returning None (torch_geometric 2.6.1).
+            if self.ldos_tensors is not None:
+                data.ldos = self.ldos_tensors[idx]
+
             return data
         else:
             raise NotImplementedError(
@@ -145,6 +169,8 @@ def create_dna_dataset(sequences: List[str], dos_data: np.ndarray,
                       right_contact_coupling_list: Optional[List[float]] = None,
                       geometry_cache: Optional[dict] = None,
                       graph_converter_func=None,
+                      ldos_data: Optional[dict] = None,
+                      ldos_target: str = 'residue',
                       **graph_kwargs) -> DNATransportDataset:
     """
     Create a DNA transport dataset with proper graph conversion.
@@ -163,6 +189,10 @@ def create_dna_dataset(sequences: List[str], dos_data: np.ndarray,
         left_contact_coupling_list: List of left contact coupling values (eV) for each sequence (optional)
         right_contact_coupling_list: List of right contact coupling values (eV) for each sequence (optional)
         graph_converter_func: Function to convert sequences to graphs
+        ldos_data: dict with keys 'residue' and 'base_only', each a list of
+            [2L, n_energy] log10 arrays, one per sample. None when the source
+            data carries no DOSAtom.
+        ldos_target: which aggregation to train against, 'residue' or 'base_only'.
         **graph_kwargs: Additional arguments to pass to graph_converter_func
 
     Returns:
@@ -240,5 +270,16 @@ def create_dna_dataset(sequences: List[str], dos_data: np.ndarray,
             )
         graphs.append(graph)
 
+    ldos_list = None
+    if ldos_data is not None:
+        if ldos_target not in ldos_data:
+            raise ValueError(
+                f"ldos_target={ldos_target!r} not in ldos_data; "
+                f"available: {sorted(ldos_data)}"
+            )
+        ldos_list = ldos_data[ldos_target]
+
     # Create and return the dataset with pre-converted graphs
-    return DNATransportDataset(sequences, dos_data, transmission_data, energy_grid, complementary_sequences, gamma_l, gamma_r, graphs)
+    return DNATransportDataset(sequences, dos_data, transmission_data, energy_grid,
+                               complementary_sequences, gamma_l, gamma_r, graphs,
+                               ldos_list)
