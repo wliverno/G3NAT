@@ -72,7 +72,11 @@ class Trainer:
         Args:
             train_loader: Training data loader
             val_loader: Validation data loader
-            checkpoint_callback: Optional callback for saving checkpoints
+            checkpoint_callback: Optional callback for saving checkpoints. Called as
+                checkpoint_callback(model, optimizer, epoch, train_losses, val_losses,
+                metric_history=self.metric_history) -- the metric_history keyword lets
+                a callback that forwards it to save_checkpoint() survive a preemption
+                without losing per-epoch LDOS/DOS/transmission history.
             progress_callback: Optional callback for tracking progress
             start_epoch: Starting epoch for resumption (default: 0)
 
@@ -124,7 +128,8 @@ class Trainer:
             # Save checkpoint periodically
             if checkpoint_callback is not None:
                 if (epoch + 1) % self.config.checkpoint_frequency == 0:
-                    checkpoint_callback(self.model, self.optimizer, epoch, self.train_losses, self.val_losses)
+                    checkpoint_callback(self.model, self.optimizer, epoch, self.train_losses, self.val_losses,
+                                       metric_history=self.metric_history)
 
             # Print progress
             if (epoch + 1) % 10 == 0:
@@ -132,7 +137,8 @@ class Trainer:
 
         # Save final checkpoint
         if checkpoint_callback is not None:
-            checkpoint_callback(self.model, self.optimizer, self.config.num_epochs - 1, self.train_losses, self.val_losses)
+            checkpoint_callback(self.model, self.optimizer, self.config.num_epochs - 1, self.train_losses, self.val_losses,
+                               metric_history=self.metric_history)
 
         return self.train_losses, self.val_losses
 
