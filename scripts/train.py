@@ -236,10 +236,11 @@ def main():
     # that variable is defined. Do not move this initialisation down into the callback.
     best_val = {'value': float('inf')}
 
-    def checkpoint_cb(model, opt, epoch, train_losses, val_losses):
+    def checkpoint_cb(model, opt, epoch, train_losses, val_losses, metric_history=None):
         save_checkpoint(model, opt, epoch, train_losses, val_losses,
                        vars(args), energy_grid,
-                       os.path.join(args.checkpoint_dir, 'checkpoint_latest.pth'))
+                       os.path.join(args.checkpoint_dir, 'checkpoint_latest.pth'),
+                       metric_history=metric_history)
         # Save only when THIS epoch is the running minimum, so the stored weights actually
         # correspond to the stored value. Testing min(val_losses) instead would fire at the
         # next checkpoint after a dip and save weights from a worse epoch under the name
@@ -253,7 +254,8 @@ def main():
             best_val['value'] = float(val_losses[-1])
             save_checkpoint(model, opt, epoch, train_losses, val_losses,
                            vars(args), energy_grid,
-                           os.path.join(args.checkpoint_dir, 'checkpoint_best.pth'))
+                           os.path.join(args.checkpoint_dir, 'checkpoint_best.pth'),
+                           metric_history=metric_history)
 
     def progress_cb(epoch, train_loss, val_loss):
         save_progress_file(epoch, train_loss, val_loss, args.checkpoint_dir, vars(args))
@@ -272,11 +274,10 @@ def main():
         start_epoch = ckpt['epoch'] + 1
         resume_train_losses = ckpt['train_losses']
         resume_val_losses = ckpt['val_losses']
-        # save_checkpoint() (g3nat/training/callbacks.py, outside this task's
-        # scope) does not write 'metric_history' into checkpoint_latest.pth, so
-        # older checkpoints -- and every checkpoint written via that path --
-        # will not carry this key. Guard with .get() and start empty rather
-        # than KeyError.
+        # save_checkpoint() writes 'metric_history' whenever the caller supplies
+        # it (checkpoint_cb below does, via Trainer.fit()'s checkpoint_callback).
+        # Older checkpoints written before this wiring existed will not carry
+        # the key, so guard with .get() and start empty rather than KeyError.
         resume_metric_history = ckpt.get('metric_history')
         # Must match the optimizer the Trainer will build, or a requeue silently switches
         # optimizer mid-run and the loaded state_dict is applied to the wrong type.
