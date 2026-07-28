@@ -39,6 +39,13 @@ def parse_args():
                        help='Minimum sequence length for TB source (-1 = same as seq_length)')
     parser.add_argument('--num_energy_points', type=int, default=100,
                        help='Number of energy points')
+    parser.add_argument('--ldos_target', type=str, default='residue',
+                       choices=['residue', 'base_only'],
+                       help='which LDOS aggregation to train against')
+    parser.add_argument('--loss_a', type=float, default=1.0,
+                        help='weight on the transmission loss term')
+    parser.add_argument('--loss_b', type=float, default=0.0,
+                        help='convex mixing weight: b*LDOS + (1-b)*DOS')
 
     # Model parameters
     parser.add_argument('--model_type', type=str, default='hamiltonian',
@@ -113,11 +120,12 @@ def main():
             num_energy_points=args.num_energy_points,
             min_length=args.min_length
         )
+        ldos_data = None
     else:  # pickle
         if args.data_dir is None:
             raise ValueError("--data_dir required for pickle data source")
         print(f"Loading pickle files from {args.data_dir}...")
-        seqs, comp_seqs, dos_data, trans_data, energy_grid, contact_configs = \
+        seqs, comp_seqs, dos_data, trans_data, energy_grid, contact_configs, ldos_data = \
             load_pickle_directory(args.data_dir)
 
         # Extract contact configurations for pickle data
@@ -152,7 +160,9 @@ def main():
             right_contact_positions_list=right_contact_pos_list,
             left_contact_coupling_list=left_coupling_list,
             right_contact_coupling_list=right_coupling_list,
-            geometry_cache=geom_cache
+            geometry_cache=geom_cache,
+            ldos_data=ldos_data,
+            ldos_target=args.ldos_target
         )
     else:
         dataset = create_dna_dataset(
@@ -226,10 +236,11 @@ def main():
     # that variable is defined. Do not move this initialisation down into the callback.
     best_val = {'value': float('inf')}
 
-    def checkpoint_cb(model, opt, epoch, train_losses, val_losses):
+    def checkpoint_cb(model, opt, epoch, train_losses, val_losses, metric_history=None):
         save_checkpoint(model, opt, epoch, train_losses, val_losses,
                        vars(args), energy_grid,
-                       os.path.join(args.checkpoint_dir, 'checkpoint_latest.pth'))
+                       os.path.join(args.checkpoint_dir, 'checkpoint_latest.pth'),
+                       metric_history=metric_history)
         # Save only when THIS epoch is the running minimum, so the stored weights actually
         # correspond to the stored value. Testing min(val_losses) instead would fire at the
         # next checkpoint after a dip and save weights from a worse epoch under the name
@@ -243,7 +254,8 @@ def main():
             best_val['value'] = float(val_losses[-1])
             save_checkpoint(model, opt, epoch, train_losses, val_losses,
                            vars(args), energy_grid,
-                           os.path.join(args.checkpoint_dir, 'checkpoint_best.pth'))
+                           os.path.join(args.checkpoint_dir, 'checkpoint_best.pth'),
+                           metric_history=metric_history)
 
     def progress_cb(epoch, train_loss, val_loss):
         save_progress_file(epoch, train_loss, val_loss, args.checkpoint_dir, vars(args))
@@ -253,6 +265,7 @@ def main():
     resume_train_losses = None
     resume_val_losses = None
     resume_optimizer = None
+    resume_metric_history = None
     checkpoint_path = os.path.join(args.checkpoint_dir, 'checkpoint_latest.pth')
     if os.path.exists(checkpoint_path):
         print(f"Resuming from checkpoint: {checkpoint_path}")
@@ -261,6 +274,11 @@ def main():
         start_epoch = ckpt['epoch'] + 1
         resume_train_losses = ckpt['train_losses']
         resume_val_losses = ckpt['val_losses']
+        # save_checkpoint() writes 'metric_history' whenever the caller supplies
+        # it (checkpoint_cb below does, via Trainer.fit()'s checkpoint_callback).
+        # Older checkpoints written before this wiring existed will not carry
+        # the key, so guard with .get() and start empty rather than KeyError.
+        resume_metric_history = ckpt.get('metric_history')
         # Must match the optimizer the Trainer will build, or a requeue silently switches
         # optimizer mid-run and the loaded state_dict is applied to the wrong type.
         _Opt = torch.optim.AdamW if args.optimizer.lower() == 'adamw' else torch.optim.Adam
@@ -275,6 +293,7 @@ def main():
             print(f"Resuming best val: {best_val['value']:.4f}")
 
     print("Training...")
+    metric_history = []
     train_losses, val_losses = train_model(
         model=model,
         train_loader=train_loader,
@@ -290,7 +309,12 @@ def main():
         start_epoch=start_epoch,
         train_losses=resume_train_losses,
         val_losses=resume_val_losses,
-        optimizer=resume_optimizer
+        optimizer=resume_optimizer,
+        loss_a=args.loss_a,
+        loss_b=args.loss_b,
+        ldos_target=args.ldos_target,
+        metric_history=resume_metric_history,
+        metric_history_out=metric_history
     )
 
     # Save final model
@@ -300,7 +324,8 @@ def main():
         'args': vars(args),
         'train_losses': train_losses,
         'val_losses': val_losses,
-        'energy_grid': energy_grid
+        'energy_grid': energy_grid,
+        'metric_history': metric_history
     }, model_path)
 
     # Also publish the BEST-val weights next to the final ones. Analysis that reads the
@@ -317,6 +342,7 @@ def main():
             'train_losses': train_losses,
             'val_losses': val_losses,
             'energy_grid': energy_grid,
+            'metric_history': metric_history,
             'best_val': float(min(val_losses)),
             'best_val_epoch': int(np.argmin(val_losses)),
             'saved_at_epoch': bc.get('epoch'),
