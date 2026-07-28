@@ -6,13 +6,21 @@ import json
 import torch
 import torch.nn as nn
 import numpy as np
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 
 def save_checkpoint(model: nn.Module, optimizer: torch.optim.Optimizer, epoch: int,
                    train_losses: List[float], val_losses: List[float], args: Dict,
-                   energy_grid: np.ndarray, checkpoint_path: str):
-    """Save training checkpoint."""
+                   energy_grid: np.ndarray, checkpoint_path: str,
+                   metric_history: Optional[List[Dict[str, float]]] = None):
+    """Save training checkpoint.
+
+    metric_history is optional and backward compatible: existing callers that
+    do not pass it keep working unchanged, and when it is omitted nothing new
+    is written to the checkpoint dict (no 'metric_history' key at all, rather
+    than a key holding None) -- so a resume read that guards with .get()
+    behaves exactly as it did before this parameter existed.
+    """
     checkpoint = {
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
@@ -23,6 +31,8 @@ def save_checkpoint(model: nn.Module, optimizer: torch.optim.Optimizer, epoch: i
         'energy_grid': energy_grid,
         'timestamp': time.time()
     }
+    if metric_history is not None:
+        checkpoint['metric_history'] = metric_history
     torch.save(checkpoint, checkpoint_path)
     print(f"Checkpoint saved: {checkpoint_path}")
 

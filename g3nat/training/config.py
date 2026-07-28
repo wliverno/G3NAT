@@ -19,6 +19,17 @@ class TrainingConfig:
     # weaker and parameter-dependent. See docs/references.md.
     optimizer: str = 'adam'          # 'adam' | 'adamw'
     weight_decay: float = 1e-5
+    # Loss weights: total = loss_a * T + loss_b * LDOS + (1 - loss_b) * DOS.
+    # loss_a=1.0, loss_b=0.0 reproduces the historical dos + transmission loss
+    # exactly. loss_b is a convex mixing weight between local and global DOS;
+    # the model cannot rescale it, unlike alpha.
+    loss_a: float = 1.0
+    loss_b: float = 0.0
+    # Which LDOS aggregation this run is trained/measured against. Controls
+    # only which of val_ldos_residue / val_ldos_base_only in metric_history
+    # holds the measured value (the other stays nan) -- it does not change
+    # what any loss or aggregation computes.
+    ldos_target: str = 'residue'  # 'residue' | 'base_only'
 
     @classmethod
     def from_kwargs(cls, **kwargs):
