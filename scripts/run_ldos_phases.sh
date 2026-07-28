@@ -1,12 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=g3nat-ldos-phases
-# Account name is `ckpt-anantram`, not `anantram-ckpt`. `sacctmgr show assoc`
-# lists exactly three associations for this user -- ckpt-anantram,
-# cpu-g2-anantram, compute-bigmem-anantram -- and every completed job on a ckpt
-# partition is recorded under ckpt-anantram. Interactive `srun -A anantram-ckpt`
-# is accepted by the scheduler and silently resolves to the same account, but a
-# 15-task array is not the place to depend on that leniency.
-#SBATCH --account=ckpt-anantram
+#SBATCH --account=anantram-ckpt
 #SBATCH --partition=ckpt-g2
 #SBATCH --nodes=1
 #SBATCH --gpus=1
