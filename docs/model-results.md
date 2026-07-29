@@ -862,19 +862,28 @@ while LDOS worsens by 0.315.
 
 ![DOS/LDOS trade-off at b=0](figures/ldos-tradeoff.png)
 
-*Mean of the three seeds, band = seed range, 301-epoch moving average, `loss_b = 0`. The
-LDOS curve is measured but never trained -- it is a passive observer of what fitting DOS and
-transmission does to spectral-weight placement.*
+*Mean of the three seeds, band = seed range, median within 140 log-spaced epoch bins,
+`loss_b = 0`. The LDOS curve is measured but never trained -- it is a passive observer of
+what fitting DOS and transmission does to spectral-weight placement.*
 
-Averaged over seeds, the smoothed curves put the exchange rate at:
+**On the binning.** An earlier version of this figure used a 301-epoch moving average, which
+is wrong on a log axis: the window spans two decades at epoch 10 and a sliver at epoch 10000,
+so it over-smooths exactly the region where the interesting structure is. It manufactured a
+smooth LDOS valley bottoming at epoch 201. There is no such valley. Binning uniformly in
+log(epoch) keeps the smoothing constant in the display space and shows what is really there:
+LDOS falls fast, then sits on a **noisy plateau from roughly epoch 15 to 300**, then climbs.
 
 | | LDOS agreement | DOS+T |
 |---|---|---|
-| at the LDOS minimum (epoch 201) | **0.6448** | 0.8206 |
-| at best-val (epoch 1083-2889) | **0.7809** | 0.5676 |
+| binned minimum (epoch ~15) | **0.5385** | 1.0605 |
+| at best-val (epoch 1083-2889) | **0.7818** | 0.5663 |
+| final (epoch 15000) | 0.8000 | ~0.61 |
 
-Going from the LDOS minimum to best-val buys 0.253 of DOS+T at a cost of 0.136 of LDOS
-agreement. The band never closes after epoch ~600: no seed recovers its early LDOS.
+The early LDOS advantage is **not reachable at a good transport fit**: where LDOS is lowest,
+DOS+T is 1.06, nearly double its 0.566 optimum. That is the point of the figure -- the model
+begins with better spectral-weight placement than it ends with, and spends that placement to
+buy DOS and transmission accuracy. The bands never re-cross after epoch ~600; no seed
+recovers its early LDOS.
 
 **Interpretation, and its limit.** Trained on aggregate observables alone, the model reaches
 a Hamiltonian that reproduces the total DOS and the contact-to-contact transmission better
