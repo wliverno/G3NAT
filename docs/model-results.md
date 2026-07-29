@@ -860,6 +860,22 @@ Each seed reaches its best LDOS agreement early -- **0.4390 at epoch 71, 0.4256 
 Seed 42 states the exchange rate plainly: from epoch 400 to 1100, DOS+T improves by 0.146
 while LDOS worsens by 0.315.
 
+![DOS/LDOS trade-off at b=0](figures/ldos-tradeoff.png)
+
+*Mean of the three seeds, band = seed range, 301-epoch moving average, `loss_b = 0`. The
+LDOS curve is measured but never trained -- it is a passive observer of what fitting DOS and
+transmission does to spectral-weight placement.*
+
+Averaged over seeds, the smoothed curves put the exchange rate at:
+
+| | LDOS agreement | DOS+T |
+|---|---|---|
+| at the LDOS minimum (epoch 201) | **0.6448** | 0.8206 |
+| at best-val (epoch 1083-2889) | **0.7809** | 0.5676 |
+
+Going from the LDOS minimum to best-val buys 0.253 of DOS+T at a cost of 0.136 of LDOS
+agreement. The band never closes after epoch ~600: no seed recovers its early LDOS.
+
 **Interpretation, and its limit.** Trained on aggregate observables alone, the model reaches
 a Hamiltonian that reproduces the total DOS and the contact-to-contact transmission better
 and better while placing spectral weight progressively less like the DFT reference. DOS
