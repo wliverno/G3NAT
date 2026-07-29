@@ -786,3 +786,113 @@ model has degraded past its own optimum rather than how well it can fit. Under a
 with best-val (or early stopping) the two convs look like a tie. The `--conv_type gat`
 default is not currently justified by evidence; re-run the comparison with early stopping
 before relying on it. One transformer seed so far.
+
+## 5. Phase A: the v2 baseline, and a measured DOS/LDOS trade-off (2026-07-29)
+
+First results from the LDOS work. Phase A is the **baseline arm**: `loss_b = 0.0`, so the
+LDOS term is skipped by branch and the loss is byte-identical to every earlier run in this
+document. What is new is that per-base LDOS agreement is **measured and reported at every
+epoch even when it is not trained**, which is what makes the rest of this section possible.
+
+Array job 37843829, 3 cells, all `COMPLETED 0:0`. Config: GAT + base-aware, hidden=256,
+layers=4, heads=4, n_orb=1, lr=1e-3, batch=32, 15000 epochs, grouped split, seeds 42/43/44,
+`pickle_files_v2` (2077 records), one L40 per cell. 796,418 parameters.
+
+### 5a. The v2 baseline
+
+| seed | best val | at epoch | final val | wall |
+|---|---|---|---|---|
+| 42 | 0.5325 | 1083 | 0.6242 | 131 min |
+| 43 | 0.5496 | 1125 | 0.6268 | 369 min |
+| 44 | 0.5390 | 2889 | 0.5652 | 140 min |
+
+Cross-seed std on best-val is **0.0086**, effectively identical to the 0.0084 best-val noise
+floor recorded in `docs/metrics.md`. That is an independent consistency check on the whole v2
+pipeline: a regenerated dataset, a rewritten loss path and a new metric channel did not move
+the run-to-run noise.
+
+Best-val ~0.540 on v2 also sits alongside the v1 model of record's 0.5469, so **moving from
+2058 to 2077 records did not change the difficulty**. Comparisons across the v1/v2 boundary
+are still not licensed -- the point is only that no large shift is hiding in the dataset
+change.
+
+Overfitting is severe and consistent with section 4: best val arrives at epoch 1083-2889 of
+15000, and final val is worse than best in all three seeds.
+
+### 5b. Metrics at each seed's own best-val epoch
+
+| quantity | s42 | s43 | s44 | mean | std | 2x |
+|---|---|---|---|---|---|---|
+| `val_dos_t_unweighted` | 0.5325 | 0.5496 | 0.5390 | 0.5404 | 0.0086 | **0.0173** |
+| `val_ldos_residue` | 0.8231 | 0.7652 | 0.7261 | 0.7715 | 0.0488 | **0.0976** |
+| `val_dos` | 0.1442 | 0.1443 | 0.1573 | 0.1486 | 0.0076 | 0.0151 |
+| `val_transmission` | 0.3883 | 0.4054 | 0.3817 | 0.3918 | 0.0122 | 0.0244 |
+
+`val_dos_t_unweighted` is the unweighted `dos + transmission` Huber. It is the only quantity
+comparable across different `loss_b` values, because the optimized total is `b`-weighted and
+therefore differently scaled at each `b`.
+
+**LDOS agreement is a much noisier quantity than DOS+T** -- cross-seed std 0.0488 against
+0.0086, a factor of 5.7. Any claim about LDOS improvement has to clear a correspondingly
+wider bar, and single-seed LDOS numbers are worthless.
+
+### 5c. The trade-off: fitting DOS and transmission makes LDOS worse
+
+Trajectories over the full 15000 epochs, sampled:
+
+| epoch | s42 ldos | s43 ldos | s44 ldos | s42 DOS+T | s43 DOS+T | s44 DOS+T |
+|---|---|---|---|---|---|---|
+| 0 | 1.1162 | 1.1122 | 1.1786 | 3.1721 | 3.3161 | 3.2914 |
+| 100 | 0.5964 | 0.6775 | 0.6756 | 1.0782 | 0.9805 | 0.8761 |
+| 400 | 0.5068 | 0.6776 | 0.7463 | 0.6965 | 0.6508 | 0.6373 |
+| 1100 | 0.8214 | 0.7744 | 0.7115 | 0.5503 | 0.5537 | 0.5938 |
+| 14999 | 0.8565 | 0.8072 | 0.7301 | 0.6242 | 0.6268 | 0.5652 |
+
+Both losses fall together for roughly the first 200-400 epochs. **After that they diverge:
+DOS+T continues to improve while LDOS agreement steadily degrades**, in all three seeds.
+Pearson correlation between the two, seed 42: **-0.381** over all 15000 epochs, **-0.278**
+restricted to epochs after 200 (i.e. excluding the initial joint descent). Both losses, so a
+negative correlation means one improves as the other worsens.
+
+Each seed reaches its best LDOS agreement early -- **0.4390 at epoch 71, 0.4256 at epoch 30,
+0.4459 at epoch 27** -- and then loses roughly 0.3 of it by best-val.
+
+Seed 42 states the exchange rate plainly: from epoch 400 to 1100, DOS+T improves by 0.146
+while LDOS worsens by 0.315.
+
+**Interpretation, and its limit.** Trained on aggregate observables alone, the model reaches
+a Hamiltonian that reproduces the total DOS and the contact-to-contact transmission better
+and better while placing spectral weight progressively less like the DFT reference. DOS
+constrains eigenvalues and transmission constrains one matrix element; neither constrains
+where a state lives, so nothing in the `b=0` objective penalizes that drift. This is the
+failure the LDOS term was proposed to prevent, and it is now measured rather than argued.
+
+What this does NOT establish: that the early minima are reachable at a good DOS+T fit. At
+epochs 27-71 the DOS+T loss is still 0.86-2.27, far from its 0.54 optimum, so ~0.43 is
+evidence that the model *starts* better than it ends, not a target. Recovering LDOS 0.51 by
+early stopping alone costs 0.146 in DOS+T -- **8.4x the 0.0173 bar**.
+
+### 5d. What Phase B is therefore testing
+
+Phase A settles the gating question the plan posed: does the untrained model already place
+spectral weight well enough that no loss change is needed? **No.** It places it reasonably
+early and then trades it away.
+
+So the question for `b > 0` is not whether LDOS supervision moves the model along this
+trade-off curve -- it must. It is whether supervision **changes the shape of the curve**,
+reaching a point that early stopping on the `b = 0` run cannot: LDOS agreement below
+`0.7715 - 0.0976 = 0.674` while `val_dos_t_unweighted` stays below `0.5404 + 0.0173 = 0.558`.
+
+### 5e. Anomaly threshold, fixed before Phase B was dispatched
+
+Required by the design so that the rule cannot be tuned after seeing results. Phase A's three
+cells landed at 0.5325 / 0.5496 / 0.5390 with no outlier.
+
+> **A cell is flagged anomalous if its best-val `val_dos_t_unweighted` exceeds 0.583**
+> (Phase A mean 0.5404 + 5 std of 0.0086). Flagged cells are reported, not silently dropped.
+> A replacement uses pre-declared backup seed 45, at most once per cell; if the replacement
+> is also anomalous the cell is reported as anomalous. Anomalies are checked for clustering
+> by `b` -- `docs/model-results.md` section 4 records that at alpha=1.0 the seeds landed in
+> genuinely different-quality basins and the *best-fitting* seed was the outlier, so a
+> cluster of anomalies is a finding about the loss landscape, not noise to be excluded.
+
