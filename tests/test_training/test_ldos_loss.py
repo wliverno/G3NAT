@@ -214,8 +214,12 @@ def test_ldos_shape_centers_per_sequence_not_per_site(monkeypatch):
     # failure mode is real, not a strawman.
     n_sites, n_energy = 4, 5
     site_offsets = torch.tensor([0.0, 1.0, 2.0, 3.0])
-    target = site_offsets.view(1, n_sites, 1).expand(1, n_sites, n_energy).clone()
-    flattened_pred = torch.full((1, n_sites, n_energy), site_offsets.mean().item())
+    # Batch size must match the real batch (2 sequences) or _compute_losses'
+    # per-sequence offset, shape [2, 1], broadcasts against a [1, ...] tensor and
+    # torch warns that the result is not what either side intends.
+    n_batch = 2
+    target = site_offsets.view(1, n_sites, 1).expand(n_batch, n_sites, n_energy).clone()
+    flattened_pred = torch.full((n_batch, n_sites, n_energy), site_offsets.mean().item())
 
     # Integration check: force the trainer's real LDOS loss path onto this
     # pred/target pair, so the assertion exercises the actual dims=(1, 2) call
