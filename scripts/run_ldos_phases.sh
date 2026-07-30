@@ -73,6 +73,13 @@ echo "disk check: ${FREE_GB}GB free (min ${MIN_FREE_GB}GB) -- ok"
 
 DATA_DIR="${DATA_DIR:-pickle_files_v2}"
 EPOCHS="${EPOCHS:-15000}"
+# n_orb is overridable for the frontier-level experiment. The HOMO+/-1eV window
+# holds 1.25-2.62 DFT levels per base (counted from the Gaussian logs) while
+# n_orb=1 supplies one, and the measured DOS offset of 0.2199 decades matches
+# that shortfall (level-counting predicts 0.2005). Prediction: at n_orb=2 the
+# offset collapses toward zero, most strongly for AT-rich sequences where the
+# level count is highest. docs/model-results.md section 7.
+N_ORB="${N_ORB:-1}"
 # Seeds 42/43/44 by default. SEEDS is overridable so the pre-declared backup
 # seed 45 can be run for a cell flagged anomalous, without editing this file:
 #   PHASE=O O_B=0.1 SEEDS=45 sbatch --array=0-0 scripts/run_ldos_phases.sh
@@ -93,11 +100,15 @@ COMMON=(
   --hidden_dim 256
   --num_layers 4
   --num_heads 4
-  --n_orb 1
+  --n_orb "${N_ORB}"
   --learning_rate 1e-3
   --batch_size 32
   --num_epochs "${EPOCHS}"
 )
+
+# Suffix only when non-default, so existing tag names are unchanged.
+NORB_TAG=""
+if [ "${N_ORB}" != "1" ]; then NORB_TAG="_n${N_ORB}"; fi
 
 i="${SLURM_ARRAY_TASK_ID}"
 
@@ -111,7 +122,7 @@ case "${PHASE}" in
     SEED="${SEEDS[$(( i % ${#SEEDS[@]} ))]}"
     B_VAL=0.0
     TARGET=residue
-    TAG="A_b0.0_s${SEED}"
+    TAG="A_b0.0_s${SEED}${NORB_TAG}"
     ;;
   B)
     B_GRID=(0.1 0.25 0.5 0.75 0.9)
@@ -123,7 +134,7 @@ case "${PHASE}" in
     B_VAL="${B_GRID[$(( i / ${#SEEDS[@]} ))]}"
     SEED="${SEEDS[$(( i % ${#SEEDS[@]} ))]}"
     TARGET=residue
-    TAG="B_b${B_VAL}_s${SEED}"
+    TAG="B_b${B_VAL}_s${SEED}${NORB_TAG}"
     ;;
   C)
     : "${B_BEST:?Phase C needs B_BEST=<b> from Phase B}"
@@ -143,7 +154,7 @@ case "${PHASE}" in
     B_VAL="${C_GRID[$(( i / ${#SEEDS[@]} ))]}"
     SEED="${SEEDS[$(( i % ${#SEEDS[@]} ))]}"
     TARGET=base_only
-    TAG="C_baseonly_b${B_VAL}_s${SEED}"
+    TAG="C_baseonly_b${B_VAL}_s${SEED}${NORB_TAG}"
     ;;
   O)
     # STRUCTURED ONSITE, alpha = 1.0. This is the phase that tests the actual
@@ -174,7 +185,7 @@ case "${PHASE}" in
     B_VAL="${O_GRID[$(( i / ${#SEEDS[@]} ))]}"
     SEED="${SEEDS[$(( i % ${#SEEDS[@]} ))]}"
     TARGET=residue
-    TAG="O_a1.0_b${B_VAL}_s${SEED}"
+    TAG="O_a1.0_b${B_VAL}_s${SEED}${NORB_TAG}"
     EXTRA=(--structured_onsite --alpha_granularity global --alpha_mode fixed --alpha_value 1.0)
     ;;
   *)
