@@ -46,6 +46,8 @@
 #   PHASE=A sbatch --array=0-2  scripts/run_ldos_phases.sh
 #   PHASE=B sbatch --array=0-14 scripts/run_ldos_phases.sh
 #   PHASE=C B_BEST=<b> B_NEIGHBOUR=<b> sbatch --array=0-5 scripts/run_ldos_phases.sh
+#   PHASE=O sbatch --array=0-8  scripts/run_ldos_phases.sh      # 3 b-values x 3 seeds
+#   PHASE=O O_B="0.0 0.1" sbatch --array=0-5 scripts/run_ldos_phases.sh
 
 module load cuda
 source /gscratch/anantram/willll/miniconda3/etc/profile.d/conda.sh
@@ -140,8 +142,40 @@ case "${PHASE}" in
     TARGET=base_only
     TAG="C_baseonly_b${B_VAL}_s${SEED}"
     ;;
+  O)
+    # STRUCTURED ONSITE, alpha = 1.0. This is the phase that tests the actual
+    # deliverable: a toy Hamiltonian that fits DNA with only N onsite terms.
+    # At alpha=1.0 the context head is switched off and `onsite_baseline` is the
+    # real learned 4-value per-base table -- scripts/extract_tb_params.py reads
+    # exactly that tensor, and its header records that the table is meaningless
+    # for any alpha < 1, where the mixing is a vacuous reparametrisation and the
+    # context head does the fitting.
+    #
+    # Phases A and B ran the DEFAULT free-onsite model, where onsite is a
+    # continuous function of context and there is no N-value table at all
+    # (verified: structured_onsite=False, onsite_baseline absent from the
+    # state_dict). They therefore cannot speak to the N-onsite-terms question.
+    #
+    # b = 0.0 is included as a MATCHED baseline and is NOT optional. The recorded
+    # cross-seed scatter for this table -- C std 0.52 with the rank order
+    # changing between seeds, docs/model-results.md section 4b -- was measured on
+    # v1 data through the old two-term loss path, so it is not a valid comparison
+    # point for these runs. The measurement here is whether LDOS supervision
+    # shrinks that scatter, which needs both arms from the same pipeline.
+    IFS=' ' read -ra O_GRID <<< "${O_B:-0.0 0.1 0.5}"
+    N=$(( ${#O_GRID[@]} * ${#SEEDS[@]} ))
+    if [ "$i" -ge "$N" ]; then
+      echo "ERROR: array task $i out of range for phase O (valid range 0-$(( N - 1 )), $N cells = ${#O_GRID[@]} b-values x ${#SEEDS[@]} seeds)" >&2
+      exit 1
+    fi
+    B_VAL="${O_GRID[$(( i / 3 ))]}"
+    SEED="${SEEDS[$(( i % 3 ))]}"
+    TARGET=residue
+    TAG="O_a1.0_b${B_VAL}_s${SEED}"
+    EXTRA=(--structured_onsite --alpha_granularity global --alpha_mode fixed --alpha_value 1.0)
+    ;;
   *)
-    echo "unknown PHASE=${PHASE}; this runner covers A, B and C." >&2
+    echo "unknown PHASE=${PHASE}; this runner covers A, B, C and O." >&2
     echo "Phase D (composition holdout) gets its own plan once Phase B lands." >&2
     exit 1
     ;;
