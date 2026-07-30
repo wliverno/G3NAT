@@ -73,7 +73,10 @@ echo "disk check: ${FREE_GB}GB free (min ${MIN_FREE_GB}GB) -- ok"
 
 DATA_DIR="${DATA_DIR:-pickle_files_v2}"
 EPOCHS="${EPOCHS:-15000}"
-SEEDS=(42 43 44)
+# Seeds 42/43/44 by default. SEEDS is overridable so the pre-declared backup
+# seed 45 can be run for a cell flagged anomalous, without editing this file:
+#   PHASE=O O_B=0.1 SEEDS=45 sbatch --array=0-0 scripts/run_ldos_phases.sh
+IFS=' ' read -ra SEEDS <<< "${SEEDS:-42 43 44}"
 
 # Held fixed across every phase: the 3-seed replication config whose cross-seed
 # scatter is on record (docs/model-results.md replication section).
@@ -105,7 +108,7 @@ case "${PHASE}" in
       echo "ERROR: array task $i out of range for phase A (valid range 0-$(( N - 1 )), $N cells = ${#SEEDS[@]} seeds)" >&2
       exit 1
     fi
-    SEED="${SEEDS[$(( i % 3 ))]}"
+    SEED="${SEEDS[$(( i % ${#SEEDS[@]} ))]}"
     B_VAL=0.0
     TARGET=residue
     TAG="A_b0.0_s${SEED}"
@@ -117,8 +120,8 @@ case "${PHASE}" in
       echo "ERROR: array task $i out of range for phase B (valid range 0-$(( N - 1 )), $N cells = ${#B_GRID[@]} b-values x ${#SEEDS[@]} seeds)" >&2
       exit 1
     fi
-    B_VAL="${B_GRID[$(( i / 3 ))]}"
-    SEED="${SEEDS[$(( i % 3 ))]}"
+    B_VAL="${B_GRID[$(( i / ${#SEEDS[@]} ))]}"
+    SEED="${SEEDS[$(( i % ${#SEEDS[@]} ))]}"
     TARGET=residue
     TAG="B_b${B_VAL}_s${SEED}"
     ;;
@@ -137,8 +140,8 @@ case "${PHASE}" in
       echo "ERROR: array task $i out of range for phase C (valid range 0-$(( N - 1 )), $N cells = ${#C_GRID[@]} b-values x ${#SEEDS[@]} seeds)" >&2
       exit 1
     fi
-    B_VAL="${C_GRID[$(( i / 3 ))]}"
-    SEED="${SEEDS[$(( i % 3 ))]}"
+    B_VAL="${C_GRID[$(( i / ${#SEEDS[@]} ))]}"
+    SEED="${SEEDS[$(( i % ${#SEEDS[@]} ))]}"
     TARGET=base_only
     TAG="C_baseonly_b${B_VAL}_s${SEED}"
     ;;
@@ -168,8 +171,8 @@ case "${PHASE}" in
       echo "ERROR: array task $i out of range for phase O (valid range 0-$(( N - 1 )), $N cells = ${#O_GRID[@]} b-values x ${#SEEDS[@]} seeds)" >&2
       exit 1
     fi
-    B_VAL="${O_GRID[$(( i / 3 ))]}"
-    SEED="${SEEDS[$(( i % 3 ))]}"
+    B_VAL="${O_GRID[$(( i / ${#SEEDS[@]} ))]}"
+    SEED="${SEEDS[$(( i % ${#SEEDS[@]} ))]}"
     TARGET=residue
     TAG="O_a1.0_b${B_VAL}_s${SEED}"
     EXTRA=(--structured_onsite --alpha_granularity global --alpha_mode fixed --alpha_value 1.0)
