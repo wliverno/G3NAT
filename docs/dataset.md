@@ -215,3 +215,36 @@ across that boundary. Re-baseline deliberately rather than swapping in place.
   Distinct resnames across all atoms: exactly `DA`, `DC`, `DG`, `DT` -- no terminal variants
   (`DA5`/`DA3`), no waters, no ions. This is the basis for `H index = resseq - 1`, used by
   `aggregate_by_residue` in `g3nat/data/ldos.py`.
+
+## Identifiability limit: A/T and G/C onsite terms are confounded by construction (2026-07-30)
+
+Raised by willll. **Every sequence in the dataset is a perfect Watson-Crick duplex in a
+single geometry.** Verified over all 2077 v2 records: residues `L+1..2L` are exactly the
+reverse complement of residues `1..L`, with only four resnames present (`DA/DC/DG/DT`), no
+mismatches, no single strands, no alternative pairings.
+
+So **every A is accompanied by a T, and every G by a C, in identical geometry.** There is no
+record anywhere in the dataset in which A appears without T. For a per-base onsite table this
+is a structural confound: only a combination of the A and T onsite terms is identifiable from
+these observables, never the split between them. The same holds for G and C.
+
+**Consequence for the learned table.** A model that lands on A ~ T is responding correctly to
+an unidentifiable parameter, not failing to resolve one. Measured in the Phase O structured
+onsite runs: at `b = 0.5` the A-T separation is 0.0085 against a pooled cross-seed std of
+0.0298 -- i.e. indistinguishable, and now tightly so. Any A-vs-T comparison against literature
+values (Roche has A -0.49, T -1.39, a 0.90 eV split) is therefore a comparison the data cannot
+support in either direction, and should not be presented as agreement OR as disagreement.
+
+**Why G and C are not equally degenerate.** They are confounded by the same argument, but the
+energy convention supplies an extra constraint that A/T do not get: the grid is centred on the
+HOMO, and the HOMO is a G-derived level whenever any G is present (495 of 515 sequences, see
+the composition section above). That pins G near zero externally and leaves C free to take the
+remaining freedom. The G/C split is therefore set partly by the reference convention rather
+than by the fit, which is the same caveat already recorded for the G column in
+`scripts/extract_tb_params.py`.
+
+**What would break the confound.** Data containing the bases in geometries that do not pair
+them one-to-one -- mismatched pairs, single strands, non-Watson-Crick pairings, or homoduplex
+constructs -- would separate the A and T contributions. None of that exists in this dataset,
+so it is a limit of the data, not of the model or the loss. Worth stating plainly in the
+discussion rather than leaving the A/T degeneracy to look like a shortcoming of the method.
