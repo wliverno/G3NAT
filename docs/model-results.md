@@ -249,16 +249,44 @@ Comparisons:
 - Roche et al. 2003 (G 0, A -0.49, T -1.39, C -1.12; `g3nat/utils/physics.py:24`,
   doi:10.1103/PhysRevLett.91.228101): matches on G-highest; the A/T/C ordering is inside our
   resolution, so it is not evidence either way.
-- **Vertical-IP ordering: attribution UNRESOLVED, do not cite as "Caruso".** The values in
-  circulation for this project (bases G 7.91 / A 8.30 / C 8.74 / T 9.05 eV; pairs GC 7.28 /
-  AT 7.86 eV) could not be traced to any paper by that author (verification pass 2026-07-24).
-  Nearest genuine sources found, neither matching digit-for-digit: Faber, Attaccalite,
-  Olevano, Runge, Blase, "First-principles GW calculations for DNA and RNA nucleobases,"
-  Phys. Rev. B 83, 115123 (2011), doi:10.1103/PhysRevB.83.115123 -- GW vertical IPs G 7.81 /
-  A 8.22 / C 8.73 / T 9.05, no base-pair data; and Khan, Comput. Theor. Chem. 1013, 136-139
-  (2013) -- GC 7.29 / AT 7.88 eV. Source these six numbers properly before publication.
-  Whatever the source, the qualitative content we rely on (G has the lowest IP, hence the
-  highest hole on-site energy) is not in dispute and our fit reproduces it.
+- **Vertical-IP ordering: the six numbers remain unsourced, but the Caruso citation is real
+  and this entry previously said otherwise.** CORRECTED 2026-07-30. An earlier version of
+  this bullet read "attribution UNRESOLVED, do not cite as Caruso" on the grounds that the
+  values could not be traced to any paper by that author. That was a search failure, not an
+  attribution problem, and it is retracted.
+
+  The two Caruso papers exist exactly as cited, verified against Crossref with no
+  discrepancy in authors, title, journal, volume, pages or year:
+
+  - Caruso, Carotenuto, Vasca, Peluso, "Direct Experimental Observation of the Effect of the
+    Base Pairing on the Oxidation Potential of Guanine," *J. Am. Chem. Soc.* **127**,
+    15040-15041 (2005), doi:10.1021/ja055130s
+  - Caruso, Capobianco, Peluso, "The Oxidation Potential of Adenosine and
+    Adenosine-Thymidine Base Pair in Chloroform Solution," *J. Am. Chem. Soc.* **129**,
+    15347-15353 (2007), doi:10.1021/ja076181n
+
+  **They report a different observable.** Both measure electrochemical OXIDATION POTENTIALS
+  in chloroform by voltammetry, not gas-phase vertical ionization potentials. The 2005 paper
+  gives a 0.34 V *shift* on Watson-Crick pairing; the 2007 paper detected no thymidine
+  oxidation signal at all. Solution oxidation potentials run 0.6-1.3 V, while the six values
+  in circulation are on the 7-9 eV gas-phase scale -- different quantity, different units,
+  different order of magnitude. Relating the two would need a reference-electrode-to-vacuum
+  conversion (itself uncertain to ~0.1-0.2 eV) plus multi-eV solvation and reorganisation
+  terms for neutral and cation.
+
+  So the narrow conclusion stands -- these papers are not the source of those six numbers --
+  but the framing did not. They are real, correctly attributed work on a related question,
+  and the earlier search failed because it was looking for a computational paper.
+
+  **Still genuinely unsourced:** the origin of bases G 7.91 / A 8.30 / C 8.74 / T 9.05 eV and
+  pairs GC 7.28 / AT 7.86 eV. Faber, Attaccalite, Olevano, Runge, Blase, Phys. Rev. B 83,
+  115123 (2011), doi:10.1103/PhysRevB.83.115123 gives GW vertical IPs G 7.81 / A 8.22 /
+  C 8.73 / T 9.05 with no base-pair data, close but not digit-for-digit. Source the six
+  numbers before publication. Both Caruso papers are paywalled and their full texts were not
+  inspected, so an embedded computed table in either cannot be ruled out.
+
+  The qualitative content we rely on (G has the lowest IP, hence the highest hole on-site
+  energy) is not in dispute.
 - Absolute values are NOT comparable to literature TB parameters: different energy reference,
   and ours are effective one-orbital-per-base fits to transport observables rather than
   computed dimer integrals. Compare orderings and ratios only.
