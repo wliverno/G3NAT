@@ -1003,3 +1003,131 @@ optimizer failure from the intended trade-off. It is withdrawn as an anomaly det
 `b > 0`. It remains valid within a single `b`, where all cells share an objective; use the
 cross-seed spread at that `b` instead of a threshold carried over from another one.
 
+
+
+## 7. The DOS offset is a measurement, not a normalisation artifact (2026-07-30)
+
+willll asked whether the TB model and the DFT reference are on different DOS scales, since
+in log space a scale factor is a constant offset. They are -- the model sits 0.2199 decades
+(a factor 1.66) below the DFT DOS on held-out data, and 0.4892 decades below on per-site
+LDOS. The question was what that offset means.
+
+A first attempt (commit 91f381f, since reverted) argued the offset was unphysical: the model
+has 8 states for a 4-mer while the DFT uses ~2869 atomic orbitals, so magnitudes cannot be
+expected to agree, and DOS and LDOS should be compared by shape only. **That argument is
+wrong by a factor of about 200, and the measured offset is the evidence against it.**
+
+### 7a. The window contains frontier levels, not the whole basis
+
+Two sum rules for `G^r = (E - H + i*Gamma/2)^-1` in the wide-band limit:
+
+- integral over ALL energies of DOS = N, the basis size, independent of Gamma;
+- `sum_k g_k = Tr(Gamma)` exactly, the trace of the anti-Hermitian part being basis-invariant.
+
+The second governs a FINITE window. Out-of-window states contribute only Lorentzian tails,
+whose amplitude is set by `Tr(Gamma)` and not by N. So the in-window DOS magnitude is set by
+**the number of levels inside the window**. The basis-size argument applies the first sum
+rule to a quantity governed by the second.
+
+Counted directly from the Gaussian logs. For `aaac` (verified independently):
+
+```
+2869 basis functions,  HOMO -5.30323 eV  (Egrid mean -5.3031, matches)
+HOMO-LUMO gap 4.426 eV
+occupied MOs in [HOMO-1 eV, HOMO+1 eV]: 14
+virtual  MOs in window:                  0   <- upper half of the window is inside the gap
+ratio to 2L = 8 sites: 1.75      log10: 0.243
+```
+
+Across eight sequences spanning L = 4 to 8, the ratio of in-window MOs to `2L` runs from
+**1.25 (GC-rich) to 2.62 (AT-only)**, mean `log10(n_MO / 2L) = 0.2005 decades`.
+
+| prediction | offset in decades |
+|---|---|
+| level counting | **0.2005** |
+| **measured** | **0.2199** |
+| basis size, `log10(2869/8)` | 2.55 |
+
+Level counting matches the measurement to 0.02 decades. Basis size overshoots by ~200x in
+linear terms.
+
+The coarse-graining of the contact is also already correct in the sum-rule sense. Mean level
+width is `Tr(Gamma)/N`: DFT `0.1 * 679 / 2869 = 0.0237 eV`, model `0.1 * 2 / 8 = 0.0250 eV`,
+agreeing to 5% because the contacted fraction matches (679/2869 = 23.7% of AOs sit on the two
+terminal residues; 2/8 = 25% of model sites are contacts).
+
+**So the offset is a measurement of how many frontier states the one-orbital-per-base ansatz
+omits.** It is composition-dependent -- 1.25 states per base for GC-rich sequences, 2.62 for
+AT-only -- which makes it a per-sequence observable. Per-sequence centring deletes exactly
+that variation.
+
+### 7b. Transmission is not basis-independent either
+
+The claim that transmission must match absolutely because it is a dimensionless probability
+does not survive contact with the generator. In `DNADataset/DOS_calc.m` the self-energy is
+applied to **every atomic orbital of every atom of the terminal residue** -- base, sugar and
+phosphate. For `aaac` that is `Gamma_L` of rank 330 and `Gamma_R` of rank 349, against rank 1
+in the model. So `T_model <= 1` strictly by unitarity, while `T_DFT` has a ceiling of
+min(330, 349). "Dimensionless" is not "invariant": `T = Tr(Gamma_L G^r Gamma_R G^a)` is
+basis-independent only when the two `Gamma` operators are the same operator, and they are not.
+
+DOS and T are moreover the same trace of the same `G^r` with the same `Sigma`. No step is
+applied to one and not the other, so no principle in the original argument distinguishes them.
+
+### 7c. Independent centring destroys the localization signal
+
+`sum_i LDOS_i = DOS` holds exactly on both sides (model: diagonal versus trace of one `G^r`;
+target: verified to 3.6e-15). Therefore, with `n` sites,
+
+```
+mean_i log10 LDOS_i = log10(DOS) - log10(n) - J,     J >= 0
+J = log10(mean_i LDOS_i) - mean_i log10(LDOS_i)      (Jensen / AM-GM gap)
+```
+
+`J` is a log-space localization measure: zero for uniform LDOS, large when weight concentrates
+on few sites. Differencing prediction and target:
+
+```
+Delta_LDOS = Delta_DOS - <J_pred - J_target>
+-0.4892    = -0.2199   - <J_pred - J_target>
+=> <J_pred - J_target> = +0.2693 decades
+```
+
+**The model is 1.86x more log-localized than the DFT reference.** That cannot be a scale
+artifact, because both sides satisfy the same sum rule with the same `n`.
+
+Subtracting INDEPENDENT per-sequence offsets from DOS and from LDOS removes precisely
+`<J_pred - J_target>` -- the single number that most directly answers "does the model spread
+spectral weight over the right number of sites", which is the LDOS term's entire purpose.
+Joint centring over sites and energies preserves the site-to-site pattern, as intended, but
+still deletes the mean amount of localization.
+
+This is now reported every run as **`val_ldos_localization_gap`**, whatever the loss setting.
+
+### 7d. What was kept, what was reverted
+
+Reverted: `shape_loss` is `False` by default. DOS and per-site LDOS are compared at absolute
+magnitude in the trained loss, as before. The basis-size justification is removed from the
+code and from this document.
+
+Kept: `metric_history` now records both raw and shape variants of every affected quantity
+every run, plus `val_ldos_localization_gap`. Reporting costs nothing and builds no gradient.
+`--shape_loss` remains available as an opt-in, and if used now derives ONE offset from the DOS
+residual (median, since the LDOS Huber operates in its linear regime at std 1.49 against
+delta 1.0) and applies it to both terms, so the localization signal survives.
+
+**A methodological note worth keeping.** The shape change was validated by re-scoring existing
+checkpoints with the offset removed and observing that the DOS cost of LDOS supervision
+vanished (0.1197 -> 0.1202). That is what happens by construction when 15% of the DOS error
+budget is deleted from the score. `CLAUDE.local.md`: *do not optimize the metric instead of
+the model.* The check confirmed the metric change had the effect it was defined to have.
+
+### 7e. What the offset actually indicates: n_orb = 2
+
+The window holds 1.25-2.62 DFT levels per base; the model provides one. `n_orb > 1` is already
+supported end to end (block onsite and coupling construction, `site_ldos_log10` sums orbitals
+within a site). The prediction is that at `n_orb = 2` the DOS offset collapses toward zero,
+most strongly for the AT-rich sequences where it is largest and the level count highest.
+
+That is a model change rather than a metric change, and it is testable against a quantity the
+absolute loss preserves and the centred loss would have thrown away.
