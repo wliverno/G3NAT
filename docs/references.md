@@ -262,3 +262,24 @@ NOT a factor in this decision: MATLAB's native `h5read` support. It is true, but
 notes the group's MATLAB code is legacy and the field has moved to Python (2026-07-26), so
 it carries no weight here. The decision rests on reference class and on pickle's security
 model.
+
+## DNA base and base-pair oxidation potentials (EVIDENCED, retrieved 2026-07-30)
+
+Supplied by willll. Both verified against the Crossref REST API -- authors, title, journal,
+volume, page range and year all match with no discrepancy. Verification was done against
+structured metadata rather than a search-engine summary, because during this check a
+WebSearch result confidently attributed the 2005 paper to an entirely different author list.
+
+- Caruso, T.; Carotenuto, M.; Vasca, E.; Peluso, A. "Direct Experimental Observation of the
+  Effect of the Base Pairing on the Oxidation Potential of Guanine." *J. Am. Chem. Soc.*
+  **2005**, 127, 15040-15041. doi:10.1021/ja055130s
+- Caruso, T.; Capobianco, A.; Peluso, A. "The Oxidation Potential of Adenosine and
+  Adenosine-Thymidine Base Pair in Chloroform Solution." *J. Am. Chem. Soc.* **2007**, 129,
+  15347-15353. doi:10.1021/ja076181n
+
+Both report ELECTROCHEMICAL OXIDATION POTENTIALS measured by voltammetry in chloroform, and
+specifically the effect of Watson-Crick pairing on them (2005: a 0.34 V lowering for a
+guanosine derivative; 2007: adenosine versus the A-T pair, with no thymidine oxidation signal
+detected). These are NOT gas-phase vertical ionization potentials and are not directly
+comparable to them -- see `docs/model-results.md` section 4b for why, and for the retraction
+of an earlier entry that wrongly implied the citation could not be traced.
