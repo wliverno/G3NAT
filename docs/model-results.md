@@ -921,3 +921,85 @@ cells landed at 0.5325 / 0.5496 / 0.5390 with no outlier.
 > genuinely different-quality basins and the *best-fitting* seed was the outlier, so a
 > cluster of anomalies is a finding about the loss landscape, not noise to be excluded.
 
+
+## 6. Phase B: LDOS supervision works, and the pre-registered criterion was the wrong test
+
+Array job 37874082, 15 cells (`b` in {0.1, 0.25, 0.5, 0.75, 0.9} x seeds 42/43/44), all
+`COMPLETED 0:0`. Same config as Phase A, `ldos_target=residue`. Values at each cell's own
+best-val epoch, means over 3 seeds.
+
+| `b` | LDOS | std | DOS+T | std | LDOS gain | DOS+T cost |
+|---|---|---|---|---|---|---|
+| 0.0 (Phase A) | 0.7715 | 0.0488 | 0.5404 | 0.0086 | -- | -- |
+| 0.1 | 0.5410 | 0.0157 | 0.5656 | 0.0236 | 0.2305 | +0.0252 |
+| 0.25 | 0.3463 | 0.0097 | 0.6040 | 0.0128 | 0.4252 | +0.0636 |
+| 0.5 | 0.3359 | 0.0437 | 0.6442 | 0.0418 | 0.4356 | +0.1038 |
+| 0.75 | 0.2787 | 0.0052 | 0.7086 | 0.0181 | 0.4928 | +0.1682 |
+| 0.9 | 0.2784 | 0.0143 | 0.7064 | 0.0344 | 0.4931 | +0.1660 |
+
+![b=0 vs b=0.5](figures/ldos-b-comparison.png)
+
+*Same axes and binning as the Phase A figure. Solid = `b=0`, dashed = `b=0.5`. The two red
+curves are the result: at `b=0` LDOS agreement climbs after epoch ~300 to 0.80, while at
+`b=0.5` it goes flat at 0.33 and stays there for 14000 epochs. Dashed blue above solid blue is
+the price.*
+
+### 6a. Supervision reaches LDOS the baseline never reaches at any epoch
+
+Phase A's binned LDOS minimum was 0.5385, and its best raw per-seed minima were 0.4390 /
+0.4256 / 0.4459. **No epoch of any `b=0` run ever attains 0.28-0.35.** So `b > 0` is not
+sliding along the `b=0` trade-off curve, it is reaching a region the curve does not contain.
+That was the question Phase B was built to answer, and the answer is that supervision changes
+the reachable set, not just the operating point on it.
+
+Returns diminish sharply. `0.1 -> 0.25` buys 0.195 of LDOS for 0.038 of DOS+T. `0.25 -> 0.9`
+buys only 0.068 more for a further 0.102. The efficient region is `b ~ 0.1-0.25`.
+
+### 6b. The DOS half of the cost is confounded; the transmission half is not
+
+The loss is `a*T + b*LDOS + (1-b)*DOS`, so raising `b` **down-weights DOS**. DOS degrading is
+therefore partly just less weight on DOS, and this form cannot separate that from genuine
+competition. But `a` is fixed at 1.0 -- transmission is never down-weighted -- and it degrades
+*more* than DOS at every `b`:
+
+| `b` | DOS weight | `val_dos` vs `b=0` | `val_transmission` vs `b=0` |
+|---|---|---|---|
+| 0.1 | 0.90 | +0.0009 | +0.0166 |
+| 0.25 | 0.75 | +0.0164 | +0.0472 |
+| 0.5 | 0.50 | +0.0364 | +0.0675 |
+| 0.75 | 0.25 | +0.0792 | +0.0890 |
+| 0.9 | 0.10 | +0.0880 | +0.0779 |
+
+So there **is** real competition, and it is with transmission specifically: constraining the
+diagonal of `G^r` toward the DFT LDOS distorts whatever produces the contact-to-contact
+element. At `b=0.1`, DOS is essentially untouched (+0.0009) and only transmission moves.
+
+The convex form stays. It is principled at the endpoint -- per-residue LDOS sums exactly to
+DOS, so at `b=1` the DOS term is redundant rather than discarded (willll's design rationale) --
+and independent weights would only be needed to attribute the DOS half, not to establish that
+competition exists.
+
+### 6c. RETRACTED: the success criterion, and the anomaly threshold
+
+Both were written by me and both were wrong, in the same way.
+
+**The success criterion** (section 5d: LDOS improves by more than 2x Phase A scatter AND
+DOS+T degrades by less than 2x its scatter) is denominated in **held-out fit quality**. On it,
+every `b` fails, because DOS+T degrades past 0.5577 everywhere. But fit quality is not the
+deliverable. The goal is a toy Hamiltonian that reproduces DNA transport with only N onsite
+terms, and `docs/dataset.md:113-117` already recorded that the interpretability handle is
+whether H puts spectral weight in the right places -- i.e. LDOS. A criterion that makes LDOS
+subordinate to DOS+T inverts that. **Do not report "Phase B failed"**; report the trade and
+judge it against the Hamiltonian, which is what section 7 does.
+
+For the record, `b=0.1` is close even on the retracted criterion: its DOS+T cost of 0.0252 is
+1.46x the 0.0173 bar, while its own cross-seed std is 0.0236 -- comparable to the degradation
+itself, so the cost is not cleanly separable from zero.
+
+**The anomaly threshold** (section 5e: flag best-val `val_dos_t_unweighted` above 0.583) flags
+all 15 Phase B cells. It was set from Phase A's `b=0` distribution, but DOS+T is not the
+trained quantity at `b > 0`, so degradation is expected and the rule cannot distinguish an
+optimizer failure from the intended trade-off. It is withdrawn as an anomaly detector for
+`b > 0`. It remains valid within a single `b`, where all cells share an objective; use the
+cross-seed spread at that `b` instead of a threshold carried over from another one.
+

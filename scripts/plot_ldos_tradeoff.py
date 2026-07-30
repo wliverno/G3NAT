@@ -94,6 +94,11 @@ def main():
                     help='GLOB:LABEL, repeatable. First group is drawn as the reference.')
     ap.add_argument('--out', required=True)
     ap.add_argument('--bins', type=int, default=140)
+    ap.add_argument('--ylim', nargs=2, type=float, default=None,
+                    metavar=('LO', 'HI'),
+                    help='clip the y axis. The first ~10 epochs reach ~3.5 and '
+                         'squash the region the figure is about; clipping them is '
+                         'a display choice, not a data choice.')
     ap.add_argument('--title', default='Fitting DOS and transmission alone degrades '
                                        'where the model puts spectral weight')
     args = ap.parse_args()
@@ -125,11 +130,13 @@ def main():
               f"final {m[-1]:.4f}")
 
     ax.set_xscale('log')
+    if args.ylim:
+        ax.set_ylim(*args.ylim)
     ax.set_xlabel('epoch')
     ax.set_ylabel('held-out Huber loss')
     ax.set_title(args.title, fontsize=10.5, loc='left', pad=10)
     ax.legend(fontsize=8.5, frameon=False, loc='upper left', bbox_to_anchor=(.015, 1.0))
-    ax.text(.30, .035, f'mean of seeds, band = seed range; '
+    ax.text(.34, .022, f'mean of seeds, band = seed range; '
                        f'median in {args.bins} log-spaced epoch bins',
             transform=ax.transAxes, fontsize=7.5, color='0.45')
     ax.spines[['top', 'right']].set_visible(False)
