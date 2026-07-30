@@ -30,6 +30,27 @@ class TrainingConfig:
     # holds the measured value (the other stays nan) -- it does not change
     # what any loss or aggregation computes.
     ldos_target: str = 'residue'  # 'residue' | 'base_only'
+    # DOS/LDOS are compared by ABSOLUTE magnitude (Huber loss on the raw log10
+    # values), not by shape. The basis-size justification previously used for
+    # shape_loss=True (2026-07-30) is WRONG and has been retracted: the training
+    # window is HOMO +/- 1 eV, which holds only frontier levels, not the whole
+    # basis -- e.g. for `aaac` (2869 basis functions) the window contains 14
+    # occupied MOs and ZERO virtual ones (HOMO-LUMO gap 4.43 eV puts the upper
+    # half of the window inside the gap). Against the model's 2L=8 sites that
+    # is log10(14/8) = 0.243 decades. The measured DOS offset across checked
+    # sequences is 0.2199 decades and the level-counting prediction (mean over
+    # those sequences) is 0.2005 -- they agree to 0.02. The basis-size story
+    # instead predicts log10(2869/8) = 2.55 decades, wrong by a factor of ~200
+    # in linear terms. So the offset is not a normalisation artifact to be
+    # centered away; it is a MEASUREMENT of how many frontier states the
+    # one-orbital-per-base ansatz is missing (and it varies with base
+    # composition), and absolute comparison is the default so that signal is
+    # not deleted. Transmission is a dimensionless probability and is NEVER
+    # centered, under either setting. shape_loss=True remains available
+    # (Trainer now shares one offset between the DOS and LDOS shape terms, see
+    # trainer.py, so it no longer deletes the LDOS localization signal), kept
+    # reachable for older runs and for anyone who wants shape-only comparison.
+    shape_loss: bool = False
 
     @classmethod
     def from_kwargs(cls, **kwargs):

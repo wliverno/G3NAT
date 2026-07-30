@@ -46,6 +46,23 @@ def parse_args():
                         help='weight on the transmission loss term')
     parser.add_argument('--loss_b', type=float, default=0.0,
                         help='convex mixing weight: b*LDOS + (1-b)*DOS')
+    parser.add_argument('--raw_scale_loss', action='store_true',
+                       help='Compare DOS/LDOS by absolute magnitude. This is now the '
+                            'DEFAULT (the flag is a no-op kept for older scripts/notes '
+                            'that still pass it) -- the basis-size justification for '
+                            'shape comparison was wrong and has been retracted; the '
+                            'measured DOS offset is a measurement of missing frontier '
+                            'states in the HOMO+/-1eV window, not a basis-size artifact. '
+                            'See TrainingConfig.shape_loss for the derivation. Mutually '
+                            'exclusive with --shape_loss.')
+    parser.add_argument('--shape_loss', action='store_true',
+                       help='Opt IN to comparing DOS/LDOS by a shared offset-corrected '
+                            'shape instead of absolute magnitude (pre-2026-07-30 '
+                            'behaviour, since corrected: DOS and LDOS now share ONE '
+                            'offset derived from DOS, so the LDOS localization signal '
+                            'is not deleted -- see Trainer._compute_losses). Transmission '
+                            'is never centered under either setting. Mutually exclusive '
+                            'with --raw_scale_loss.')
 
     # Model parameters
     parser.add_argument('--model_type', type=str, default='hamiltonian',
@@ -100,6 +117,9 @@ def main():
     args = parse_args()
     assert not (args.alpha_granularity == 'per_base' and args.alpha_mode == 'fixed'), \
         "per_base+fixed needs 4 alphas; use learned or global"
+    assert not (args.raw_scale_loss and args.shape_loss), \
+        "--raw_scale_loss and --shape_loss are mutually exclusive (absolute is now " \
+        "the default; --raw_scale_loss is a no-op kept for older invocations)"
 
     os.makedirs(args.output_dir, exist_ok=True)
     os.makedirs(args.checkpoint_dir, exist_ok=True)
@@ -313,6 +333,7 @@ def main():
         loss_a=args.loss_a,
         loss_b=args.loss_b,
         ldos_target=args.ldos_target,
+        shape_loss=args.shape_loss,
         metric_history=resume_metric_history,
         metric_history_out=metric_history
     )

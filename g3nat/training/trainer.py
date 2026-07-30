@@ -9,6 +9,20 @@ from .config import TrainingConfig
 from g3nat.models.hamiltonian import site_ldos_log10
 
 
+def _center(x, dims):
+    """Subtract the mean over `dims`, keeping dims, so only SHAPE is compared.
+
+    Used only by Trainer._ldos_agreement's held-out 'shape' metric (dims=(1, 2),
+    site AND energy jointly -- one offset per sequence, never per site), which
+    is independent of config.shape_loss and kept for continuity with older
+    runs. Trainer._compute_losses's TRAINED shape terms no longer call this: as
+    of 2026-07-30 they share one offset (the median DOS residual) between DOS
+    and LDOS instead of centering each independently -- see that method's
+    docstring. Never applied to transmission.
+    """
+    return x - x.mean(dim=dims, keepdim=True)
+
+
 class Trainer:
     """Trainer for DNA transport GNN models."""
 
@@ -145,10 +159,38 @@ class Trainer:
     def _compute_losses(self, batch, dos_pred, transmission_pred):
         """Compose the loss for one batch.
 
+        DOS/LDOS are compared BY ABSOLUTE MAGNITUDE by default (config.shape_loss
+        =False): the measured DOS offset matches level-counting in the HOMO+/-1eV
+        window, not basis size (see TrainingConfig.shape_loss's docstring), so it
+        is a real measurement of the ansatz's missing frontier states, not an
+        artifact to be centered away.
+
+        Both the raw (magnitude) and shape (offset-corrected) versions of
+        DOS/LDOS are always computed here, regardless of config.shape_loss, so
+        metric_history never loses information; config.shape_loss selects only
+        which pair feeds 'total', the optimized scalar.
+
+        The shape variant uses ONE offset for both DOS and LDOS, derived from
+        DOS alone (the MEDIAN, not mean, of the per-sequence DOS residual --
+        the LDOS residual std is ~1.49 against Huber delta=1.0, so the loss
+        operates mostly in its linear regime, where the median is optimal, not
+        the mean). Sharing a single offset matters because sum_i LDOS_i = DOS
+        holds exactly on both sides, so
+            mean_i log10 LDOS_i = log10(DOS) - log10(n_sites) - J
+        where J is the Jensen/AM-GM gap, a log-space localization measure.
+        Subtracting INDEPENDENT offsets from DOS and LDOS (the pre-2026-07-30
+        shape_loss implementation) removes <J_pred - J_target> entirely, i.e.
+        deletes exactly the quantity the LDOS term exists to measure. Sharing
+        the DOS-derived offset instead leaves that signal in the LDOS
+        residual -- see val_ldos_localization_gap in _validate_epoch, which
+        reports it directly. Transmission is a dimensionless, basis-size-
+        independent observable and is NEVER centered, under either setting.
+
         Returns a dict with 'total' (the optimized scalar), the individual
-        'dos'/'transmission'/'ldos' terms, and 'dos_t_unweighted' -- the only
-        quantity comparable across different loss_b values and back to the
-        v1 record, because 'total' is loss_b-weighted and so differently
+        'dos'/'dos_shape'/'transmission'/'ldos'/'ldos_shape' terms, and
+        'dos_t_unweighted'/'dos_t_shape_unweighted' -- the quantities
+        comparable across different loss_b values and back to the v1
+        record, because 'total' is loss_b-weighted and so differently
         scaled at each b.
         """
         batch_size = dos_pred.size(0)
@@ -158,12 +200,20 @@ class Trainer:
         transmission_target = batch.transmission.view(batch_size, num_energy_points)
 
         dos_loss = self.criterion(dos_pred, dos_target)
+        # Shared offset for the shape variant: MEDIAN (not mean) of the
+        # per-sequence DOS residual over the energy axis (dim=1) -- see the
+        # docstring above for why median and why shared with LDOS below.
+        off = (dos_pred - dos_target).median(dim=1, keepdim=True).values  # [B, 1]
+        dos_shape_loss = self.criterion(dos_pred - off, dos_target)
         transmission_loss = self.criterion(transmission_pred, transmission_target)
 
         a = self.config.loss_a
         b = self.config.loss_b
+        shape = self.config.shape_loss
+        dos_term = dos_shape_loss if shape else dos_loss
 
         ldos_loss = None
+        ldos_shape_loss = None
         if b != 0.0:
             # PyG drops an attribute assigned None, so presence is hasattr,
             # never `is not None`.
@@ -183,18 +233,26 @@ class Trainer:
             ldos_pred, ldos_target = self._ldos_pred_and_target(batch, batch_size)
 
             ldos_loss = self.criterion(ldos_pred, ldos_target)
-            total = a * transmission_loss + b * ldos_loss + (1.0 - b) * dos_loss
+            # SAME offset as dos_shape_loss (derived from DOS alone), broadcast
+            # over both site and energy dims, so DOS and LDOS shift TOGETHER
+            # rather than independently -- see the docstring above.
+            ldos_shape_loss = self.criterion(ldos_pred - off.unsqueeze(-1), ldos_target)
+            ldos_term = ldos_shape_loss if shape else ldos_loss
+            total = a * transmission_loss + b * ldos_term + (1.0 - b) * dos_term
         else:
             # Skipped by branch, never multiplied by zero, so a dataset with no
             # LDOS target still trains and no backward pass is built for it.
-            total = a * transmission_loss + dos_loss
+            total = a * transmission_loss + dos_term
 
         return {
             'total': total,
             'dos': dos_loss,
+            'dos_shape': dos_shape_loss,
             'transmission': transmission_loss,
             'ldos': ldos_loss,
+            'ldos_shape': ldos_shape_loss,
             'dos_t_unweighted': dos_loss + transmission_loss,
+            'dos_t_shape_unweighted': dos_shape_loss + transmission_loss,
         }
 
     def _ldos_pred_and_target(self, batch, batch_size):
@@ -227,17 +285,48 @@ class Trainer:
             )
         return pred, target
 
-    def _ldos_agreement(self, batch):
-        """Held-out LDOS Huber, measured whether or not it is being trained.
+    def _ldos_agreement(self, batch, dos_pred):
+        """Held-out LDOS Huber + localization gap, measured whether or not
+        the LDOS term is being trained.
 
-        Returns nan when the batch carries no target. Presence of the target
-        governs this metric; loss_b governs only the loss.
+        Returns (raw, shape, localization_gap) -- all nan when the batch
+        carries no target. Presence of the target governs this metric;
+        loss_b/shape_loss govern only what feeds the trained loss.
+
+        `shape` centers pred and target INDEPENDENTLY, jointly over (site,
+        energy) per sequence, dims=(1, 2). This is NOT the same computation as
+        `_compute_losses`'s trained shape term any more: as of 2026-07-30 that
+        term shares one DOS-derived offset with DOS instead of centering LDOS
+        on its own (see `_compute_losses`'s docstring). This metric keeps its
+        own independent centering for continuity with older runs; it is a
+        held-out diagnostic, not the trained quantity.
+
+        `localization_gap` is
+            <log10 dos_pred - log10 dos_target> - <log10 ldos_pred - log10 ldos_target>
+        Both dos_pred/dos_target and ldos_pred/ldos_target are already log10
+        (see docstrings in g3nat/data/datasets.py and
+        g3nat/models/hamiltonian.py::site_ldos_log10), so this is directly a
+        difference of log-residual means -- no extra log10 call needed. Since
+        sum_i LDOS_i = DOS holds exactly on both sides,
+            mean_i log10 LDOS_i = log10(DOS) - log10(n_sites) - J
+        (J the Jensen/AM-GM gap, a log-space localization measure), and the
+        shared log10(n_sites) term cancels in the pred-minus-target
+        differences above, so localization_gap == J_pred - J_target exactly.
+        POSITIVE means the model concentrates spectral weight onto fewer
+        sites than DFT (more log-localized); negative means it spreads weight
+        more than DFT.
         """
         if not hasattr(batch, 'ldos') or not hasattr(self.model, 'ldos'):
-            return float('nan')
+            return float('nan'), float('nan'), float('nan')
         batch_size = int(batch.batch.max().item() + 1)
         pred, target = self._ldos_pred_and_target(batch, batch_size)
-        return self.criterion(pred, target).item()
+        raw = self.criterion(pred, target).item()
+        shape = self.criterion(_center(pred, (1, 2)), _center(target, (1, 2))).item()
+
+        num_energy_points = dos_pred.size(1)
+        dos_target = batch.dos.view(batch_size, num_energy_points)
+        localization_gap = (dos_pred - dos_target).mean().item() - (pred - target).mean().item()
+        return raw, shape, localization_gap
 
     def _train_epoch(self, train_loader: DataLoader) -> float:
         """Train for one epoch."""
@@ -280,9 +369,13 @@ class Trainer:
         self.model.eval()
         val_loss = 0.0
         agg_dos = 0.0
+        agg_dos_shape = 0.0
         agg_trans = 0.0
         agg_unweighted = 0.0
+        agg_shape_unweighted = 0.0
         agg_ldos = 0.0
+        agg_ldos_shape = 0.0
+        agg_localization_gap = 0.0
         n_batches = 0
 
         with torch.no_grad():
@@ -295,9 +388,14 @@ class Trainer:
 
                 val_loss += total_loss.item()
                 agg_dos += losses['dos'].item()
+                agg_dos_shape += losses['dos_shape'].item()
                 agg_trans += losses['transmission'].item()
                 agg_unweighted += losses['dos_t_unweighted'].item()
-                agg_ldos += self._ldos_agreement(batch)
+                agg_shape_unweighted += losses['dos_t_shape_unweighted'].item()
+                ldos_raw, ldos_shape, localization_gap = self._ldos_agreement(batch, dos_pred)
+                agg_ldos += ldos_raw
+                agg_ldos_shape += ldos_shape
+                agg_localization_gap += localization_gap
                 n_batches += 1
 
         val_loss /= len(val_loader)
@@ -311,16 +409,36 @@ class Trainer:
         # base_only LDOS arrays on every Data object simultaneously, which is
         # deliberately out of scope here. The experiment covers the other
         # aggregation by running it directly in a later phase (Phase C), not
-        # through this trainer computing both at once.
+        # through this trainer computing both at once. The '_shape' keys
+        # mirror this exact same dynamic keying, one level up: shape_loss
+        # only changes what 'total' trains on, never what is reported here --
+        # every run measures and stores both raw and shape variants of DOS
+        # and LDOS so no information is lost and old runs stay comparable.
         measured_key = f"val_ldos_{self.config.ldos_target}"
         other_key = 'val_ldos_base_only' if self.config.ldos_target == 'residue' else 'val_ldos_residue'
+        shape_measured_key = f"val_ldos_shape_{self.config.ldos_target}"
+        shape_other_key = (
+            'val_ldos_shape_base_only' if self.config.ldos_target == 'residue'
+            else 'val_ldos_shape_residue'
+        )
         entry = {
             'epoch': epoch,
             'val_dos': agg_dos / n_batches,
+            'val_dos_shape': agg_dos_shape / n_batches,
             'val_transmission': agg_trans / n_batches,
             'val_dos_t_unweighted': agg_unweighted / n_batches,
+            'val_dos_t_shape_unweighted': agg_shape_unweighted / n_batches,
             measured_key: agg_ldos / n_batches,
             other_key: float('nan'),
+            shape_measured_key: agg_ldos_shape / n_batches,
+            shape_other_key: float('nan'),
+            # Reported every run regardless of shape_loss -- this is the
+            # quantity the shape_loss=True independent-offset bug (fixed
+            # 2026-07-30) was silently deleting. See _ldos_agreement's
+            # docstring for the derivation. Positive: model more
+            # log-localized than DFT; negative: model spreads weight more
+            # than DFT; nan when the batch carries no LDOS target.
+            'val_ldos_localization_gap': agg_localization_gap / n_batches,
         }
         self.metric_history.append(entry)
         return val_loss
@@ -343,7 +461,7 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
                checkpoint_callback=None, progress_callback=None, max_grad_norm: float = 1.0,
                warmup_epochs: int = 50, optimizer_name: str = 'adam',
                weight_decay: float = 1e-5, loss_a: float = 1.0, loss_b: float = 0.0,
-               ldos_target: str = 'residue',
+               ldos_target: str = 'residue', shape_loss: bool = False,
                metric_history: Optional[List[Dict[str, float]]] = None,
                metric_history_out: Optional[List[Dict[str, float]]] = None):
     """
@@ -370,6 +488,13 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         ldos_target: which LDOS aggregation ('residue' or 'base_only') this run is
             trained/measured against -- selects which key in each metric_history
             entry holds the measured value; the other key is always nan.
+        shape_loss: compare DOS/LDOS by a shared offset-corrected shape rather
+            than absolute magnitude (default False -- absolute is correct; see
+            TrainingConfig.shape_loss's docstring for why the basis-size
+            justification for True was wrong and has been retracted). When
+            True, DOS and LDOS share ONE offset (see Trainer._compute_losses)
+            so the LDOS localization signal is not deleted. Transmission is
+            never centered either way.
         metric_history: existing per-epoch metric_history for resumption
             (optional), analogous to train_losses/val_losses. Each entry
             already carries an absolute 'epoch' key, so seeding here and then
@@ -398,7 +523,8 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         weight_decay=weight_decay,
         loss_a=loss_a,
         loss_b=loss_b,
-        ldos_target=ldos_target
+        ldos_target=ldos_target,
+        shape_loss=shape_loss
     )
 
     # Create trainer
