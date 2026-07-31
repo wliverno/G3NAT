@@ -1036,9 +1036,15 @@ cross-seed spread at that `b` instead of a threshold carried over from another o
 ## 7. The DOS offset is a measurement, not a normalisation artifact (2026-07-30)
 
 willll asked whether the TB model and the DFT reference are on different DOS scales, since
-in log space a scale factor is a constant offset. They are -- the model sits 0.2199 decades
-(a factor 1.66) below the DFT DOS on held-out data, and 0.4892 decades below on per-site
-LDOS. The question was what that offset means.
+in log space a scale factor is a constant offset. They are: on held-out data the model sits
+below the DFT DOS, and further below on per-site LDOS. The question was what that offset
+means.
+
+**Read section 7a first.** An earlier version of this section answered that question with a
+level-counting argument and reported single-seed numbers (0.2199 decades on DOS, 0.4892 on
+LDOS) as agreeing with it to 0.02 decades. Both the precision claim and the mechanism are
+retracted below. The three-seed numbers are in 7a; the sum-rule reasoning that motivated the
+question survives, the quantitative level count does not.
 
 A first attempt (commit 91f381f, since reverted) argued the offset was unphysical: the model
 has 8 states for a 4-mer while the DFT uses ~2869 atomic orbitals, so magnitudes cannot be
@@ -1057,37 +1063,92 @@ whose amplitude is set by `Tr(Gamma)` and not by N. So the in-window DOS magnitu
 **the number of levels inside the window**. The basis-size argument applies the first sum
 rule to a quantity governed by the second.
 
-Counted directly from the Gaussian logs. For `aaac` (verified independently):
+That much stands: the basis-size argument applies the wrong sum rule, and `log10(2869/8) =
+2.55` decades is not the expected offset. What does NOT stand is the quantitative version.
 
-```
-2869 basis functions,  HOMO -5.30323 eV  (Egrid mean -5.3031, matches)
-HOMO-LUMO gap 4.426 eV
-occupied MOs in [HOMO-1 eV, HOMO+1 eV]: 14
-virtual  MOs in window:                  0   <- upper half of the window is inside the gap
-ratio to 2L = 8 sites: 1.75      log10: 0.243
-```
+### RETRACTED: the level count and its agreement with the measurement (2026-07-30)
 
-Across eight sequences spanning L = 4 to 8, the ratio of in-window MOs to `2L` runs from
-**1.25 (GC-rich) to 2.62 (AT-only)**, mean `log10(n_MO / 2L) = 0.2005 decades`.
+The earlier text counted in-window MOs, got a mean `log10(n_MO / 2L) = 0.2005 decades`, set
+it against a measured 0.2199, and concluded the two matched to 0.02 decades. Three separate
+problems, all found on 2026-07-30:
 
-| prediction | offset in decades |
-|---|---|
-| level counting | **0.2005** |
-| **measured** | **0.2199** |
-| basis size, `log10(2869/8)` | 2.55 |
+**1. The measurement was one seed, and the seed scatter is 30x the claimed agreement.** Three
+seeds at the same configuration (`n_orb=1`, `b=0`, absolute loss, best-val weights, grouped
+split) give:
 
-Level counting matches the measurement to 0.02 decades. Basis size overshoots by ~200x in
-linear terms.
+| quantity | s42 | s43 | s44 | mean |
+|---|---|---|---|---|
+| DOS bias (log10, model - DFT) | -0.8833 | -0.2805 | -0.2647 | **-0.4762** |
+| LDOS bias | -0.9628 | -0.6646 | -0.6690 | **-0.7654** |
+
+The 0.2199 was near the s43/s44 end of a range 0.62 decades wide. Agreement to 0.02 decades
+inside that scatter is not a result. (The checkpoint it came from was later overwritten by
+the `n_orb` arm, so it is not recoverable; the numbers above supersede it.)
+
+**2. The magnitude is unexplained; the flatness is explained.** Level counting predicts
+`bias = -log10(levels / 2L)`. Counted properly from `eigen.mat` (see point 3) over 189
+sampled records, `levels/2L` is essentially flat with length:
+
+| L | median levels | levels/2L | predicted bias | measured (n_orb=1) | residual |
+|---|---|---|---|---|---|
+| 4 | 11.0 | 1.375 | -0.138 | -0.4943 | -0.633 |
+| 5 | 15.0 | 1.500 | -0.176 | -0.4972 | -0.673 |
+| 6 | 18.0 | 1.500 | -0.176 | -0.5114 | -0.687 |
+| 7 | 22.0 | 1.571 | -0.196 | -0.4371 | -0.633 |
+| 8 | 24.5 | 1.531 | -0.185 | -0.4501 | -0.635 |
+
+Predicted spread across L: 0.058 decades. Measured: 0.074. **The argument gets the shape
+right** -- both are flat, and an earlier claim in this section that it predicted a 0.85-decade
+gradient was itself computed from the integrated DOS rather than from levels, and is
+withdrawn.
+
+What it does not get is the size. There is a **constant -0.63 decade residual at every
+length**, remarkably constant (spread 0.054). Level counting accounts for roughly a quarter of
+the measured offset and something else accounts for the rest.
+
+That residual is **not** dataset contamination. Excluding all 147 sum-rule-violating records
+moves the DOS bias by 0.0004 decades (`docs/dataset.md`), because the artifact occupies one
+grid point of 201 and the bias averages over the window. The residual is a real unexplained
+effect. Splitting by duplex AT fraction
+adds nothing: AT-poor -0.4874, mid -0.4267, AT-rich -0.5133, against a cross-seed scatter of
++-0.40.
+
+So the original claim of agreement "to 0.02 decades" was a lucky single seed meeting a
+prediction that is off by a factor of ~2.8 in linear terms. The mechanism is partially right
+and was oversold, which is a different failure from being wrong.
+
+**3. `eigen.mat` is usable -- the earlier confusion here was a units error.** Identified by
+willll (DOMAIN): the file is in **Hartree and unsorted**. Multiply by 27.211386 and sort, and
+`sorted(eigen_eV)[:n_occ]` matches `occ.mat` to 7.5e-4 eV, the HOMO matches
+`energy_reference_eV` to 2e-6 eV, and `aaac`'s HOMO-LUMO gap comes out 4.4255 eV. A previous
+revision of this section claimed the file could not be reconciled and that `aaac`'s
+occupied/virtual counts were inverted; both statements were artifacts of reading Hartree as
+eV and are withdrawn. **The original counts were correct**: `aaac` 14 in-window, `attggctg`
+23, all occupied, the window's upper half lying inside the ~4.1-4.4 eV gap.
+
+What remains true is that the *integrated DOS* is not a level count, and the discrepancy grows
+with length -- median integral-per-level runs 1.07, 1.27, 3.40, 4.31, 10.44 for L=4..8, and
+reaches ~4500 for the artifact records. That growth is what manufactured the spurious
+1.94-to-13.57 "state count" gradient. See `docs/dataset.md`.
 
 The coarse-graining of the contact is also already correct in the sum-rule sense. Mean level
 width is `Tr(Gamma)/N`: DFT `0.1 * 679 / 2869 = 0.0237 eV`, model `0.1 * 2 / 8 = 0.0250 eV`,
 agreeing to 5% because the contacted fraction matches (679/2869 = 23.7% of AOs sit on the two
 terminal residues; 2/8 = 25% of model sites are contacts).
 
-**So the offset is a measurement of how many frontier states the one-orbital-per-base ansatz
-omits.** It is composition-dependent -- 1.25 states per base for GC-rich sequences, 2.62 for
-AT-only -- which makes it a per-sequence observable. Per-sequence centring deletes exactly
-that variation.
+**What the offset is remains open.** It is real, large, and it responds strongly to `n_orb`
+(section 7e) -- but it does not scale with length or composition the way a missing-states
+account requires. The leading alternative, untested and uncited, is that it is a *valley*
+effect rather than a magnitude one: with `2L` sites the model has too few Lorentzians to fill
+the window, so it undershoots between its own peaks, and averaging `log10` over the window
+turns that into a negative bias with no dependence on total state count. That would fit
+flat-across-L exactly. Testing it means looking at the residual as a function of distance to
+the nearest model peak, which has not been done.
+
+The one thing the offset is NOT is a per-sequence observable of the kind the earlier text
+claimed, so "per-sequence centring deletes exactly that variation" no longer holds as an
+argument. The case against centring now rests on 7b and 7c, which do not depend on level
+counting.
 
 ### 7b. Transmission is not basis-independent either
 
@@ -1116,13 +1177,25 @@ J = log10(mean_i LDOS_i) - mean_i log10(LDOS_i)      (Jensen / AM-GM gap)
 on few sites. Differencing prediction and target:
 
 ```
-Delta_LDOS = Delta_DOS - <J_pred - J_target>
--0.4892    = -0.2199   - <J_pred - J_target>
-=> <J_pred - J_target> = +0.2693 decades
+<J_pred - J_target> = Delta_DOS - Delta_LDOS
 ```
 
-**The model is 1.86x more log-localized than the DFT reference.** That cannot be a scale
-artifact, because both sides satisfy the same sum rule with the same `n`.
+The algebra is exact and survives the 7a retraction; only the numbers feeding it change.
+Re-measured over three seeds (the earlier single-seed value was +0.2693):
+
+| arm | s42 | s43 | s44 | mean |
+|---|---|---|---|---|
+| `n_orb=1` | +0.0795 | +0.3841 | +0.4043 | **+0.2893** |
+| `n_orb=2` | -0.0019 | -0.0320 | -0.0917 | **-0.0419** |
+
+At `n_orb=1` the model is more log-localized than the DFT reference, but the seed spread
+(0.32 decades) is comparable to the effect, so the magnitude is not well determined. **At
+`n_orb=2` the gap closes to roughly zero** -- model and reference agree on how concentrated
+the spectral weight is, not merely on how much of it there is. That is the stronger half of
+the `n_orb` result and it is not something the DOS magnitude alone could have shown.
+
+Either way the gap cannot be a scale artifact, because both sides satisfy the same sum rule
+with the same `n`.
 
 Subtracting INDEPENDENT per-sequence offsets from DOS and from LDOS removes precisely
 `<J_pred - J_target>` -- the single number that most directly answers "does the model spread
@@ -1150,12 +1223,35 @@ vanished (0.1197 -> 0.1202). That is what happens by construction when 15% of th
 budget is deleted from the score. `CLAUDE.local.md`: *do not optimize the metric instead of
 the model.* The check confirmed the metric change had the effect it was defined to have.
 
-### 7e. What the offset actually indicates: n_orb = 2
+### 7e. n_orb = 2: the intervention works, the reason it was predicted does not
 
-The window holds 1.25-2.62 DFT levels per base; the model provides one. `n_orb > 1` is already
-supported end to end (block onsite and coupling construction, `site_ldos_log10` sums orbitals
-within a site). The prediction is that at `n_orb = 2` the DOS offset collapses toward zero,
-most strongly for the AT-rich sequences where it is largest and the level count highest.
+Run 2026-07-30, jobs 37925511 / 37925512. Two arms, three seeds each, identical but for
+`n_orb`: `b=0`, `loss_a=1.0`, `shape_loss=False`, 15000 epochs, best-val weights, grouped
+split. Held-out mean signed `log10` residual (model - DFT):
 
-That is a model change rather than a metric change, and it is testable against a quantity the
-absolute loss preserves and the centred loss would have thrown away.
+| arm | DOS bias, mean [seed range] | LDOS bias, mean [seed range] | best val, mean |
+|---|---|---|---|
+| `n_orb=1` | **-0.4762** [-0.8833, -0.2647] | **-0.7654** [-0.9628, -0.6646] | 0.6239 |
+| `n_orb=2` | **-0.1059** [-0.1525, -0.0773] | **-0.0641** [-0.0861, -0.0453] | 0.4512 |
+
+**Confirmed.** The DOS bias falls 4.5x and the LDOS bias 12x. The seed ranges do not overlap
+on any of the three quantities -- every `n_orb=2` seed beats every `n_orb=1` seed -- so this
+clears the cross-seed bar that four earlier conclusions in this project failed. The
+localization gap closes as well (7c). `n_orb=2` should be the default for the LDOS phases.
+
+**Refuted: the stated prediction.** It was "most strongly for the AT-rich sequences where the
+level count is highest." There is no AT gradient at either `n_orb` (terciles differ by 0.026
+against a seed scatter of +-0.40), and no length gradient where 0.85 decades were predicted
+(7a, point 2). The intervention was right; the reason given for it was not.
+
+Two caveats before this is read as pure physics. `n_orb=2` doubles the Hamiltonian block size,
+so part of the gain is capacity -- and the best-val epoch moves *earlier* under `n_orb=2`
+(642/536/1276 versus 1408/6179/13199), which is what more capacity looks like. Second, at
+`n_orb=1` the seed with the *largest* bias (s42, -0.8833) has a middling best-val loss and the
+*fewest* heavy-tail records in its validation split (3.9%, versus 12.5% for the seed with the
+smallest bias). So the bias is not determined by the loss and is not driven by tail
+contamination: the optimizer trades bias against shape error and lands in different places at
+equal loss. Do not read any single run's bias as a property of the architecture.
+
+Measured with `norb_bias.py` / `norb_clean.py`, kept outside this repo in the
+private notes tree alongside `dos_scale.py`.
