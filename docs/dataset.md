@@ -1,7 +1,7 @@
 # The DFT transport dataset: inventory, conventions, and open questions
 
 Working notes toward a published dataset that ships with the paper. Everything here was
-measured on 2026-07-24 (`/mmfs1/gscratch/anantram/willll/reconcile_dataset.py`), not
+measured on 2026-07-24 (`scripts/reconcile_dataset.py`), not
 recalled. Where a claim is unverified it says so.
 
 Scope decision (willll, 2026-07-24): the published dataset carries **transport observables
@@ -248,3 +248,107 @@ them one-to-one -- mismatched pairs, single strands, non-Watson-Crick pairings, 
 constructs -- would separate the A and T contributions. None of that exists in this dataset,
 so it is a limit of the data, not of the model or the loss. Worth stating plainly in the
 discussion rather than leaving the A/T degeneracy to look like a shortcoming of the method.
+
+## States inside the transport window, and a heavy tail worth investigating (2026-07-30)
+
+Measured by trapezoid-integrating the DFT `DOS` over the 2 eV window for all 2077 v2 records.
+
+**CORRECTION (2026-07-30): this integral is NOT a level count, and the section originally
+said it was.** The identity "integral of DOS = number of levels" holds over ALL energy, where
+it gives the basis size `N`. Over a finite window it requires every in-window level to be
+resolved by the broadening, and in this dataset that fails badly in both directions, because
+`eta = 0` leaves contact `Gamma` as the only imaginary part. Sampled against direct
+eigenvalue reads, the integral runs from ~0.35x the in-window level count to more than 2000x
+it, continuously, with no clean separation. Treat the numbers below as **a property of the
+integrated DOS**, useful for spotting sick records, and not as a state count. Anything built
+on them as a state count is retracted -- see `docs/model-results.md` section 7a.
+
+**Medians** (the mean is destroyed by the tail described below):
+
+| L | 2L (model sites) | records | median states in window | ratio to 2L |
+|---|---|---|---|---|
+| 4 | 8 | 540 | 15.51 | 1.94 |
+| 5 | 10 | 451 | 22.20 | 2.22 |
+| 6 | 12 | 330 | 40.03 | 3.34 |
+| 7 | 14 | 372 | 86.26 | 6.16 |
+| 8 | 16 | 384 | 217.18 | 13.57 |
+
+Pooled ratio percentiles: p1 0.67, p5 0.86, p25 1.52, **p50 2.69**, p75 10.15, p95 147.70,
+p99 608.39.
+
+### The true level counts, and why the integral looked like it agreed with them
+
+Counted properly from `asyed4/DNADataSet/<seq>/<seq>_eigen.mat`. **That file is in Hartree and
+is unsorted** (identified by willll); multiply by 27.211386 and sort, and its first `n_occ`
+entries reproduce `occ.mat` to 7.5e-4 eV and its HOMO reproduces `energy_reference_eV` to
+2e-6 eV. Over 189 sampled records:
+
+| L | median true levels in window | levels / 2L | median integral / level |
+|---|---|---|---|
+| 4 | 11.0 | 1.375 | **1.07** |
+| 5 | 15.0 | 1.500 | 1.27 |
+| 6 | 18.0 | 1.500 | 3.40 |
+| 7 | 22.0 | 1.571 | 4.31 |
+| 8 | 24.5 | 1.531 | **10.44** |
+
+The true count per site is **flat at about 1.5**, not the 1.94-to-13.57 gradient the integral
+suggested. The apparent gradient was the integral's own error growing with length.
+
+This also explains why the original cross-check looked convincing. It compared a Gaussian-log
+count for `aaac` (14 in window, ratio 1.75) against the L=4 integral (15.51, ratio 1.94) and
+concluded "two methods, same answer". At L=4 the integral genuinely is a decent proxy --
+integral/level is 1.07 there. The check was valid, and it generalized to nothing: by L=8 the
+same comparison is off by a factor of ten. A single-length agreement was read as validating
+the method at all lengths.
+
+### The tail IS a numerical artifact, and the mechanism is identified (2026-07-30)
+
+**7.1% of records (147 of 2077) have a ratio above 100**, i.e. more than 800 states inside a
+2 eV window. The worst are `attggctg_run2` (6423x), `taagtaa_run2` (5807x), `taagtaa_run4`
+(4309x), `atgccaca_run2` (2185x). The largest single DOS value anywhere in the dataset is
+**1.028e7**.
+
+**Proof that this is not physical, requiring no eigenvalue interpretation at all.** The
+integral of DOS over ALL energy equals the basis size `N`. An integral over a 2 eV
+sub-window therefore cannot exceed `N`. For the worst records it does, by more than an order
+of magnitude (`N` = dimension of `<seq>_Fock.mat`; integral by trapezoid over `Egrid`):
+
+| record | N | 2 eV window integral | ratio to N |
+|---|---|---|---|
+| `attggctg_run2` | 5806 | 102772.5 | **17.7** |
+| `taagtaa_run2` | 5083 | 81299.8 | 16.0 |
+| `taagtaa_run4` | 5083 | 60318.3 | 11.9 |
+| `atgccaca_run2` | 5806 | 34954.0 | 6.0 |
+
+Reproduced independently by two separate implementations to the digit. The DOS in these
+records is not counting states.
+
+**Mechanism.** `eta = 0` in the generator (verified in `Parameters.txt`), so contact `Gamma`
+is the only imaginary part anywhere. The energy grid is constructed to place a point exactly
+on the HOMO of every record -- confirmed, `max(occ.mat)` equals `energy_reference_eV` to
+3e-7 eV for `aaac` and 7.7e-8 eV for `attggctg`. When the HOMO eigenvector additionally has
+negligible weight on the contacted terminal residues (measured Mulliken weight 1e-6 to 1e-7
+for tail records, 3-4 orders below healthy controls), nothing broadens that pole and `-Im G^r`
+at that grid point diverges. Every one of the 147 flagged records peaks at exactly the HOMO
+grid index. Note that healthy records frequently do too -- peaking at the HOMO is necessary
+for the artifact, not sufficient, and is not on its own a diagnostic.
+
+**This is the same tail seen in the LDOS distribution**: max 7.80e6 against a p99 of 9.76,
+with only 4 values out of 4,852,542 above 3e6.
+
+Still open, and worth settling before these records are trusted:
+
+- **Their effect on window-averaged metrics is negligible -- measured, not assumed.**
+  Recomputing the held-out DOS and LDOS bias for both `n_orb` arms with all 147 excluded
+  moves the DOS bias by 0.0004 decades (`n_orb=1`: -0.4762 all, -0.4758 clean) and the LDOS
+  bias by 0.007. The reason is that the artifact is a spike at a *single* grid point -- the
+  HOMO index -- out of 201, so any metric averaged across the window sees about 1/201 of it.
+  An earlier estimate that contamination might account for ~0.36 decades of the DOS bias
+  assumed the corruption was spread across the window; it is not.
+- They are therefore safe to leave in for window-averaged training and evaluation, and unsafe
+  for anything evaluated AT or NEAR the reference energy, which is where transport actually
+  happens. Any per-energy analysis at E_F must exclude them.
+- `ratio > 100` is a threshold on a continuum, not a boundary between two populations. Sampled
+  records run 0.35, 1.9, 7.9, 26.6, 88.2, ... with no gap. Any cut is arbitrary.
+- The right fix is upstream: a small finite `eta` would regularize every one of these. That is
+  a regeneration decision, not something to patch in the loader.
