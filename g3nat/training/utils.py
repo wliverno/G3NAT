@@ -1,10 +1,39 @@
-"""Training utilities including batch samplers and dataset splitting."""
+"""Training utilities including batch samplers, dataset splitting and seeding."""
+
+import random
+from typing import List, Optional
 
 import numpy as np
-from typing import List
+import torch
 from torch.utils.data import Sampler
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Subset
+
+
+def set_init_seed(seed: Optional[int]) -> bool:
+    """Seed every RNG that affects model initialization. Returns True if seeded.
+
+    This is deliberately SEPARATE from the train/val split seed. Before
+    2026-07-31 `--split_seed` was the only seed in the codebase, so a sweep over
+    "seeds" varied the held-out set while initialization was left to torch's
+    global RNG. Every cross-seed spread measured that way mixes split variance
+    with init variance and is not reproducible.
+
+    Asking whether a loss term makes the recovered Hamiltonian more reproducible
+    requires the opposite: hold the split fixed and vary init. That is only
+    possible once the two are independent.
+
+    `seed=None` touches no RNG, reproducing historical behaviour exactly, so
+    existing runs and byte-identical comparisons are unaffected.
+    """
+    if seed is None:
+        return False
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    return True
 
 
 class LengthBucketBatchSampler(Sampler[List[int]]):
