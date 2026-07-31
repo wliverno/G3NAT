@@ -88,6 +88,15 @@ IFS=' ' read -ra SEEDS <<< "${SEEDS:-42 43 44}"
 # Held fixed across every phase: the 3-seed replication config whose cross-seed
 # scatter is on record (docs/model-results.md replication section).
 #
+# SEEDS sets --split_seed, and --init_seed follows it unless INIT_SEED overrides.
+# Before 2026-07-31 --split_seed was the ONLY seed, so a "3 seed" sweep varied the
+# held-out set with initialization left uncontrolled, and no cell was reproducible.
+# Tying them by default keeps a seed meaning one (split, init) pair. To vary
+# initialization at a FIXED split -- which is what a reproducibility sweep over H
+# requires -- pin SEEDS to one value and set INIT_SEED per cell, e.g.
+#   for k in 1 2 3 4 5; do SEEDS=42 INIT_SEED=$k N_ORB=2 \
+#     sbatch --array=0-0 scripts/run_ldos_phases.sh; done
+#
 # NOTE: conv_type is lowercase "gat". scripts/train.py declares
 # choices=['gat', 'transformer'] and argparse choice matching is case
 # sensitive, so "GAT" would fail with an invalid-choice error at argparse
@@ -207,6 +216,13 @@ esac
 # The outputs_*/ and ckpt_*/ gitignore patterns already cover this "outputs_
 # ldos_..." / "ckpt_ldos_..." naming, so these directories never enter the
 # repo, same as the other sweep scripts' run artifacts.
+# Suffix only when INIT_SEED is decoupled from SEED, so existing tag names are
+# unchanged. Without this, an init sweep at a fixed split would write every cell
+# into the SAME output directory and silently overwrite itself.
+if [ -n "${INIT_SEED:-}" ] && [ "${INIT_SEED}" != "${SEED}" ]; then
+  TAG="${TAG}_i${INIT_SEED}"
+fi
+
 OUT="outputs_ldos_${TAG}"
 CKPT="ckpt_ldos_${TAG}"
 mkdir -p "${OUT}" "${CKPT}"
@@ -219,6 +235,7 @@ python -u scripts/train.py \
   --loss_b "${B_VAL}" \
   --ldos_target "${TARGET}" \
   --split_seed "${SEED}" \
+  --init_seed "${INIT_SEED:-${SEED}}" \
   --output_dir "${OUT}" \
   --checkpoint_dir "${CKPT}" \
   ${EXTRA[@]+"${EXTRA[@]}"}
