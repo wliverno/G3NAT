@@ -14,7 +14,8 @@ import numpy as np
 import g3nat
 from g3nat.data import (generate_tight_binding_data, load_pickle_directory,
                         create_dna_dataset)
-from g3nat.training import train_model, TrainingConfig, LengthBucketBatchSampler
+from g3nat.training import (train_model, TrainingConfig, LengthBucketBatchSampler,
+                            set_init_seed)
 from g3nat.training.callbacks import save_checkpoint, save_progress_file
 from g3nat.utils import setup_device
 
@@ -74,10 +75,13 @@ def parse_args():
     parser.add_argument('--n_orb', type=int, default=1)
     parser.add_argument('--conv_type', type=str, default='gat',
                        choices=['gat', 'transformer'],
-                       help='Graph convolution type for the hamiltonian model. '
-                            'Default gat: best for DFT (pickle) fitting '
-                            '(val 0.547 vs transformer 1.42). transformer fits the '
-                            'synthetic TB data better. See docs/model-results.md.')
+                       help='Graph convolution type for the hamiltonian model. Default gat '
+                            'for continuity with existing runs, NOT because it is measurably '
+                            'better: the old "0.547 vs 1.42" claim compared final-epoch '
+                            'values under a leaking split and is retracted. On best-val with '
+                            'a grouped split the two TIE (gat 0.592 +/- 0.010 over 3 seeds, '
+                            'transformer 0.579 over 1). transformer does fit the synthetic TB '
+                            'data better. See docs/model-results.md.')
     parser.add_argument('--use_geometry', action='store_true',
                        help='Fuse SE(3)-invariant X3DNA edge geometry (hamiltonian model). '
                             'Requires a geometry cache built via GeomCacheJob.')
@@ -91,7 +95,13 @@ def parse_args():
     parser.add_argument('--weight_decay', type=float, default=1e-5,
                        help='Weight decay. Default 1e-5 matches the historical hardcoded value.')
     parser.add_argument('--split_seed', type=int, default=42,
-                       help='Seed for the sequence-grouped train/val split.')
+                       help='Seed for the sequence-grouped train/val split. Controls WHICH '
+                            'sequences are held out, and nothing else.')
+    parser.add_argument('--init_seed', type=int, default=None,
+                       help='Seed for model initialization, independent of --split_seed. '
+                            'Default None leaves the RNGs untouched, reproducing historical '
+                            'runs exactly. Set it to vary initialization at a FIXED split, '
+                            'which is what a reproducibility sweep over H actually requires.')
     parser.add_argument('--structured_onsite', action='store_true',
                        help='Mix a per-base onsite baseline with the context head.')
     parser.add_argument('--alpha_granularity', choices=['global', 'per_base'], default='global')
@@ -210,6 +220,13 @@ def main():
     else:
         train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
+
+    # Seed initialization AFTER the split (which uses its own seed) and BEFORE
+    # constructing the model, so --init_seed controls weights and nothing else.
+    if set_init_seed(args.init_seed):
+        print(f"Initialization seeded with {args.init_seed}")
+    else:
+        print("Initialization NOT seeded (pass --init_seed for reproducible weights)")
 
     # Create model
     if args.model_type == 'standard':
