@@ -1255,3 +1255,74 @@ equal loss. Do not read any single run's bias as a property of the architecture.
 
 Measured with `norb_bias.py` / `norb_clean.py`, kept outside this repo in the
 private notes tree alongside `dos_scale.py`.
+
+
+## 8. Phases A, B and O re-run at n_orb=2 on the absolute loss (2026-08-01)
+
+Every earlier Phase A/B/O number was produced under the shape-loss configuration that was
+reverted in section 7d, so all of them are superseded. This is the full re-run: jobs
+37966188 / 37966189 / 37966190, plus 37986411 for one cell lost to a corrupted checkpoint,
+27 cells total. `n_orb=2` (section 7e), absolute loss, grouped split, best-val weights,
+15000 epochs, 3 seeds. `--init_seed` is tied to `--split_seed`, so unlike every previous
+sweep each cell is reproducible.
+
+**Read the DOS+T column, not the total val loss.** The objective is
+`a*T + b*LDOS + (1-b)*DOS`, so a different `b` is a different objective and total loss is not
+comparable across the sweep. `val_dos_t_unweighted` is measured identically at every `b`,
+which is the reason it is recorded.
+
+### 8a. Phase B -- free model, b sweep
+
+| b | n | DOS+T unweighted | LDOS agreement | best-val epochs |
+|---|---|---|---|---|
+| 0.00 | 3 | 0.4396 [0.3723, 0.4750] | 0.5155 [0.4105, 0.6069] | 364 / 567 / 11402 |
+| 0.10 | 3 | 0.4674 [0.4668, 0.4685] | 0.3764 [0.3516, 0.3979] | 479 / 823 / 1380 |
+| 0.25 | 3 | 0.4477 [0.4151, 0.4715] | **0.2621** [0.2461, 0.2721] | 394 / 734 / 1140 |
+| 0.50 | 3 | 0.4936 [0.4830, 0.5061] | 0.2119 [0.2011, 0.2178] | 424 / 920 / 1141 |
+| 0.75 | 3 | 0.4992 [0.4844, 0.5186] | 0.1969 [0.1843, 0.2133] | 773 / 978 / 7019 |
+| 0.90 | 3 | 0.4880 [0.4579, 0.5170] | 0.1878 [0.1817, 0.1922] | 541 / 682 / 1719 |
+
+LDOS agreement improves monotonically and the b=0 and b=0.25 ranges are disjoint. DOS+T
+degrades mildly. At **b = 0.25** the DOS+T range still overlaps the b=0 baseline, so LDOS
+error halves at no measurable transport cost.
+
+State this as engineering, not as a discovery. Training on LDOS improves LDOS agreement is a
+mechanical consequence of the objective, and reporting it as a finding would be circular. The
+reportable quantity is the exchange rate: how much DOS+T a given LDOS gain costs.
+
+### 8b. Phase O -- structured onsite (alpha = 1.0)
+
+`alpha=1.0` replaces the free per-site onsite term with four learned per-base values, which is
+the interpretable object.
+
+| b | n | DOS+T unweighted | LDOS agreement | best-val epochs |
+|---|---|---|---|---|
+| 0.00 | 3 | 0.8207 [0.5641, 1.0075] | 0.5705 [0.5280, 0.6324] | 8983 / 9362 / 10032 |
+| 0.10 | 3 | **0.4472** [0.3969, 0.5068] | 0.4272 [0.3903, 0.4932] | 1284 / 1491 / 2913 |
+| 0.50 | 3 | 0.6537 [0.4636, 0.9506] | 0.3430 [0.2581, 0.4232] | 1368 / 12782 / 13063 |
+
+At `b = 0.1` the structured model reaches 0.4472 against the **free** model's 0.4396 baseline,
+with the b=0 and b=0.1 ranges disjoint. The per-base parameterization stops costing anything.
+That is the discriminator this project defined for the structured onsite head: if per-base
+fits about as well as free, the free model's spread was under-determination rather than
+necessity.
+
+**OPEN -- do not write the strong version of this yet.** The result is confounded with
+convergence rate. Phase O `b=0` peaks at epochs 8983 / 9362 / 10032 against a 15000 cap, while
+`b=0.1` peaks at 1284 / 1491 / 2913. `alpha=1.0` is independently documented as pathologically
+slow and possibly truncated at this budget, so "LDOS makes the interpretable model reachable"
+is not yet separable from "LDOS makes it converge inside the budget". Both are worth reporting
+but they are different sentences. One long-budget `b=0` arm decides which. Until then, quote
+the convergence epochs alongside every number in this table.
+
+### 8c. The landscape is rugged, and the b=0 baseline shows it plainly
+
+The three Phase A cells are identical in every respect except the seed, and they peak at
+epochs **364, 567 and 11402** -- a 30x spread, with best-val ranging 0.3723 to 0.4750. This is
+the same two-basin behaviour recorded for the per-base onsite table, and it is the clearest
+standing evidence that DOS and transmission alone leave the Hamiltonian under-determined.
+
+It also means a fixed epoch budget is not a neutral choice here: it penalises whichever
+configuration converges more slowly, which is exactly the confound in 8b.
+
+Collected with `ld15_collect.py` in the private notes tree.
