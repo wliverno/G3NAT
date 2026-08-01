@@ -235,7 +235,13 @@ def main():
             num_layers=args.num_layers,
             num_heads=args.num_heads,
             output_dim=len(energy_grid),
-            dropout=args.dropout
+            dropout=args.dropout,
+            # Was omitted, so --conv_type was silently ignored here and this
+            # model always used its own default ('transformer') while the
+            # hamiltonian model honoured the flag. Any standard-vs-hamiltonian
+            # comparison run before 2026-08-01 therefore compared two different
+            # convolutions as well as two different readouts.
+            conv_type=args.conv_type
         )
     else:
         model = g3nat.DNATransportHamiltonianGNN(
