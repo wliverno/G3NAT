@@ -33,7 +33,27 @@ def save_checkpoint(model: nn.Module, optimizer: torch.optim.Optimizer, epoch: i
     }
     if metric_history is not None:
         checkpoint['metric_history'] = metric_history
-    torch.save(checkpoint, checkpoint_path)
+
+    # Write-then-rename, because these runs are preemptible. The phase runners
+    # use SLURM --requeue on ckpt partitions, so being killed part-way through
+    # serialization is expected, not exceptional. Writing straight to
+    # checkpoint_path leaves a truncated zip and the requeued attempt dies on
+    # resume with "PytorchStreamReader failed reading zip archive" -- which is
+    # what happened to job 37966189_0 on 2026-07-31, costing ~3h of training.
+    # os.replace is atomic within a filesystem, so an interrupted write leaves
+    # the previous checkpoint untouched and the requeue resumes from it.
+    tmp_path = f"{checkpoint_path}.tmp"
+    try:
+        torch.save(checkpoint, tmp_path)
+        os.replace(tmp_path, checkpoint_path)
+    except BaseException:
+        # Includes SystemExit/KeyboardInterrupt, since the point is surviving a
+        # signal. Never let cleanup mask the original failure.
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
     print(f"Checkpoint saved: {checkpoint_path}")
 
 
