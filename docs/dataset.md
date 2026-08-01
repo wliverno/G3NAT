@@ -11,6 +11,21 @@ as a training target for this project.
 
 ## Inventory (verified)
 
+**Which directory a number refers to matters** -- `pickle_files` is the original set and
+`pickle_files_v2` is the regenerated one, and they differ. Recounted 2026-08-01:
+
+| directory | files | unreadable | unique sequences | by length (4/5/6/7/8) |
+|---|---|---|---|---|
+| `pickle_files` (v1) | 2058 | 1 | **515** | 135 / 112 / 82 / 90 / 96 |
+| `pickle_files_v2` | 2077 | **0** | **520** | 135 / 113 / 83 / 93 / 96 |
+
+v2 is a strict superset: it adds `CGTAT`, `CGTTCCT`, `GCCTGG`, `TCGCTCC`, `TTAAAAG` and loses
+nothing. It also repaired the truncated `gaaac_run2.pkl`, so v2 loads 2077 of 2077 with no
+skipped file -- the "Ran out of input" warning that appeared in every v1 run log is gone.
+
+The table below is the ORIGINAL v1 inventory, retained because the reconciliation arithmetic
+refers to it.
+
 | quantity | count |
 |---|---|
 | pickle files | 2058 |
@@ -37,16 +52,55 @@ C) and **16 GC-only** (no A or T).
 
 - **`gaaac_run2.pkl` is 0 bytes** -- an empty file from a truncated write, not corrupt
   content. Every training run logs "Error loading ... Ran out of input" and skips it, so
-  2057 of 2058 files actually load.
+  2057 of 2058 files actually load. **FIXED in v2**, which loads 2077 of 2077.
 - **`gjf_text` is redundant.** It carries the full Gaussian input deck including 3D
   coordinates, and the loader discards it. Verified: the gjf coordinates and the PDB
   coordinates are the same geometry to **0.0000 A** over all 253 atoms of `aaac`. The
   published record should carry the PDB and drop the deck -- it also shrinks every record
   substantially.
-- **7 sequences have DFT results but no pickle**: `cactc`, `cgtat`, `cgttcct`, `gcctgg`,
-  `tcgctcc`, `tggaa`, `ttaaaag`. Free additions.
+- **7 sequences had DFT results but no pickle**: `cactc`, `cgtat`, `cgttcct`, `gcctgg`,
+  `tcgctcc`, `tggaa`, `ttaaaag`. **5 of the 7 were recovered in v2.** The remaining two are
+  not recoverable and should be dropped from the todo:
+  - `cactc` and `tggaa` have upstream `DOS_*.mat` files of **exactly 131072 bytes** (128 KiB,
+    a buffer boundary) against ~491 KB for a healthy one -- the upstream write was truncated.
+    `scipy.io.loadmat` fails with "Did not read any bytes", and the converter drops them
+    correctly. Their remaining runs have a `Tran_*.mat` but no `DOS_*.mat` at all.
+  - `tggaa` additionally has no `.pdb`, `.gjf` or `.log`, so it has no structure either.
+  Recovering them means re-running the upstream transport calculation, not re-parsing.
 - **The energy convention is undocumented** (see below). A published dataset cannot leave
   each consumer to infer it.
+
+## Transmission dynamic range, and what it does to every loss number (2026-08-01)
+
+Measured over all 417,477 energy points in 2077 v2 records.
+
+| percentile | T |
+|---|---|
+| p50 | **1.709e-08** |
+| p90 | 5.04e-04 |
+| p99 | 0.1509 |
+| p99.9 | 0.7932 |
+| max | 1.002 |
+
+**Half of every spectrum is deep tunneling at ~1e-8, carrying no appreciable current**, and
+the training loss weights all 201 energy points equally in log10 space. So roughly half the
+error budget of every number this project has ever quoted is spent on a region no transport
+measurement would resolve. This is not an argument for changing the loss -- a uniform log-space
+fit is a defensible choice -- but any model comparison should be reported BOTH whole-window and
+restricted to where T is appreciable. A model that wins on the tail and loses at the resonances
+would look better on the whole-window metric while being worse for transport.
+
+**The rank-1 unitarity ceiling is not a binding constraint.** The model applies its
+self-energy through rank-1 contacts, so its `T = Tr(Gamma_L G^r Gamma_R G^a) <= 1`, whereas the
+DFT reference couples every atomic orbital of each terminal residue (rank ~330/349 for `aaac`)
+and could in principle exceed 1. It essentially never does: **1 point in 417,477 is above
+T = 1, at 1.002**. Recorded so the hypothesis that this structurally floors the model's error
+is not re-derived -- it explains nothing.
+
+**Reference smoothness**, mean |2nd difference| of log10: **T 0.2613, DOS 0.1704**. DOS and T
+generated from a finite Hermitian H with fixed Gamma are sums of Lorentzians and therefore
+smooth. This is the target for any comparison against a model that emits 201 independent
+values with no constraint tying neighbouring energies.
 
 ## Energy convention
 
