@@ -117,9 +117,13 @@ python scripts/train.py --data_source pickle --data_dir /path/to/pickle/files \
 ```
 
 **Honest caveat:** on the current DFT dataset the structures are idealized fiber B-DNA, so
-the geometry is near-constant across sequences and carries no predictive signal -- a
-geometry-on run matches the geometry-off baseline within noise (0.538 vs 0.547; see
-`docs/model-results.md`). The feature is infrastructure for future datasets with real
+the geometry is near-constant across sequences and carries no predictive signal. The
+strongest evidence is structural rather than a loss comparison: the phosphorus coordinates
+are **bit-identical** across different sequences of the same length, so only base atoms
+differ and any geometric descriptor is near-constant by construction. (An early geometry-on
+vs geometry-off comparison, 0.538 vs 0.547, agreed -- but both numbers are final-epoch under
+the since-retired leaking split, so treat them as illustrative, not as the evidence. See
+`docs/model-results.md`.) The feature is infrastructure for future datasets with real
 geometric variation (MD / crystal / predicted structures). Design:
 `docs/superpowers/specs/2026-07-20-x3dna-edge-geometry-design.md`.
 
@@ -127,7 +131,7 @@ geometric variation (MD / crystal / predicted structures). Design:
 - Node features: 4 one-hot features (A, T, G, C)
 - Edge features (`edge_attr`): 5 values per edge: [backbone_onehot, hbond_onehot, contact_onehot, directionality, coupling]
 - Optional edge geometry: with `--use_geometry`, each edge additionally carries a separate SE(3)-invariant `edge_geom` (7 values) channel plus an `edge_geom_mask`; `edge_attr` itself is unchanged. See "Edge geometry" above.
-- Default graph convolution for the Hamiltonian model is `gat` (best on the DFT dataset; `--conv_type transformer` fits the synthetic TB data better). See `docs/model-results.md`.
+- Default graph convolution for the Hamiltonian model is `gat`, for continuity with existing runs rather than because it is measurably better: on best-val under a sequence-grouped split the two **tie** (gat 0.592 +/- 0.010 over 3 seeds, transformer 0.579 over 1). The earlier claim that gat won decisively compared final-epoch values under a split that leaked sequences across train and val, and is retracted. `--conv_type transformer` does fit the synthetic TB data better. See `docs/model-results.md`.
 - Hamiltonian NEGF implementation is vectorized for stability; transmission/DOS are returned as log10-safe values for training stability in `DNATransportHamiltonianGNN`.
 
 ### Contact configuration defaults
