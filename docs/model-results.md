@@ -1552,3 +1552,100 @@ length-4, so this is substantially a 4-mer result. The Hamiltonian seed spread (
 advantage exceeds that spread.
 
 Measured with `substitution_test.py` in the private notes tree.
+
+
+## 12. Length extrapolation and the substitution factor grid (2026-08-02)
+
+Two analyses on existing checkpoints. No new training, no new DFT.
+
+**Nothing here establishes which model is CORRECT.** Training data stops at 8 bp and no DFT
+reference exists beyond it, so the length section measures what the models DO, not which is
+right. DFT strands to settle it are specified in the internal notes.
+
+### 12a. Length: the two models disagree by 3-7x, robustly
+
+Predicted `log10 T` at window centre against strand length, L = 4..20, both models, 3 seeds
+each, six sequence families. Points at the `log_floor` are dropped as numerical rather than
+physical.
+
+| family | Hamiltonian slope/bp | direct slope/bp |
+|---|---|---|
+| poly-G | -1.278 [-1.420, -1.171] | -0.191 [-0.257, -0.094] |
+| (GC)n | -1.523 [-1.692, -1.379] | -0.238 [-0.311, -0.202] |
+| (AT)n | -0.929 [-1.497, -0.456] | -0.287 [-0.348, -0.200] |
+| random-0 | -1.666 [-1.684, -1.646] | -0.466 [-0.507, -0.437] |
+| random-1 | -1.673 [-1.910, -1.428] | -0.372 [-0.425, -0.299] |
+| random-2 | -1.310 [-1.377, -1.212] | -0.357 [-0.370, -0.345] |
+
+Seed ranges are disjoint in every family. **The non-periodic control matters and it holds.**
+An adversarial review established that the pooled readout is NOT length-blind -- it averages
+over 2 contact nodes plus 2L base nodes, so the contact fraction `2/(2L+2)` carries an
+`O(1/L)` length signal -- and that any saturation argument is most exact for periodic motifs.
+Random sequences were added for exactly that reason and separate just as cleanly; `random-0`
+gives the tightest Hamiltonian seed range in the project, -1.684 to -1.646.
+
+**Functional form.** `log10 T` linear in L is the tunneling form. R2 of the linear fit favours
+the Hamiltonian model in all six families: 0.999 / 0.978 / 0.996 / 0.940 / 0.967 / 0.935
+against 0.918 / 0.909 / 0.868 / 0.811 / 0.877 / 0.892, means 0.969 vs 0.879.
+
+**What is NOT established.** Quadratic curvature was proposed as the discriminator and is
+confounded: the Hamiltonian model hits `log_floor` and fits on 5-7 points against the direct
+model's 10, and floor compression biases curvature positive. Lower the floor at evaluation
+before using curvature at all.
+
+**Against the naive expectation.** The direct model orders the motifs poly-G shallowest
+(-0.191) to (AT)n steepest (-0.287), matching the qualitative expectation that G-tracts conduct
+better. The Hamiltonian model does not: it puts (AT)n shallowest at -0.929. Its (AT)n seed
+range spans -1.497 to -0.456, a 3x spread, so that slope is not determined -- and a
+motif-ordering test cannot be run against DFT until it is. The "G-tracts conduct better"
+expectation is used here as an intuition and has NOT been sourced.
+
+### 12b. Substitution: a factor grid over alpha, b and geometry
+
+The section 11 substitution metric applied to all 12 trained configurations, 3 seeds each.
+Held-out pairs. Skill is `1 - MSE(predicted change)/MSE(zero change)`, so it reads as variance
+explained in how the spectrum RESPONDS to a base swap; 0 means no better than predicting no
+change.
+
+| config | DOS skill | T skill |
+|---|---|---|
+| **DIRECT (blind)** | **+0.608** [+0.570, +0.631] | **+0.726** |
+| alpha=0, b=0.5 | +0.179 [+0.111, +0.307] | +0.544 |
+| alpha=0, b=0.25 | +0.162 | +0.528 |
+| alpha=0, b=0.1 | +0.151 | +0.474 |
+| alpha=0, b=0.75 | +0.143 | +0.488 |
+| alpha=0, b=0 | +0.089 [-0.157, +0.244] | +0.458 |
+| alpha=0, b=0.9 | +0.082 | +0.452 |
+| alpha=1, b=0.1 | +0.025 | +0.453 |
+| alpha=1, b=0.5 | -0.065 | +0.285 |
+| alpha=1, b=0 | -0.150 [-0.294, -0.010] | -0.103 |
+| alpha=0, b=0 +geom | -0.287 [-0.639, +0.046] | -0.179 |
+| alpha=1, b=0.1 +geom | -0.339 | +0.132 |
+
+**b helps, as an inverted U peaking near 0.5.** DOS skill roughly doubles from b=0 (+0.089) to
+b=0.5 (+0.179) and falls away by b=0.9 (+0.082); transmission follows the same shape. This is
+the first evidence in this project that a loss parameter improves a PHYSICAL-RESPONSE metric
+rather than the metric it was trained on. Note pairwise ranges overlap, so no single comparison
+is resolvable at n=3 -- **the evidence is the monotone trend across six levels**, which is what
+a factor grid buys and one-factor-at-a-time cannot. An earlier reading of the single b=0.25
+cell concluded LDOS supervision "did not help"; that was one cell and it was wrong.
+
+**alpha=1.0 makes substitution WORSE.** Every structured-onsite cell falls below every
+free-onsite cell on DOS skill, and alpha=1/b=0 has all three seeds negative (range entirely
+below zero), so that cell is resolvable. This refutes the mechanistic expectation that tying
+onsite energy to base identity would help predict a base change. Post-hoc and flagged as such:
+forcing onsite to four shared values may remove the model's capacity to represent how a
+substitution alters its NEIGHBOURS' environment, and that context term appears to carry the
+response.
+
+**Geometry gives the two worst cells in the grid**, at both alpha values (-0.287, -0.339).
+Direction is now consistent across three independent measurements (fit, and both geometry
+cells here), though seed ranges remain wide. Plausible mechanism: `edge_geom` is a
+deterministic function of base identity, so under substitution it moves in perfect correlation
+with the base change and offers a redundant path the model leans on. Recorded as suggestive,
+not resolved.
+
+**The gap does not close.** The best Hamiltonian cell (+0.179) remains 3.4x below the direct
+model (+0.608).
+
+Measured with `length_sweep.py` and `substitution_test.py` in the private notes tree.
