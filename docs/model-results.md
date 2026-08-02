@@ -1503,8 +1503,25 @@ between records with the SAME contact configuration.
 
 **The null that matters** is "predict no change". Single-base substitutions are small
 perturbations, so `delta = 0` is often nearly right, and per-spectrum fit quality says nothing
-about whether a model beats it. Skill `= 1 - MSE(model)/MSE(zero)`; positive means the model
-knows something about substitution.
+about whether a model beats it. The statistic is `1 - MSE(model)/MSE(zero)`; positive means the
+model knows something about substitution.
+
+**On the name (2026-08-02).** This is reported below as "skill", which is the standard term in
+forecast verification -- meteorology and hydrology -- and is largely unfamiliar in mainstream
+ML, where the same construction is R2 / explained variance. It was adopted for being the right
+QUESTION without checking whether it was the right NAME. Two properties a reader needs:
+
+- The reference is ZERO, not the mean of the target, so it is not literally R2. Zero is the
+  deliberate choice because for a CHANGE the meaningful null is "nothing happened". Whether
+  `mean(delta)` is near zero across pairs has not been checked; if it is, the two coincide and
+  the choice is free.
+- It is **unbounded below** while capped at +1, which is why -0.287 reads as more dramatic than
+  a symmetric metric would.
+
+It will be restated as "fraction of the substitution-response variance explained", with RMSE in
+decades alongside so the magnitude is judgeable, and correlation kept as a separate column since
+getting the SHAPE of a change right while getting its MAGNITUDE wrong are different failures
+that one number hides. The values below do not change; only their presentation will.
 
 ### 11a. Result, pairs with BOTH members held out
 
