@@ -82,7 +82,13 @@ def load_trained_model(model_path: str, device: str = 'auto') -> Tuple[Union[DNA
             hidden_dim=args.get('hidden_dim', 128),
             num_layers=args.get('num_layers', 4),
             num_heads=args.get('num_heads', 4),
-            output_dim=args.get('num_energy_points', 100),
+            # The stored energy grid is authoritative -- it is what the weights were
+            # trained against. args['num_energy_points'] only applies to the synthetic
+            # tight-binding data source; for pickle data the grid comes from the data
+            # and that arg keeps its default of 100, so reading it here made every
+            # direct-model checkpoint trained on the 201-point DFT grid fail to load
+            # with a dos_proj/transmission_proj size mismatch.
+            output_dim=len(energy_grid),
             dropout=args.get('dropout', 0.1),
             conv_type=args.get('conv_type', 'transformer')
         )
