@@ -1387,3 +1387,98 @@ needs a code change first.
 Cache note: `geom_cache/geometry.pkl` covers 515 sequences against the 520 in
 `pickle_files_v2`, silently omitting the five v2 additions. Use `geometry_v2.pkl`, rebuilt to
 cover all 520; the 515 shared entries reproduce the old cache bit-for-bit.
+
+
+## 10. The physics-blind control: what the Hamiltonian intermediate costs (2026-08-02)
+
+The first non-self baseline this project has had. Job 37998358: the direct model
+(`--model_type standard`, `DNATransportGNN`) regresses DOS and transmission straight from the
+graph -- no Hamiltonian, no NEGF -- on the same data, same grouped split, same protocol.
+2 convolutions x 3 seeds, dropout 0, 15000 epochs, best-val.
+
+**The encoder is byte-identical between the two models**: `node_proj` (4->hidden), `edge_proj`
+(5->hidden), num_layers x conv(hidden, hidden/heads, heads, edge_dim=hidden), LayerNorm,
+conv->norm->relu. Verified at 533,248 parameters in both. The readout is the sole variable:
+
+| | readout | total |
+|---|---|---|
+| direct model (gat) | 117,650 -- pool to one graph vector, two INDEPENDENT MLP heads | 650,898 |
+| Hamiltonian model (gat, n_orb=2) | 264,712 -- onsite per node + coupling per edge -> H -> NEGF | 797,960 |
+
+Not parameter-matched, deliberately: matching would mean shrinking the encoder and breaking
+the control. The Hamiltonian model carries 23% MORE parameters.
+
+### 10a. Fit
+
+| model | conv | best-val (T+DOS), 3 seeds | best epoch |
+|---|---|---|---|
+| direct | gat | 0.1859 / 0.2249 / 0.1914 -> **0.2007** | 118 / 140 / 160 |
+| direct | transformer | 0.1884 / 0.2234 / 0.1852 -> **0.1990** | 110 / 122 / 168 |
+| Hamiltonian | gat, n_orb=2 | **0.4396** [0.3723, 0.4750] | 364 / 567 / 11402 |
+
+The direct model fits **2.2x better** and converges roughly two orders of magnitude faster.
+Both convolutions land in the same place, consistent with the tie in section 4.3.
+
+Broken down, and restricted to where transport actually happens (reference `log10 T > -3`):
+
+| quantity | direct | Hamiltonian | ratio |
+|---|---|---|---|
+| mean abs log10 DOS error, whole window | 0.1198 | 0.3081 | 0.389 |
+| mean abs log10 T error, whole window | 0.4388 | 0.7068 | 0.621 |
+| mean abs log10 DOS error, T > 1e-3 | 0.3877 | 0.7265 | 0.534 |
+| mean abs log10 T error, T > 1e-3 | 0.8898 | 1.5054 | 0.591 |
+
+**The direct model wins at the resonances too**, not only on the deep-tunneling tail. An
+earlier hypothesis that its advantage was concentrated where transmission is negligible is
+refuted: restricting to appreciable T narrows the gap but does not close it.
+
+### 10b. This is the expected signature of coarse-graining, not a defect
+
+A tight-binding model with `2L * n_orb` sites is a drastic reduction from a ~2869 basis
+function DFT calculation, and the direct model is not producing a Hamiltonian at all -- it is a
+curve fitter with 201 free outputs per spectrum. The two are not competing for the same
+deliverable. A coarse H that *matched* an unconstrained pooled MLP on raw fit would be the
+suspicious outcome; that is what the earlier unphysical models did, fitting well with onsite
+energies running to -33 eV.
+
+The useful reading is as a decomposition. The direct model measures the **irreducible learning
+error** -- what this encoder can extract from sequence with no physics constraint. The gap to
+the Hamiltonian model is then **the price of representability**, separated from "the GNN
+learned badly":
+
+| | DOS | T |
+|---|---|---|
+| direct model (learnable floor) | 0.1198 | 0.4388 |
+| Hamiltonian model | 0.3081 | 0.7068 |
+| **cost of the tight-binding reduction** | **0.188 decades** | **0.268 decades** |
+
+That number is only measurable because the control exists, and it is the quantity a reader can
+actually judge.
+
+### 10c. Spectral roughness -- an open flag, not a settled verdict
+
+Mean absolute second difference of log10, on held-out data:
+
+| | T | DOS |
+|---|---|---|
+| DFT reference | 0.2613 | 0.1704 |
+| direct model | 0.1775 | 0.1288 |
+| Hamiltonian model | **0.0330** | **0.0244** |
+
+Both models are smoother than the reference; the Hamiltonian model is ~8x smoother. Two
+readings are live and this document does not choose between them. Either the smoothing is what
+a reduction to ~32 states necessarily does to structure built from thousands of basis
+functions, or real resonance structure is being averaged away in a way that matters for
+transport. An independent review flagged the second as a genuine limitation rather than
+expected behaviour. Distinguishing them requires the extrapolation tests, not an argument.
+
+Also recorded so it is not re-derived: the rank-1 unitarity ceiling explains none of the gap.
+One point in 417,477 exceeds T = 1, at 1.002 (`docs/dataset.md`).
+
+### 10d. Structural asymmetry worth stating
+
+The direct model **cannot** take the geometry channel -- `g3nat/models/standard.py:29` hardcodes
+`edge_features = 5`. Any geometry-aware comparison is Hamiltonian-model-only without a code
+change.
+
+Measured with `artifact_compare.py` in the private notes tree.
