@@ -1482,3 +1482,73 @@ The direct model **cannot** take the geometry channel -- `g3nat/models/standard.
 change.
 
 Measured with `artifact_compare.py` in the private notes tree.
+
+
+## 11. Single-base substitution: the model predicts change, the blind control predicts it better (2026-08-02)
+
+A predictive rather than descriptive test. For sequence pairs (X, X') differing at exactly one
+position, both with DFT references, does the model predict the CHANGE in spectrum? A model
+that interpolates 2077 independently-fitted curves can get each spectrum roughly right and
+still get their difference wrong.
+
+526 unique single-base sequence pairs exist in `pickle_files_v2`, all six substitution types
+represented (81-95 each). Matching on contact configuration gives **2104 record pairs**. No new
+DFT was needed; the ground truth was already in the dataset.
+
+**Method.** Compare index-wise on the HOMO-referenced grid, which measures the change in the
+HOMO-referenced spectrum -- exactly what the model predicts natively. The model has no
+absolute-energy output and so cannot predict the HOMO shift a substitution causes; that is a
+scope limit of the energy convention, stated rather than worked around. Pairs are formed only
+between records with the SAME contact configuration.
+
+**The null that matters** is "predict no change". Single-base substitutions are small
+perturbations, so `delta = 0` is often nearly right, and per-spectrum fit quality says nothing
+about whether a model beats it. Skill `= 1 - MSE(model)/MSE(zero)`; positive means the model
+knows something about substitution.
+
+### 11a. Result, pairs with BOTH members held out
+
+| model | n | DOS skill | DOS r | T skill | T r |
+|---|---|---|---|---|---|
+| Hamiltonian s42 | 96 | +0.244 | +0.373 | +0.637 | +0.620 |
+| Hamiltonian s43 | 60 | +0.179 | +0.338 | +0.548 | +0.508 |
+| Hamiltonian s44 | 56 | **-0.157** | +0.346 | +0.189 | +0.452 |
+| Hamiltonian b=0.25 s42 | 96 | +0.150 | +0.317 | +0.595 | +0.567 |
+| **direct s42** | 96 | **+0.631** | +0.600 | **+0.747** | +0.720 |
+| **direct s43** | 60 | **+0.625** | +0.569 | **+0.754** | +0.663 |
+| **direct s44** | 56 | **+0.570** | +0.642 | **+0.676** | +0.763 |
+
+Chance correlation, obtained by permuting which DFT delta is paired with which prediction, is
+~0 in every row, so the correlations are real. Both model families beat the no-change null on
+average. **The direct model beats the Hamiltonian model decisively**, on held-out pairs, on
+both observables, and it is stable across seeds (0.570-0.631) while the Hamiltonian arm swings
+from +0.244 to -0.157. One Hamiltonian seed is worse than predicting no change at all.
+
+The pattern is the same over all 2104 pairs (Hamiltonian DOS skill +0.047 to +0.238, direct
++0.655 to +0.674), so it is not an artifact of the small held-out counts.
+
+### 11b. What this does and does not say
+
+**Does:** the tight-binding reduction is worse at predicting the spectral response to a base
+substitution than an unconstrained regressor on the same encoder. The physics structure buys
+nothing on this axis.
+
+**Does not:** generalise to length. `global_mean_pool` discards LENGTH -- averaging is
+length-invariant -- but it does not discard COMPOSITION: changing a base changes the node
+features and therefore the pooled vector. There was never a structural reason for the direct
+model to fail at substitution, and the pooling argument was only ever about length. This result
+narrows the extrapolation claim to the axis where the structural argument holds rather than
+refuting it. The length test is a separate measurement and is not prejudged by this one.
+
+**Probable mechanism, linking to section 10c.** The Hamiltonian model is ~8x smoother than the
+DFT reference. A substitution changes fine structure, and a model that cannot represent fine
+structure cannot represent its change. This is the first measured consequence of the
+over-smoothing, and it argues for the reading that real resonance structure is being averaged
+away rather than the reading that the smoothing is benign.
+
+**Caveats.** Held-out counts are 56-96 pairs. 422 of the 526 unique sequence pairs are
+length-4, so this is substantially a 4-mer result. The Hamiltonian seed spread (-0.157 to
++0.244) is wide enough that its central value is not well determined, though the direct model's
+advantage exceeds that spread.
+
+Measured with `substitution_test.py` in the private notes tree.
