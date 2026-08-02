@@ -115,6 +115,27 @@ COMMON=(
   --num_epochs "${EPOCHS}"
 )
 
+# GEOM=1 fuses the SE(3)-invariant X3DNA edge geometry (7 channels per edge).
+#
+# Off by default only for continuity with the runs already on record -- NOT
+# because geometry has been shown to be unhelpful. The one comparison ever made
+# (0.538 vs 0.547) was a single final-epoch pair under the since-retired leaking
+# split and is not usable evidence. Whether the channel helps, hurts or is
+# neutral is an open empirical question, and GEOM=1 is how it gets answered.
+#
+# It is also a capability requirement independent of val loss: a model trained
+# without the channel can never respond to conformational change, so it could
+# never be run over an MD trajectory to watch onsite energies fluctuate. That
+# use is a goal of the project, and it needs the weights to exist and be trained.
+#
+# Cache: geometry_v2.pkl covers all 520 pickle_files_v2 sequences. The older
+# geometry.pkl has 515 and silently omits the five v2 additions.
+GEOM_TAG=""
+if [ "${GEOM:-0}" = "1" ]; then
+  COMMON+=(--use_geometry --geom_cache "${GEOM_CACHE:-geom_cache/geometry_v2.pkl}")
+  GEOM_TAG="_geom"
+fi
+
 # Suffix only when non-default, so existing tag names are unchanged.
 NORB_TAG=""
 if [ "${N_ORB}" != "1" ]; then NORB_TAG="_n${N_ORB}"; fi
@@ -131,7 +152,7 @@ case "${PHASE}" in
     SEED="${SEEDS[$(( i % ${#SEEDS[@]} ))]}"
     B_VAL=0.0
     TARGET=residue
-    TAG="A_b0.0_s${SEED}${NORB_TAG}"
+    TAG="A_b0.0_s${SEED}${NORB_TAG}${GEOM_TAG}"
     ;;
   B)
     B_GRID=(0.1 0.25 0.5 0.75 0.9)
@@ -143,7 +164,7 @@ case "${PHASE}" in
     B_VAL="${B_GRID[$(( i / ${#SEEDS[@]} ))]}"
     SEED="${SEEDS[$(( i % ${#SEEDS[@]} ))]}"
     TARGET=residue
-    TAG="B_b${B_VAL}_s${SEED}${NORB_TAG}"
+    TAG="B_b${B_VAL}_s${SEED}${NORB_TAG}${GEOM_TAG}"
     ;;
   C)
     : "${B_BEST:?Phase C needs B_BEST=<b> from Phase B}"
@@ -163,7 +184,7 @@ case "${PHASE}" in
     B_VAL="${C_GRID[$(( i / ${#SEEDS[@]} ))]}"
     SEED="${SEEDS[$(( i % ${#SEEDS[@]} ))]}"
     TARGET=base_only
-    TAG="C_baseonly_b${B_VAL}_s${SEED}${NORB_TAG}"
+    TAG="C_baseonly_b${B_VAL}_s${SEED}${NORB_TAG}${GEOM_TAG}"
     ;;
   O)
     # STRUCTURED ONSITE, alpha = 1.0. This is the phase that tests the actual
@@ -194,7 +215,7 @@ case "${PHASE}" in
     B_VAL="${O_GRID[$(( i / ${#SEEDS[@]} ))]}"
     SEED="${SEEDS[$(( i % ${#SEEDS[@]} ))]}"
     TARGET=residue
-    TAG="O_a1.0_b${B_VAL}_s${SEED}${NORB_TAG}"
+    TAG="O_a1.0_b${B_VAL}_s${SEED}${NORB_TAG}${GEOM_TAG}"
     EXTRA=(--structured_onsite --alpha_granularity global --alpha_mode fixed --alpha_value 1.0)
     ;;
   *)
