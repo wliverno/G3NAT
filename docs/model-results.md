@@ -1326,3 +1326,64 @@ It also means a fixed epoch budget is not a neutral choice here: it penalises wh
 configuration converges more slowly, which is exactly the confound in 8b.
 
 Collected with `ld15_collect.py` in the private notes tree.
+
+
+## 9. X3DNA edge geometry: measured at last, and unresolvable at n=3 (2026-08-02)
+
+Until now **no training run in this project had ever used the geometry channel** -- 0 of 109
+checkpoints, and none of the sweep runners passed `--use_geometry`. The only comparison on
+record (0.538 vs 0.547) was a single final-epoch pair under the leaking flat-index split,
+which this document treats as unusable evidence everywhere else. So the question was open,
+not settled.
+
+Jobs 38012603 / 38012604. Two arms, 3 seeds each, `n_orb=2`, paired against the geometry-off
+runs of section 8 at the same split and init seeds. Read on `val_dos_t_unweighted`.
+
+| arm | geometry OFF | geometry ON | effect | worst-arm seed spread |
+|---|---|---|---|---|
+| A (b=0, free onsite) | 0.4396 [0.3723, 0.4750] | 0.4598 [0.4228, 0.5257] | +0.0202 | 0.103 |
+| O (alpha=1.0, b=0.1) | 0.4472 [0.3969, 0.5068] | 0.5294 [0.3839, 0.7105] | +0.0822 | 0.327 |
+
+**Neither effect is resolvable.** Both are 4-5x smaller than the cross-seed scatter within
+their own arm. Pairing by split seed does not rescue it: the per-seed differences in Phase A
+are +0.0505, -0.0440, +0.0543, scattering as widely as the effect being measured. At these
+spreads, resolving a 0.02 difference would take on the order of 25 seeds.
+
+The limiting factor is the ruggedness already documented in section 8c, not the geometry
+channel. Best-val epochs in the geometry-on Phase A arm are **124, 509 and 13835** at
+identical configuration.
+
+### 9a. What may and may not be concluded
+
+**May not:** that geometry is redundant. An earlier version of this analysis measured that the
+cached geometry is close to a deterministic function of base and step identity -- within-type
+standard deviations near zero, position accounting for the residual, length for about 2% of it
+-- and concluded the channel therefore adds nothing. That measurement bounds the channel's
+INFORMATION CONTENT. It does not establish that supplying those values explicitly fails to help
+a network that would otherwise have to derive them through message passing. Only the first was
+measured; the second was asserted. The runs above were commissioned to test it and did not
+resolve it either way.
+
+**May:** that there is no measurable cost to training with geometry on this dataset.
+
+### 9b. Recommendation: default geometry ON
+
+The measured cost is zero within resolution. The capability benefit is unconditional and does
+not depend on val loss at all: **a model trained without the channel cannot respond to
+conformational change**, so it can never be evaluated on a perturbed structure or run across an
+MD trajectory to watch onsite energies fluctuate. Both are project goals, and both require
+these weights to exist and be trained. Paying an unmeasurable price for a capability the
+project needs is the correct trade.
+
+This also unblocks the fraying protocol in the intended form -- perturb PDB coordinates, run
+X3DNA on the perturbed structure, feed the resulting parameters to the model, and run DFT on
+that same structure, so model and reference see one identical perturbation.
+
+Caveats: geometry-on carries 865,800 parameters against 797,960, an 8.5% capacity difference,
+so this is not a perfectly clean A/B. And the direct model cannot take geometry at all --
+`g3nat/models/standard.py:29` hardcodes `edge_features = 5` -- so any geometry-aware baseline
+needs a code change first.
+
+Cache note: `geom_cache/geometry.pkl` covers 515 sequences against the 520 in
+`pickle_files_v2`, silently omitting the five v2 additions. Use `geometry_v2.pkl`, rebuilt to
+cover all 520; the 515 shared entries reproduce the old cache bit-for-bit.
