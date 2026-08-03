@@ -1777,10 +1777,30 @@ reverse-complemented (`aaac` -> `gttt`), so primary `k` pairs with H site `2L-1-
 is concentrated -- the peak site moves 3-4x more than the median site, so the model is
 perturbing H rather than rescaling it. The change drops ~70% within one site.
 
-**Reported honestly: the decay does not continue.** Beyond d = 2 the profile flattens at
-~0.25-0.40 of peak rather than falling further. So the response is local plus a diffuse floor,
-not a clean exponential envelope. Whether that floor is physical (a real delocalised component)
-or slop has not been determined.
+**Not an edge artifact.** The peak lands on an EXTREME H-site (first or last) only 17.1% of the
+time against a 24.0% chance rate, so the localisation statistic is not being inflated by
+edge or contact-adjacent effects. Independent check, 2026-08-03.
+
+**The decay profile above uses a WRONG distance metric.** It measured
+`min(abs(i-pk), n-abs(i-pk))`, which treats the 2L concatenated sites as a ring. That is
+defensible at the two strand ends, which really are hydrogen-bonded, but blind to every
+INTERIOR Watson-Crick rung -- primary `i` is bonded to complementary `L-1-i` for all `i`, not
+only at the ends. Recomputed with true graph shortest-path distance (BFS over backbone edges
+plus all WC rungs), the apparent bump at d = 4 disappears (0.379 -> 0.244) and the profile
+becomes smooth and monotonic:
+
+| d | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|
+| mean abs(delta) / peak | 0.372 | 0.344 | 0.263 | 0.244 | 0.232 |
+
+**What survives and what does not.** The earlier description -- "flattens into a plateau at
+0.25-0.40" -- was an artifact of the ring metric and is withdrawn. The underlying finding
+survives: the response declines smoothly but has NOT reached zero by d = 5, so it is local plus
+a genuinely diffuse component. Whether that component is physical or slop is still open.
+
+**A caveat on the onsite scalar.** Reducing each `n_orb x n_orb` diagonal block to its mean
+eigenvalue discards any redistribution WITHIN the block. A substitution that reshuffles weight
+between a site's two orbitals without moving their mean would register as zero change here.
 
 **A method note.** An earlier version of this test accepted four candidate site indices because
 the ordering had not been established, which for L = 4 accepted half of all sites and put chance
