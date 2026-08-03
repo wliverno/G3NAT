@@ -1741,3 +1741,71 @@ why the noise floor is high (+-0.250 on `sub_dos`, +-3870 epochs on `best_epoch`
 that `--init_seed` exists; not yet done.
 
 Measured with `length_sweep.py` and `substitution_test.py` in the private notes tree.
+
+
+## 13. What the Hamiltonian gives that a spectrum cannot (2026-08-03)
+
+Sections 11 and 12b compared the two models on predicting the CHANGE IN SPECTRUM under a base
+substitution, and the physics-blind control won. That is the axis where a curve fitter competes.
+This section measures the axis where it cannot: the change in **H** itself.
+
+Substituting one base changes the learned Hamiltonian everywhere. The question is whether the
+change is localised at the substituted site and decays with distance -- which is what a physical
+onsite term must do. A pooled MLP emits 201 numbers per spectrum and has no answer to "what
+happened to base 3 when base 5 was mutated". This is not a comparison; the control has no
+corresponding output.
+
+**Method.** 520 contact-matched substitution pairs at L <= 6. Per site, the onsite term is the
+`n_orb x n_orb` diagonal block of H reduced to its mean eigenvalue. `delta_i = onsite_i(X') -
+onsite_i(X)`.
+
+Site ordering, established from `g3nat/graph/construction.py:116-133`: graph nodes are
+`[contact_L, contact_R, primary 0..L-1, complementary 0..L-1]`, contacts are masked out of H, so
+H site `k` is primary position `k` and site `L+j` is complementary `j`. The stored complement is
+reverse-complemented (`aaac` -> `gttt`), so primary `k` pairs with H site `2L-1-k`.
+
+### 13a. The perturbation is localised
+
+| | s42 | s43 | s44 |
+|---|---|---|---|
+| peak on mutated site or WC partner | 44.4% | 48.5% | 46.7% |
+| chance | 24.0% | 24.0% | 24.0% |
+| peak / median abs(delta onsite) | 3.06x | 3.92x | 4.40x |
+| decay, d = 0 / 1 / 2 | 1.00 / 0.39 / 0.30 | 1.00 / 0.31 / 0.22 | 1.00 / 0.27 / 0.16 |
+
+**Roughly 2x chance on localisation, replicated across all three seeds**, and the perturbation
+is concentrated -- the peak site moves 3-4x more than the median site, so the model is
+perturbing H rather than rescaling it. The change drops ~70% within one site.
+
+**Reported honestly: the decay does not continue.** Beyond d = 2 the profile flattens at
+~0.25-0.40 of peak rather than falling further. So the response is local plus a diffuse floor,
+not a clean exponential envelope. Whether that floor is physical (a real delocalised component)
+or slop has not been determined.
+
+**A method note.** An earlier version of this test accepted four candidate site indices because
+the ordering had not been established, which for L = 4 accepted half of all sites and put chance
+at 47%. The measured hit rate was unchanged; the CHANCE baseline was wrong, making a 2x effect
+look marginal. Establishing the convention was the fix.
+
+### 13b. Physicality: only ~30% of eigenvalues are in the transport window
+
+| seed | H eigenvalues inside [-1, 1] |
+|---|---|
+| 42 | 31.0% |
+| 43 | 30.4% |
+| 44 | 29.5% |
+
+**This is worse than the pathology already documented for the pre-2026-07-24 models**, where a
+GAT model fit under the leaking split put 59% of its eigenvalues in-window and was called
+unphysical on that basis. The current `n_orb=2`, `b=0` models place ~70% of their spectral
+weight outside the window the data covers.
+
+That is the under-determination of section 8c showing up directly in H rather than in a loss
+curve: the model is free to place states where no observable constrains them, and it does.
+
+**This is a new response for the factorial and it has not been swept.** Whether `b` (which
+constrains eigenvectors) or `alpha` (which constrains onsite to a per-base table) improves the
+in-window fraction is exactly the tuning question -- and unlike the spectral responses, it
+measures whether the recovered H is usable rather than whether it fits.
+
+Measured with `onsite_response.py` in the private notes tree.
