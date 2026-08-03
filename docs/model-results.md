@@ -1579,43 +1579,68 @@ Two analyses on existing checkpoints. No new training, no new DFT.
 reference exists beyond it, so the length section measures what the models DO, not which is
 right. DFT strands to settle it are specified in the internal notes.
 
-### 12a. Length: the two models disagree by 3-7x, robustly
+### 12a. Length: the two models disagree by 1.5-4.8x (CORRECTED 2026-08-03)
 
 Predicted `log10 T` at window centre against strand length, L = 4..20, both models, 3 seeds
-each, six sequence families. Points at the `log_floor` are dropped as numerical rather than
-physical.
+each, six sequence families including three non-periodic controls.
 
-| family | Hamiltonian slope/bp | direct slope/bp |
+**This section originally reported a 3-7x slope gap, seed ranges disjoint in all six families,
+and R2 favouring the Hamiltonian model 6/6. Two of those three were artifacts of an
+evaluation-time clamp.** `log_floor = 1e-16` (`hamiltonian.py`, read from `self.log_floor` at
+forward time) truncated the Hamiltonian model's curve at L >= 16, so it was fit on 5-7 points
+while the direct model -- whose MLP emits unclamped values -- was fit on all 10. Lowering the
+clamp to 1e-30 requires no retraining and removes the asymmetry.
+
+**Slope, both models on all 10 points:**
+
+| family | Hamiltonian | direct | ratio |
+|---|---|---|---|
+| poly-G | -0.926 | -0.191 | 4.84x |
+| (GC)n | -0.831 | -0.238 | 3.49x |
+| (AT)n | -0.746 | -0.287 | 2.60x |
+| random-0 | -0.712 | -0.466 | 1.53x |
+| random-1 | -0.923 | -0.372 | 2.48x |
+| random-2 | -0.795 | -0.357 | 2.23x |
+
+**Seed ranges are disjoint in all six families.** That includes (AT)n, whose disjointness
+failed under an adversarial reviewer's range-matched refit -- the correct fix was removing the
+clamp, not weakening the claim. The published 3-7x is wrong; the honest figure is **1.5-4.8x**.
+
+The non-periodic control holds. The pooled readout is NOT length-blind -- it averages over 2
+contact nodes plus 2L base nodes, so the contact fraction `2/(2L+2)` carries an `O(1/L)` signal
+-- and any receptive-field saturation argument is most exact for periodic motifs. Random
+families were added for that reason and separate just as cleanly.
+
+**RETRACTED: R2 does not favour the Hamiltonian model.** This section reported R2 of the linear
+fit at 0.969 against 0.879, favouring the Hamiltonian model in all six families, and called it
+the surviving evidence for the tunneling functional form. That was measured on the truncated
+curve. On all 10 points:
+
+| | Hamiltonian | direct |
 |---|---|---|
-| poly-G | -1.278 [-1.420, -1.171] | -0.191 [-0.257, -0.094] |
-| (GC)n | -1.523 [-1.692, -1.379] | -0.238 [-0.311, -0.202] |
-| (AT)n | -0.929 [-1.497, -0.456] | -0.287 [-0.348, -0.200] |
-| random-0 | -1.666 [-1.684, -1.646] | -0.466 [-0.507, -0.437] |
-| random-1 | -1.673 [-1.910, -1.428] | -0.372 [-0.425, -0.299] |
-| random-2 | -1.310 [-1.377, -1.212] | -0.357 [-0.370, -0.345] |
+| mean R2 | **0.846** | **0.879** |
+| mean quadratic curvature | +0.068 | +0.016 |
 
-Seed ranges are disjoint in every family. **The non-periodic control matters and it holds.**
-An adversarial review established that the pooled readout is NOT length-blind -- it averages
-over 2 contact nodes plus 2L base nodes, so the contact fraction `2/(2L+2)` carries an
-`O(1/L)` length signal -- and that any saturation argument is most exact for periodic motifs.
-Random sequences were added for exactly that reason and separate just as cleanly; `random-0`
-gives the tightest Hamiltonian seed range in the project, -1.684 to -1.646.
+The direct model produces the CLEANER exponential -- higher R2 and less curvature -- while the
+Hamiltonian model flattens at long L. This is the reverse of what was published, and it was the
+correction of our own confound that produced it.
 
-**Functional form.** `log10 T` linear in L is the tunneling form. R2 of the linear fit favours
-the Hamiltonian model in all six families: 0.999 / 0.978 / 0.996 / 0.940 / 0.967 / 0.935
-against 0.918 / 0.909 / 0.868 / 0.811 / 0.877 / 0.892, means 0.969 vs 0.879.
+**Recorded so the statistic switch can be audited.** Curvature was originally proposed as the
+exponential-vs-flattening discriminator, came out unfavourable, and was set aside as
+floor-confounded in favour of R2. The rejected numbers were never written down, which made the
+switch unauditable. Both statistics are now reported at both floors, and at the corrected floor
+both favour the direct model.
 
-**What is NOT established.** Quadratic curvature was proposed as the discriminator and is
-confounded: the Hamiltonian model hits `log_floor` and fits on 5-7 points against the direct
-model's 10, and floor compression biases curvature positive. Lower the floor at evaluation
-before using curvature at all.
+**Open, and not investigated.** At L = 20 the Hamiltonian model predicts T ~ 1e-18, from
+inverting an 80x80 Green's function. The flattening at long L may be numerical conditioning
+rather than physics. Checkable; not checked.
 
-**Against the naive expectation.** The direct model orders the motifs poly-G shallowest
-(-0.191) to (AT)n steepest (-0.287), matching the qualitative expectation that G-tracts conduct
-better. The Hamiltonian model does not: it puts (AT)n shallowest at -0.929. Its (AT)n seed
-range spans -1.497 to -0.456, a 3x spread, so that slope is not determined -- and a
-motif-ordering test cannot be run against DFT until it is. The "G-tracts conduct better"
-expectation is used here as an intuition and has NOT been sourced.
+**What survives, and is the claim to carry forward:** the two models disagree about the
+MAGNITUDE of length dependence by 1.5-4.8x, disjointly across seeds and across six sequence
+families including non-periodic ones. Nothing here establishes which is correct -- training
+stops at 8 bp and no DFT reference exists beyond it.
+
+Measured with `length_sweep.py` and `length_floor_fix.py` in the private notes tree.
 
 ### 12b. Substitution: a factor grid over alpha, b and geometry
 
