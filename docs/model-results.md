@@ -1639,30 +1639,56 @@ change.
 | alpha=0, b=0 +geom | -0.287 [-0.639, +0.046] | -0.179 |
 | alpha=1, b=0.1 +geom | -0.339 | +0.132 |
 
-**b helps, as an inverted U peaking near 0.5.** DOS skill roughly doubles from b=0 (+0.089) to
-b=0.5 (+0.179) and falls away by b=0.9 (+0.082); transmission follows the same shape. This is
-the first evidence in this project that a loss parameter improves a PHYSICAL-RESPONSE metric
-rather than the metric it was trained on. Note pairwise ranges overlap, so no single comparison
-is resolvable at n=3 -- **the evidence is the monotone trend across six levels**, which is what
-a factor grid buys and one-factor-at-a-time cannot. An earlier reading of the single b=0.25
-cell concluded LDOS supervision "did not help"; that was one cell and it was wrong.
+**RETRACTED 2026-08-03: the b inverted-U is not real.** This section previously reported that
+"b helps, as an inverted U peaking near 0.5", doubling DOS skill from b=0 to b=0.5, and called
+it the first evidence that a loss parameter improves a physical-response metric. A completed
+factorial with ANOVA gives the **quadratic term in b at p = 0.365** on `sub_dos`, against a
+residual SD of 0.250 versus an inverted-U amplitude of 0.090 -- the noise is 2.8x the effect.
+Six means with overlapping seed ranges were read as a trend. An adversarial review called it
+"six noisy points fitted by eye" before the ANOVA existed and was correct.
 
-**alpha=1.0 makes substitution WORSE.** Every structured-onsite cell falls below every
-free-onsite cell on DOS skill, and alpha=1/b=0 has all three seeds negative (range entirely
-below zero), so that cell is resolvable. This refutes the mechanistic expectation that tying
-onsite energy to base identity would help predict a base change. Post-hoc and flagged as such:
-forcing onsite to four shared values may remove the model's capacity to represent how a
-substitution alters its NEIGHBOURS' environment, and that context term appears to carry the
-response.
+`b` has no significant effect on ANY response except `ldos`, which it directly trains, making
+that one circular. See `G3NAT-internal/statistics-methods.md` for the full test procedure.
 
-**Geometry gives the two worst cells in the grid**, at both alpha values (-0.287, -0.339).
-Direction is now consistent across three independent measurements (fit, and both geometry
-cells here), though seed ranges remain wide. Plausible mechanism: `edge_geom` is a
-deterministic function of base identity, so under substitution it moves in perfect correlation
-with the base change and offers a redundant path the model leans on. Recorded as suggestive,
-not resolved.
+**RETRACTED 2026-08-03: alpha does not significantly affect substitution.** This section
+previously reported that alpha=1.0 makes substitution worse, on the basis that every
+structured-onsite cell fell below every free-onsite cell. Under the completed factorial the
+alpha main effect on `sub_dos` is **p = 0.105**, not significant, and the alpha:b interaction
+(raw p = 0.0198) **fails multiplicity correction**.
+
+What IS established about alpha, both surviving correction: it worsens `ldos` by
++0.081 [0.036, 0.125], and **runs at alpha=1 take 2.92x longer [1.28, 6.63] to reach their best
+epoch** -- visible only after log-transforming `best_epoch`, since raw-scale skew from a few
+slow alpha=1 runs masks it. That convergence penalty resolves the section 8b confound: at a
+fixed 15000-epoch budget, alpha=1 arms are systematically handicapped, so any alpha comparison
+at fixed budget is partly a convergence-rate comparison.
+
+**CONFIRMED and strengthened: geometry damages substitution response, and only that.** Under
+the completed factorial, geometry is the largest effect anywhere in the design and the only one
+affecting substitution: **-0.357 [-0.49, -0.23] on `sub_dos` and -0.443 [-0.61, -0.27] on
+`sub_t`, both p < 1e-5, surviving Bonferroni and Benjamini-Hochberg.** Present in 9/9 and 8/9
+crossed cells across both alpha levels, verified cell-by-cell as not outlier-driven.
+
+Its nulls elsewhere are genuine on 4 of 6 responses (`dos_t`, `loc_gap`, `best_epoch`,
+`len_r2`, deltas 3-7x below the minimum detectable effect). On `ldos` and `len_slope` the
+deltas are only 1.44x and 1.64x below MDE, so those are **underpowered, not null**.
+
+Mechanism, plausible but not tested: `edge_geom` is a deterministic function of base identity
+(`docs/dataset.md`), so under substitution it moves in perfect correlation with the base change
+and offers a redundant path the model leans on -- which then fails on exactly the prediction
+requiring the base change to be disentangled from its correlates.
 
 **The gap does not close.** The best Hamiltonian cell (+0.179) remains 3.4x below the direct
-model (+0.608).
+model (+0.608). That comparison is unaffected by the retractions above.
+
+**Method caveat covering this whole section.** The values in the table were originally read by
+eye, and 40 tests were later run against them with no multiplicity correction; of 8 raw
+significant terms only 5 survive adjustment. Do not read stars off this table -- use
+`G3NAT-internal/statistics-methods.md`, whose arithmetic has been independently reproduced.
+
+**Design limitation.** The seed controls BOTH the train/val split and the initialization, so the
+three runs per cell are not true replicates and the residual SD absorbs both sources. This is
+why the noise floor is high (+-0.250 on `sub_dos`, +-3870 epochs on `best_epoch`). Separable now
+that `--init_seed` exists; not yet done.
 
 Measured with `length_sweep.py` and `substitution_test.py` in the private notes tree.
