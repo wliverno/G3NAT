@@ -1787,25 +1787,36 @@ the ordering had not been established, which for L = 4 accepted half of all site
 at 47%. The measured hit rate was unchanged; the CHANCE baseline was wrong, making a 2x effect
 look marginal. Establishing the convention was the fix.
 
-### 13b. Physicality: only ~30% of eigenvalues are in the transport window
+### 13b. Physicality: the spectrum is reasonable, and an earlier reading here was wrong
 
-| seed | H eigenvalues inside [-1, 1] |
-|---|---|
-| 42 | 31.0% |
-| 43 | 30.4% |
-| 44 | 29.5% |
+**CORRECTED 2026-08-03 (willll).** This subsection originally reported that only 29-31% of H
+eigenvalues fall inside [-1, 1] and called that "worse than the pre-2026-07-24 models documented
+as unphysical at 59% in-window". Both the metric and the conclusion were wrong. Eigenvalues do
+not need to sit INSIDE a 2 eV window to be physical -- nearby is fine. The documented pathology
+was onsite terms running to **-33 eV**, which a hard in/out cut cannot distinguish from an
+eigenvalue at 1.2 eV.
 
-**This is worse than the pathology already documented for the pre-2026-07-24 models**, where a
-GAT model fit under the leaking split put 59% of its eigenvalues in-window and was called
-unphysical on that basis. The current `n_orb=2`, `b=0` models place ~70% of their spectral
-weight outside the window the data covers.
+The distribution, over 150 records per seed:
 
-That is the under-determination of section 8c showing up directly in H rather than in a loss
-curve: the model is free to place states where no observable constrains them, and it does.
+| seed | p5 | p50 | p95 | max abs(eig) | abs>3 eV | abs>5 eV | abs>10 eV |
+|---|---|---|---|---|---|---|---|
+| 42 | -3.25 | -0.25 | +3.56 | **5.11** | 21.6% | 0.1% | 0.0% |
+| 43 | -3.09 | +0.63 | +8.79 | **11.67** | 21.1% | 10.0% | 2.4% |
+| 44 | -3.96 | +0.62 | +2.04 | **6.95** | 9.5% | 2.2% | 0.0% |
 
-**This is a new response for the factorial and it has not been swept.** Whether `b` (which
-constrains eigenvectors) or `alpha` (which constrains onsite to a per-base table) improves the
-in-window fraction is exactly the tuning question -- and unlike the spectral responses, it
-measures whether the recovered H is usable rather than whether it fits.
+**The maximum eigenvalue is 5-12 eV, not -33.** That is two orders of magnitude better than the
+documented pathology. The bulk lies within ~3 eV of a window that is itself only 2 eV wide,
+which is a reasonable spread for a coarse-grained reduction, and the median sits close to the
+window centre. There is no evidence here of states being dumped far from the observable region.
+
+Cross-seed variation is real and worth carrying: seed 43 is the loose one, with 10% of
+eigenvalues beyond 5 eV and a maximum of 11.67, against essentially nothing beyond 5 eV for
+seed 42. Same configuration.
+
+**The right factorial response is an OUTLIER measure, not a window cut.** `max abs(eig)` or the
+fraction beyond ~5 eV captures "is the model dumping states somewhere absurd"; the fraction
+inside [-1, 1] does not, and using it would have driven the sweep toward models that
+artificially compress their spectrum into the window rather than models that are physically
+sensible.
 
 Measured with `onsite_response.py` in the private notes tree.
