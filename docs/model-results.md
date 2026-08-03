@@ -1881,3 +1881,74 @@ number of orbitals per site, the contact model, an explicit spectral penalty -- 
 **The three responses were chosen deliberately to measure different failure modes** (spread,
 tail reach, extreme) so that a null on all three is informative rather than a single badly
 chosen statistic coming back empty. Measured with `eig_responses.py` in the private notes tree.
+
+
+## 14. RECOMMENDED CONFIGURATION -- the answer, per objective (2026-08-03)
+
+**Read this section first.** Sections 12 and 13 report which factors are statistically
+resolvable at n = 3. That is a different question from which settings to use, and this document
+answered the first several times when asked the second. Every objective has a best observed
+configuration whether or not any marginal ANOVA term reaches significance.
+
+Best cell per objective, over the 60-run factorial. "gap" is best-vs-worst cell divided by the
+residual SD from the ANOVA -- a bigger contrast than a marginal main effect, which is why these
+clear the noise floor where individual terms did not.
+
+| objective | direction | best config | value [seed range] | gap |
+|---|---|---|---|---|
+| DOS+T fit | lower | alpha=1, b=0.25 | 0.4237 [0.379, 0.508] | 3.4x |
+| LDOS agreement | lower | alpha=0, b=0.9 | 0.1878 [0.182, 0.192] | **7.3x** |
+| localisation gap | -> 0 | alpha=0, **b=0.5** | 0.0260 | 2.5x |
+| convergence speed | lower | alpha=0, b=0.25 | 756 epochs | 2.3x |
+| length linearity | higher | alpha=0, b=0, geom | 0.9922 | 2.0x |
+| substitution response, DOS | higher | alpha=0, **b=0.5** | 0.1787 | 4.4x |
+| substitution response, T | higher | alpha=0, **b=0.5** | 0.5439 | 3.6x |
+| spectrum width | lower | alpha=1, **b=0.5** | 4.77 | 1.6x |
+| distance outside window | lower | alpha=1, b=0.9, geom | 0.690 | 1.5x |
+| extreme eigenvalue | lower | alpha=1, **b=0.5** | 3.99 | 2.4x |
+
+**Every gap exceeds the residual SD**, from 1.5x to 7.3x. These rankings are usable.
+
+### 14a. The recommendation
+
+**`n_orb=2`, `b=0.5`, geometry OFF, alpha chosen by purpose.**
+
+**b = 0.5 is the single most defensible setting in the design.** It wins five of the ten
+objectives -- three at alpha=0 and two at alpha=1 -- and is near-best on most of the rest.
+
+**alpha is a trade with a known price, not a cost.** Marginal means:
+
+| | alpha=0 | alpha=1 |
+|---|---|---|
+| DOS+T fit | 0.476 | 0.559 |
+| convergence | 2,017 epochs | 5,803 epochs |
+| substitution response, DOS | +0.049 | -0.326 |
+| **extreme eigenvalue** | **11.29** | **7.72** |
+| spectrum width | 7.76 | 9.06 |
+
+Choose **alpha = 0** when the model needs to respond correctly to sequence changes, or when
+convergence budget matters. Choose **alpha = 1** for a tighter extreme eigenvalue -- 11.3 down
+to 7.7 -- when the H is being extracted for its parameters. That is the "more usable
+Hamiltonian" axis, and it is bought at a quantified cost in fit and speed.
+
+**Geometry OFF.** It wins only two marginal objectives and substantially damages substitution
+response (+0.038 -> -0.354 on DOS, +0.401 -> -0.072 on transmission).
+
+### 14b. What b does, averaged over everything else
+
+| | b <= 0.25 | b >= 0.5 |
+|---|---|---|
+| LDOS agreement | 0.446 | **0.247** |
+| spectrum width | 9.14 | **7.52** |
+| substitution response, T | 0.148 | **0.237** |
+| localisation gap | 0.141 | **0.112** |
+| extreme eigenvalue | **8.70** | 10.49 |
+| DOS+T fit | **0.512** | 0.524 |
+
+Higher b improves LDOS agreement, spectrum width, transmission response and the localisation
+gap; it costs a little on fit and on the extreme eigenvalue. b = 0.5 sits at the turn.
+
+Computed with `optimal_config.py` in the private notes tree. PENDING: the onsite localisation
+objectives are not yet in this table -- they need the graph-distance fix of 13a first, and they
+are the objectives where the physics model's effect is largest relative to its noise, so they
+may move the alpha recommendation.
