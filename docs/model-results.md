@@ -1820,3 +1820,44 @@ artificially compress their spectrum into the window rather than models that are
 sensible.
 
 Measured with `onsite_response.py` in the private notes tree.
+
+
+### 13c. H-spectrum responses across the factorial: nothing is resolvable
+
+The three spectrum responses of 13b, computed on all 60 factorial cells (100 fixed records per
+cell) and put through the same ANOVA as section 12.
+
+| response | what it measures | alpha | b | b^2 | geom | alpha:b | resid SD |
+|---|---|---|---|---|---|---|---|
+| `eig_spread` (p95-p5) | how WIDE the spectrum is | 1.31 (.258) | 0.00 (.993) | 0.00 (.972) | 0.33 (.568) | 0.47 (.496) | **5.11** |
+| `eig_excess` (mean max(0,abs-1)) | how FAR OUTSIDE the window the tails reach | 0.62 (.436) | 0.52 (.475) | 0.22 (.638) | 0.36 (.551) | 1.28 (.264) | **0.89** |
+| `max_abs_eig` | the extreme -- what would catch a -33 eV pathology | 0.00 (.957) | 1.12 (.294) | 0.15 (.700) | 1.50 (.226) | 3.26 (.076) | **6.14** |
+
+**Nothing is significant on any response, before correction, let alone after.**
+
+Level means look suggestive and are not:
+
+| response | alpha=0 | alpha=1 | geom off | geom on |
+|---|---|---|---|---|
+| `eig_spread` | 7.76 | 9.06 | 8.69 | 8.07 |
+| `eig_excess` | 1.40 | 1.36 | 1.45 | 1.31 |
+| `max_abs_eig` | 11.29 | 7.72 | 10.55 | 8.23 |
+
+`alpha=1` appears to cut the maximum eigenvalue from 11.3 to 7.7 -- a 3.6 eV improvement -- but
+the residual SD is **6.14**, so seed noise is nearly twice the effect. That is the same
+relationship between effect and noise that killed the `b` inverted-U in 12b, and it is not
+evidence.
+
+**The conclusion, stated plainly.** The spectral character of the recovered Hamiltonian is set
+by which optimization basin a run lands in, not by alpha, b or geometry. Tuning the
+hyperparameters swept here does not make the H measurably more physical. This is section 8c's
+ruggedness again -- identical configurations reach best-val at epochs 364, 567 and 11402, with
+a residual SD of 3870 epochs -- now visible in H rather than in a loss curve.
+
+**What this does NOT say.** It does not say the H is unusable; 13b shows the spectrum is
+reasonable. It says these three knobs do not control it. Whether something else does -- the
+number of orbitals per site, the contact model, an explicit spectral penalty -- is untested.
+
+**The three responses were chosen deliberately to measure different failure modes** (spread,
+tail reach, extreme) so that a null on all three is informative rather than a single badly
+chosen statistic coming back empty. Measured with `eig_responses.py` in the private notes tree.
