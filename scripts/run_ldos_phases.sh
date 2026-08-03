@@ -191,9 +191,26 @@ case "${PHASE}" in
     # deliverable: a toy Hamiltonian that fits DNA with only N onsite terms.
     # At alpha=1.0 the context head is switched off and `onsite_baseline` is the
     # real learned 4-value per-base table -- scripts/extract_tb_params.py reads
-    # exactly that tensor, and its header records that the table is meaningless
-    # for any alpha < 1, where the mixing is a vacuous reparametrisation and the
-    # context head does the fitting.
+    # exactly that tensor.
+    #
+    # CORRECTED 2026-08-03. The header of that script says the table is
+    # "meaningless for any alpha < 1, where the mixing is a vacuous
+    # reparametrisation". That is overstated, and it is why alpha was only ever
+    # run at 0 and 1 -- a continuous parameter treated as a switch.
+    #   - It is true that for alpha < 1 the free context head can absorb the
+    #     baseline, so the FUNCTION SPACE is the same at every alpha < 1.
+    #   - It does not follow that alpha is inert. Function space is not
+    #     optimisation: different parametrisations have different gradient
+    #     geometry and implicit bias. Untested here.
+    #   - Nor is the table meaningless below 1. It is PARTIAL:
+    #     onsite = alpha*baseline + (1-alpha)*context still learns a real
+    #     4-value table explaining an alpha-fraction of the onsite energy.
+    #     "Base identity alone accounts for 50% of the onsite term" is a
+    #     reportable result, not a degenerate one.
+    #   - alpha_mode='learned' exists and has never been run at the current
+    #     configuration. It answers the question directly: how much of the
+    #     onsite energy does the data want explained by base identity?
+    # A fractional sweep plus a learned-alpha arm is outstanding work.
     #
     # Phases A and B ran the DEFAULT free-onsite model, where onsite is a
     # continuous function of context and there is no N-value table at all
