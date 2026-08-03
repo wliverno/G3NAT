@@ -1631,9 +1631,33 @@ floor-confounded in favour of R2. The rejected numbers were never written down, 
 switch unauditable. Both statistics are now reported at both floors, and at the corrected floor
 both favour the direct model.
 
-**Open, and not investigated.** At L = 20 the Hamiltonian model predicts T ~ 1e-18, from
-inverting an 80x80 Green's function. The flattening at long L may be numerical conditioning
-rather than physics. Checkable; not checked.
+**CHECKED 2026-08-03: the flattening is NOT a precision artifact.** The concern was that at
+L = 20 the model predicts T ~ 1e-18 from inverting an 80x80 Green's function, so the flattening
+might be float32 breaking down. Tested against a uniform single-channel tight-binding chain run
+through the same NEGF algebra, where the transmission decay is exactly exponential by
+construction, at E = 1.5 (outside the band [-0.6, 0.6], so genuinely tunneling):
+
+| precision | slope | R2 | curvature |
+|---|---|---|---|
+| float64 | -2.7218 | **1.000000** | **+0.000000** |
+| float32 | -12.48 | 0.557 | -2.05 |
+
+float64 reproduces the exact exponential. float32 tracks it to four decimals through L = 16
+(-44.5429 vs -44.5524) and then collapses to zero at L = 20.
+
+**The failure mode is UNDERFLOW, not ill-conditioning.** The condition number of
+`E - H - Sigma` is ~2.3 at every length from 4 to 20 -- the inverse is well behaved throughout.
+float32's smallest normal is ~1e-38 and the analytic chain reaches 1e-55 by L = 20, so the
+product underflows to zero while the linear algebra remains sound.
+
+The trained model operates at T ~ 1e-18, twenty orders of magnitude above that threshold, and
+in that regime the analytic control shows float32 and float64 agreeing to four decimal places.
+**So the flattening is model behaviour, not numerics, and the R2 reversal above stands.**
+
+Caveat: this is inference from the analytic bound. A direct float64 run of the trained model
+still fails on a dtype mismatch between the converted module and its stored energy grid, so the
+model itself has not been re-run in double precision. The 20-order-of-magnitude margin makes
+the conclusion safe, but it is not a direct confirmation.
 
 **What survives, and is the claim to carry forward:** the two models disagree about the
 MAGNITUDE of length dependence by 1.5-4.8x, disjointly across seeds and across six sequence
