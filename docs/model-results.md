@@ -1907,14 +1907,26 @@ clear the noise floor where individual terms did not.
 | distance outside window | lower | alpha=1, b=0.9, geom | 0.690 | 1.5x |
 | extreme eigenvalue | lower | alpha=1, **b=0.5** | 3.99 | 2.4x |
 
-**Every gap exceeds the residual SD**, from 1.5x to 7.3x. These rankings are usable.
+**Every gap exceeds the residual SD**, from 1.5x to 7.3x -- but see the warning below before
+attributing any of it to a factor.
 
 ### 14a. The recommendation
 
 **`n_orb=2`, `b=0.5`, geometry OFF, alpha chosen by purpose.**
 
-**b = 0.5 is the single most defensible setting in the design.** It wins five of the ten
-objectives -- three at alpha=0 and two at alpha=1 -- and is near-best on most of the rest.
+**CORRECTED 2026-08-03. The best-cell table above does NOT establish anything about `b`.**
+A full re-derivation (`G3NAT-internal/statistics-section.md`) traced the "b=0.5 wins five of
+ten objectives" claim and found it confounded: **in every one of those five wins, the
+worst-comparator cell differs from the winner in alpha and/or geom as well**, and one uses the
+`b=0.75` singleton cell as its anchor. A best-vs-worst cell gap shows that the twenty cells
+differ; it does not show which factor caused the difference. Only the per-term F-test holds the
+other factors constant, and across an 88-test family **`b`'s only surviving effect anywhere is
+on `ldos` -- the response `b` directly weights in the loss, so it is circular.** No `b` or `b^2`
+term reaches even raw p < 0.05 on any of the other ten responses, at location or dispersion.
+
+`b = 0.5` remains the recommended value as a **judgment call**: it captures most of the
+achievable `ldos` gain while sitting in the well-replicated part of the design. It is not an
+established optimum and must not be reported as one.
 
 **alpha is a trade with a known price, not a cost.** Marginal means:
 
@@ -1926,10 +1938,17 @@ objectives -- three at alpha=0 and two at alpha=1 -- and is near-best on most of
 | **extreme eigenvalue** | **11.29** | **7.72** |
 | spectrum width | 7.76 | 9.06 |
 
-Choose **alpha = 0** when the model needs to respond correctly to sequence changes, or when
-convergence budget matters. Choose **alpha = 1** for a tighter extreme eigenvalue -- 11.3 down
-to 7.7 -- when the H is being extracted for its parameters. That is the "more usable
-Hamiltonian" axis, and it is bought at a quantified cost in fit and speed.
+**Choose alpha = 0.** The dispersion analysis settles this: **alpha = 1 significantly increases
+seed spread on 5 of 11 responses** (`dos_t`, `len_slope`, `len_r2`, `eig_spread`, `eig_excess`),
+two surviving full Bonferroni, and it is the largest and most consistent signal in the entire
+test family -- with **no matching benefit on the location side**. The apparent alpha=1 advantage
+on the extreme eigenvalue (11.29 -> 7.72) is not significant and does not survive as a reason
+to pay the reproducibility cost.
+
+That is the strongest statistically established result in the design, and it is about VARIANCE
+rather than mean: a factor can move dispersion without moving location, and for this project
+dispersion matters more, because the dominant failure mode is a rugged landscape where
+identical configurations reach best-val at epochs 364, 567 and 11402.
 
 **Geometry OFF.** It wins only two marginal objectives and substantially damages substitution
 response (+0.038 -> -0.354 on DOS, +0.401 -> -0.072 on transmission).
