@@ -1928,10 +1928,19 @@ complete 5 x 2 x 2 x 3 factorial on a uniform 0.25 grid with both endpoints. The
 `b=1.0` cells completed 2026-08-04, which closed the design; every one of the 20 cells now has
 exactly 3 seeds.
 
-`b=0.1` and `b=0.9` are EXCLUDED from the primary analysis. `b=0.1` was never a complete
-design cell (it has no (alpha=0, geom=1) cell). `b=0.9` IS complete at 4 cells x 3 seeds but
-sits off the uniform grid; it is held in reserve as an interior verification point, per
-`outline.md` 4.5, and is not part of the reported design.
+`b=0.1` is EXCLUDED: it was never a complete design cell (no (alpha=0, geom=1) cell).
+
+**`b=0.9` IS INCLUDED in the analysis that determines what is established** (decision
+2026-08-04). It is a complete 4-cell x 3-seed block, run before the grid was made uniform,
+and was withheld as an independent replication check on any `b` conclusion. It then falsified
+one -- see item 1 below -- which is precisely what a held-out slice is for. Excluding data that
+exists, is sound, and CHANGES A CONCLUSION would not be defensible. OLS does not require equal
+factor spacing, so the uneven 0.9 point costs nothing statistically.
+
+The uniform 5-level grid remains the reported DESIGN; `b=0.9` is a confirmatory slice on top of
+it, not a sixth design level. Adding it moves only 7 of 88 verdicts, and the `alpha`
+reproducibility result gets STRONGER (`len_r2` dispersion:alpha goes from BH-only to
+Bonferroni+BH).
 
 **This supersedes the earlier n=48 subset, `b` in {0, 0.25, 0.5, 0.9}**, which was the largest
 balanced set available before the endpoint cells landed and used `b=0.9` as a stand-in for an
