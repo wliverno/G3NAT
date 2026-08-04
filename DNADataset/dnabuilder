@@ -1,6 +1,19 @@
 #!/bin/bash
 
-#INPUT: Set dnabuilder script and compiled nab (in /nab/ subfolder)
+# INPUT: point BUILDDIR at a directory holding the compiled NAB toolchain, i.e. the
+# `nabc/nabc.sh` environment script and an `AmberEnv/` tree. The path below is a DELIBERATE
+# PLACEHOLDER, not a bug -- the working path is site-specific and is not published. Install
+# NAB from https://github.com/dacase/nabc and set this to wherever you put it.
+#
+# NOTE (2026-08-03): this script's Gaussian route line (below) emits ONLY
+#   #p b3lyp/6-31g(d,p) scrf=(solvent=water)
+# and writes no trailing "<seq>.mat" line. `combined_script.slurm` works the other way
+# round: it assumes the .gjf ALREADY carries `guess=(read,only) pop=minimal
+# output=(matrix,i4lab)` and strips those flags to build the first-pass SCF input. Used
+# together as-is, the matrix-dump pass never dumps a matrix. The commented-out block at
+# combined_script.slurm:96-104 shows the older workflow that ADDED those flags via sed,
+# which is what this script was written against -- so the two files are from different
+# generations of the pipeline. Reconcile before relying on this path end to end.
 export BUILDDIR="/path/to/dnabuilder"
 
 # Help text
