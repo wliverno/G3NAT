@@ -1,11 +1,16 @@
 # The DFT transport dataset: inventory, conventions, and open questions
 
-Working notes toward a published dataset that ships with the paper. Everything here was
+> **The DFT data is released with the preprint, not before** (willll, 2026-08-03). The
+> format, conventions and inventory are documented openly -- see
+> `DNADataset/README.md` -- but no archive file is distributed yet, and none has ever been
+> committed to this repository on any branch.
+
+Working notes toward a dataset to ship with the paper. Everything here was
 measured on 2026-07-24 (`scripts/reconcile_dataset.py`), not
 recalled. Where a claim is unverified it says so.
 
-Scope decision (willll, 2026-07-24): the published dataset carries **transport observables
-plus structure**. It does NOT carry the DFT Fock/overlap matrices. Those exist upstream
+Scope decision (willll, 2026-07-24): the dataset, when released, will carry **transport
+observables plus structure**. It does NOT carry the DFT Fock/overlap matrices. Those exist upstream
 (523 `_Fock.mat`) and are a separate publication decision; they are also already ruled out
 as a training target for this project.
 
@@ -220,8 +225,8 @@ Regenerated from the existing DFT and transport output -- pure parsing, nothing 
 The v2 records add `DOSAtom`, the atom-resolved density of states, shape
 `[n_atoms, n_energy]`.
 
-**2077 records across 520 sequences.** Output in `pickle_files_v2/` and the published
-archive `g3nat_dna_transport.h5`.
+**2077 records across 520 sequences.** Output in `pickle_files_v2/`, both gitignored. An
+unreleased local archive `g3nat_dna_transport.h5` is built from it by `export_hdf5.py`.
 
 | sequence length | sequences | records |
 |---|---|---|
@@ -249,7 +254,7 @@ across that boundary. Re-baseline deliberately rather than swapping in place.
 - The per-record HOMO reference is composition-driven, as expected: `aaat` (pure AT) sits at
   -5.8120 eV while `aaacgacg` (GC-rich) sits at -4.8709 eV -- a 0.94 eV spread across five
   consecutive records, consistent with the 0.813 eV / 13.6 sigma AT-vs-GC separation
-  measured earlier. This is why the published archive warns against comparing a fixed
+  measured earlier. This is why the archive's own root attrs warn against comparing a fixed
   relative energy across sequences.
 - Element-to-orbital mapping, measured over 55 sequences / 22781 atoms and one-to-one with
   no exceptions: `H:5, C:15, N:15, O:15, P:19`, as expected for B3LYP/6-31G(d,p) with

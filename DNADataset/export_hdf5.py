@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Export the regenerated pickles to one portable HDF5.
 
-Reads the PICKLES, not the .mat files, so the published archive is a pure
+The resulting archive ships with the preprint, not before. Reads the PICKLES, not
+the .mat files, so the archive is a pure
 transformation of exactly what we train on and cannot silently disagree with our
 results. Group path is /<sequence>/<run>.
 """
