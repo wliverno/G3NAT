@@ -1946,33 +1946,43 @@ plus its spatial decomposition.
 
 **WHAT CHANGED ON THE COMPLETE DESIGN.** Two things, one in each direction.
 
-1. **`b` now has non-circular evidence, and it favours HIGHER b.** On the n=48 subset, `b`'s
-   only surviving effect anywhere was on `ldos`, which `b` directly weights in the loss and is
-   therefore circular -- which is why `b=0.5` was recorded below as a judgment call. On the
-   complete design, `b` significantly reduces the seed-to-seed SPREAD of `len_slope`
-   (dispersion, p = 0.0076, survives Benjamini-Hochberg over the 88-test family). This is not
-   circular: `b` weights the LDOS term, while `len_slope` is the length-extrapolation decay
-   measured at lengths never trained on. The effect is monotone and large:
+1. **RETRACTED WITHIN THE DAY (2026-08-04). `b` still has NO established non-circular effect.**
 
-   | b | mean `len_slope` spread across 3 seeds |
-   |---|---|
-   | 0.0 | 0.5803 |
-   | 0.25 | 0.6056 |
-   | 0.5 | 0.3824 |
-   | 0.75 | 0.3516 |
-   | 1.0 | **0.2353** |
+   An earlier revision of this section, committed as 69026b6, claimed that higher `b`
+   monotonically tightens the seed spread of `len_slope` (dispersion p = 0.0076, surviving
+   Benjamini-Hochberg) and called it the first non-circular evidence about `b`. **That claim
+   does not replicate and is withdrawn.**
 
-   b=1.0 is 2.5x tighter than b=0.0, coefficient -0.3776 per unit b -- the ONLY dispersion
-   effect anywhere that exceeds its own minimum detectable effect (109% of MDE). Supporting
-   but not individually significant: **all 11 dispersion coefficients for `b` are negative**
-   (`len_r2` 87% of MDE, `eig_spread` 88%, `eig_excess` 81%). Higher `b` tightens everything
-   measured. Those 11 responses are correlated (`eig_spread`/`eig_excess` at r = 0.95), so
-   read this as one consistent direction, not eleven confirmations.
+   The claim was read off the five design levels only. Adding the `b = 0.9` slice -- a
+   COMPLETE 4-cell x 3-seed block we already owned, held out as a reserve verification point --
+   breaks it:
 
-   **What this does NOT license:** it is a statement about REPRODUCIBILITY, not correctness.
-   `len_slope` has no a-priori good direction -- the pre-registered rule in
-   `G3NAT-internal/paper/dft-validation-strands.md` is that DFT decides which slope is right.
-   Higher `b` gives a more repeatable answer, not a verified one.
+   | b | mean `len_slope` spread across 3 seeds | |
+   |---|---|---|
+   | 0.0 | 0.5803 | |
+   | 0.25 | 0.6056 | |
+   | 0.5 | 0.3824 | |
+   | 0.75 | 0.3516 | |
+   | **0.9** | **0.5663** | **held-out slice -- BREAKS the trend** |
+   | 1.0 | 0.2353 | |
+
+   b=0.9 sits ABOVE both b=0.5 and b=0.75, back near the b=0 level. Refitting the 88-test
+   family with b=0.9 included, `len_slope` dispersion:`b` collapses from p = 0.0076 (BH pass)
+   to **p = 0.0599 -- not even raw-significant**. The per-cell spreads at b=0.9 are
+   0.0894 / 0.3028 / 0.7583 / 1.1147: one cell dominates the mean, which is a reminder that a
+   spread-of-3-seeds is a crude dispersion estimator and no single b level is precisely
+   estimated. The SLURM logs for those 12 runs show no `g3070` or other known infrastructure
+   fault, so this is genuine data, not corruption.
+
+   **STATUS: UNRESOLVED -- did not replicate on a held-out slice.** Not "no effect": every
+   non-significant term in this design is underpowered rather than an adequately-powered null.
+   But it must not be reported as established, and `b = 1.0` must not be recommended on it.
+
+   **Why this happened, recorded so it does not happen a third time.** This project has
+   already had an inverted-U in `b` killed at p = 0.365 after being read off six noisy means.
+   This was the same error: five means with a plausible shape, promoted to a headline finding
+   before checking the one slice that could falsify it. The reserve point existed precisely
+   for this and should have been consulted BEFORE the claim was written, not after.
 
 2. **`dos_t:alpha` weakened and no longer survives correction.** p = 0.0048 on the n=48
    subset, p = 0.0139 on the complete n=60 design -- still raw-significant, but it now fails
@@ -1983,32 +1993,29 @@ The `b` conclusions below are the
 best available now, not final.
 
 
-**`n_orb=2`, `alpha=0`, geometry OFF. For `b`, see the split recommendation below.**
+**`n_orb=2`, `alpha=0`, geometry OFF, `b=0.5` as a judgment call.**
 
 `alpha=0` and geometry OFF are STATISTICALLY ESTABLISHED and unchanged by the complete design.
 "alpha chosen by purpose" was an earlier framing and stays retracted: the alpha=1 spectrum
 advantage is not significant, alpha=1 costs reproducibility, and on the n=60 design the
 alpha effect on DOS+T fit no longer survives multiplicity correction either.
 
-**`b` IS NO LONGER A PURE JUDGMENT CALL, AND THE EVIDENCE POINTS AWAY FROM 0.5 (2026-08-04).**
-The complete design produced one non-circular, BH-surviving, monotone effect of `b`: higher
-`b` tightens the seed spread of `len_slope` (see "WHAT CHANGED" above). That is the first
-evidence about `b` that does not run through the response `b` weights in the loss.
+**`b` REMAINS A JUDGMENT CALL. `b` HAS NO ESTABLISHED NON-CIRCULAR EFFECT ANYWHERE.**
+A claim to the contrary was written and committed earlier on 2026-08-04 and retracted the same
+day when the held-out `b = 0.9` slice failed to replicate it (see item 1 above). `b`'s only
+surviving effect in the 88-test family is on `ldos` -- the response `b` directly weights in the
+loss, so it is circular and cannot support a recommendation.
 
-The honest recommendation is therefore SPLIT BY PURPOSE, and the two halves disagree:
+- **`b = 0.5` remains the working default**, as a judgment call and not an optimum. It takes
+  the best observed `sub_dos` (0.1787, 4.4x SD), `sub_t` (0.5439, 3.5x SD) and localisation
+  gap, and it sits in the well-replicated middle of the grid. **These are best-cell contrasts
+  and establish nothing about `b`** -- see the standing warning below.
+- **`b = 1.0` is NOT recommended.** Its apparent reproducibility advantage is the retracted
+  claim. It does give the best `ldos` (circular) and the fastest convergence (703 epochs),
+  neither of which is a reason to prefer it.
 
-- **For reproducibility, use `b = 1.0`.** It is the only value with non-circular per-term
-  support: 2.5x tighter `len_slope` spread than b=0, the sole dispersion effect exceeding its
-  MDE, with all 11 dispersion coefficients sharing its sign. It also gives the best `ldos`
-  (circular, discount it) and the fastest convergence (703 epochs).
-- **For substitution response, `b = 0.5` remains the best observed**, taking both `sub_dos`
-  (0.1787, 4.4x SD) and `sub_t` (0.5439, 3.5x SD) and the localisation gap. **But this is a
-  best-cell contrast and is NOT established** -- see the standing warning below, which still
-  applies in full.
-
-If one value must be chosen and reproducibility is the priority, that is now `b = 1.0`.
-`b = 0.5` should no longer be presented as the default without stating that the only
-factor-isolating evidence about `b` favours the opposite end of the grid.
+Say plainly in any write-up that `b` was swept over a complete uniform grid and no
+factor-isolating effect survived on any response other than the one it weights.
 
 **STANDING WARNING, unchanged. The best-cell table above does NOT establish anything about
 `b`.** A full re-derivation (`G3NAT-internal/statistics-section.md`) traced the earlier
