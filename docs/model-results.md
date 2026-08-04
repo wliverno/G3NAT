@@ -1366,7 +1366,16 @@ resolve it either way.
 
 **May:** that there is no measurable cost to training with geometry on this dataset.
 
-### 9b. Recommendation: default geometry ON
+### 9b. Recommendation: default geometry ON -- SUPERSEDED 2026-08-03
+
+**REVERSED by the completed factorial. See sections 12b and 14.** Geometry significantly
+DAMAGES substitution response (-0.357 / -0.443, p < 1e-5, surviving Bonferroni) -- the largest
+effect anywhere in the design. The reasoning below is preserved because its capability argument
+still holds, but its premise, "the measured cost is zero within resolution", was measured only
+on val loss and is false on the response that matters. **Default geometry OFF on this dataset.**
+This is a limitation of the current uniform-geometry data, not a verdict on the channel; runs
+with varied geometries are future work.
+
 
 The measured cost is zero within resolution. The capability benefit is unconditional and does
 not depend on val loss at all: **a model trained without the channel cannot respond to
@@ -1912,7 +1921,11 @@ attributing any of it to a factor.
 
 ### 14a. The recommendation
 
-**`n_orb=2`, `b=0.5`, geometry OFF, alpha chosen by purpose.**
+**`n_orb=2`, `alpha=0`, geometry OFF, `b=0.5`.**
+
+`alpha=0` and geometry OFF are STATISTICALLY ESTABLISHED. `b=0.5` is a JUDGMENT CALL --
+see the correction immediately below. "alpha chosen by purpose" was the earlier framing and is
+retracted: the alpha=1 spectrum advantage is not significant, and alpha=1 costs reproducibility.
 
 **CORRECTED 2026-08-03. The best-cell table above does NOT establish anything about `b`.**
 A full re-derivation (`G3NAT-internal/statistics-section.md`) traced the "b=0.5 wins five of
@@ -1953,7 +1966,13 @@ identical configurations reach best-val at epochs 364, 567 and 11402.
 **Geometry OFF.** It wins only two marginal objectives and substantially damages substitution
 response (+0.038 -> -0.354 on DOS, +0.401 -> -0.072 on transmission).
 
-### 14b. What b does, averaged over everything else
+### 14b. What b does, averaged over everything else -- DESCRIPTIVE ONLY
+
+**These are marginal means, not established effects.** Section 14a retracts the causal reading
+of exactly these comparisons: across the 88-test family in `statistics-section.md`, no `b` or
+`b^2` term reaches even raw p < 0.05 on any response except `ldos`, which `b` weights in the
+loss. The table below shows how the means fall out; it does NOT show that `b` moved them.
+
 
 | | b <= 0.25 | b >= 0.5 |
 |---|---|---|
@@ -1964,8 +1983,10 @@ response (+0.038 -> -0.354 on DOS, +0.401 -> -0.072 on transmission).
 | extreme eigenvalue | **8.70** | 10.49 |
 | DOS+T fit | **0.512** | 0.524 |
 
-Higher b improves LDOS agreement, spectrum width, transmission response and the localisation
-gap; it costs a little on fit and on the extreme eigenvalue. b = 0.5 sits at the turn.
+Higher b is ASSOCIATED WITH better LDOS agreement, spectrum width, transmission response and
+localisation gap, and with slightly worse fit and extreme eigenvalue. Only the LDOS association
+is statistically resolvable, and it is circular. None of the others licenses a claim that `b`
+caused the difference; they are equally consistent with the cells differing in alpha and geom.
 
 Computed with `optimal_config.py` in the private notes tree. PENDING: the onsite localisation
 objectives are not yet in this table -- they need the graph-distance fix of 13a first, and they
