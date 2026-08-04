@@ -36,7 +36,10 @@ python scripts/train.py \
   --num_epochs 100 \
   --learning_rate 1e-3
 ```
-Outputs (model checkpoint, curves, sample prediction plots) are saved under `./outputs` and `./checkpoints`.
+Outputs (the final model, and `checkpoint_latest.pth` / `checkpoint_best.pth`) are saved under
+`./outputs` and `./checkpoints`. Training itself writes no figures -- plots come from the
+separate scripts `scripts/dos_map.py`, `scripts/plot_ldos_tradeoff.py` and
+`scripts/fray_plots.py`.
 
 To resume training, pass `--resume_from path/to/checkpoint_latest.pth`.
 
@@ -44,7 +47,7 @@ To resume training, pass `--resume_from path/to/checkpoint_latest.pth`.
 ### Inference with a trained model
 You can create and load trained models to use for transport prediction, and the access the tight binding hamiltonian direcly from the model:
 ```python
-from g3nat.models import load_trained_model, predict_sequence
+from g3nat.evaluation import load_trained_model, predict_sequence
 
 model, energy_grid, device = load_trained_model('outputs/hamiltonian_pickle_model.pth')
 dos_pred, trans_pred = predict_sequence(
@@ -124,8 +127,7 @@ differ and any geometric descriptor is near-constant by construction. (An early 
 vs geometry-off comparison, 0.538 vs 0.547, agreed -- but both numbers are final-epoch under
 the since-retired leaking split, so treat them as illustrative, not as the evidence. See
 `docs/model-results.md`.) The feature is infrastructure for future datasets with real
-geometric variation (MD / crystal / predicted structures). Design:
-`docs/superpowers/specs/2026-07-20-x3dna-edge-geometry-design.md`.
+geometric variation (MD / crystal / predicted structures).
 
 ### Notes
 - Node features: 4 one-hot features (A, T, G, C)
