@@ -3,7 +3,7 @@
 Setup script for DNA Transport GNN (G3NAT).
 """
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 
 def read_readme():
@@ -25,13 +25,7 @@ setup(
     long_description=read_readme(),
     long_description_content_type="text/markdown",
     url="https://github.com/wliverno/G3NAT",
-    py_modules=[
-        "models",
-        "dataset",
-        "data_generator",
-        "main",
-        "visualize_dna_graph",
-    ],
+    packages=find_packages(include=["g3nat", "g3nat.*"]),
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Science/Research",
@@ -53,11 +47,6 @@ setup(
             "black>=23.0",
             "flake8>=6.0",
             "mypy>=1.0",
-        ],
-    },
-    entry_points={
-        "console_scripts": [
-            "g3nat-train=main:main",
         ],
     },
     include_package_data=True,
