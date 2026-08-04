@@ -190,3 +190,13 @@ geom_cache/
 
 # slurm Logs
 slurm-*.out
+
+# NAB build products: dnabuilder writes nuc.nab, compiles it to nuc.c, links a.out.
+# All three are generated per run and must not be committed (see DNADataset/dnabuilder).
+nuc.nab
+nuc.c
+a.out
+# Gaussian punch files
+fort.[0-9]*
+# Captured pytest transcripts -- one from a stranger's Windows checkout was committed once
+test_results.txt

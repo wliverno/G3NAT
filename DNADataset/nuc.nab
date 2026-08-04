@@ -1,3 +1,0 @@
-molecule m;
-m = fd_helix( "abdna", "gatg", "dna" );
-putpdb( "gatg.pdb", m, "-wwpdb");
