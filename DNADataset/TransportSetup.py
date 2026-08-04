@@ -327,10 +327,13 @@ if __name__ == "__main__":
     print(f"\n=== Finding HOMO-LUMO ===")
     homo, lumo = parser.find_homo_lumo(log_file, eigen_file)
     print(f"HOMO: {homo:.4f} eV, LUMO: {lumo:.4f} eV")
-    # Create energy range: HOMO-1eV to HOMO+1eV with 200 points (0.01eV spacing)
-    # Using np.arange gives exactly 200 points with 0.01eV spacing
+    # Energy range: HOMO-1eV to HOMO+1eV inclusive at 0.01 eV spacing, which is 201 points,
+    # not 200. The stop value below is homo+1.01 precisely so np.arange includes the
+    # right-hand endpoint. Verified against the generated Parameters.txt and against the
+    # pickled Egrid: both are 201 long. Earlier comments here claimed 200 and the count
+    # printed below was computed as int(2.0/0.01)=200, understating it by one.
     energy_range = (homo - 1.0, homo + 1.01, 0.01)
-    num_points = int((homo + 1.0 - (homo - 1.0)) / 0.01)
+    num_points = len(np.arange(*energy_range))
     print(f"Energy range: {homo - 1.0:.2f} to {homo + 1.0:.2f} eV ({num_points} points, 0.01 eV spacing)")
     print(f"\n=== Generating Parameters File ===\n")
     

@@ -152,19 +152,24 @@ Original `.pdb` and `.gjf` files remain in the main directory.
 
 - NAB installation: Install from https://github.com/dacase/nabc and set `BUILDDIR` in `dnabuilder`
 - PDB files must have TER records separating strands
-- `TransportSetup.py` automatically finds HOMO-LUMO from `.log` and `_eigen.mat` files to set energy range (HOMO±1eV, 200 points)
+- `TransportSetup.py` automatically finds HOMO-LUMO from `.log` and `_eigen.mat` files to set energy range (HOMO±1eV inclusive at 0.01 eV, i.e. 201 points)
 - MATLAB functions must be in MATLAB path or same directory as scripts
 
 ---
 
-## Published dataset (HDF5 archive)
+## Dataset archive format (HDF5)
 
-This section documents the single HDF5 file produced by `export_hdf5.py` -- the archive
-distributed to external users. It is written entirely from the pickled records
+> **The DFT data itself is not yet distributed.** The archive described here is released
+> with the preprint; until then this section is the format specification only, and no
+> download exists. The generation tooling above is public and complete, so the records can
+> be regenerated from scratch.
+
+This section documents the single HDF5 file produced by `export_hdf5.py` -- the archive that
+will be distributed. It is written entirely from the pickled records
 (`convert_to_pickle.py`, functions `build_record`/`validate_record`), not from the raw
 `.mat`/`.pdb` files directly, so this text is a mechanical transcription of
 `DNADataset/export_hdf5.py` and should never drift from the shipped file. If anything
-below appears to disagree with a file you downloaded, trust the file's own root attrs
+below appears to disagree with the archive file itself, trust the file's own root attrs
 (section 2 quotes them verbatim) over this prose.
 
 ### Regenerating the archive
@@ -296,7 +301,7 @@ itself stored -- see section 6) is the Lowdin-symmetrically-orthogonalized Fock 
 matrix. This is a specific, non-unique choice of orthogonalization. A reader who
 reconstructs any part of the electronic structure from `gjf_text` / re-run Gaussian
 output using a different orthogonalization convention (canonical, symmetric-but-not-
-Lowdin, or a non-orthogonalized AO basis) will not reproduce `DOS`/`T` as published here.
+Lowdin, or a non-orthogonalized AO basis) will not reproduce the `DOS`/`T` recorded here.
 
 **`atom_index_base`** -- contact atom indices are 1-BASED. Verbatim:
 
