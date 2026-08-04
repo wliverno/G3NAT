@@ -10,7 +10,6 @@ from typing import List, Tuple, Dict, Optional, Union
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
-import matplotlib.pyplot as plt
 
 
 def site_ldos_log10(ldos_raw: torch.Tensor, n_sites: int, log_floor: float) -> torch.Tensor:
