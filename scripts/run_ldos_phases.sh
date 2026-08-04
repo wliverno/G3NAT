@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --job-name=g3nat-ldos-phases
 #SBATCH --account=anantram-ckpt
-#SBATCH --partition=ckpt-g2
+#SBATCH --partition=ckpt-all
 #SBATCH --nodes=1
 #SBATCH --gpus=1
 #SBATCH --ntasks-per-node=8
 #SBATCH --mem=32G
-#SBATCH --time=24:00:00
+#SBATCH --time=08:00:00
 #SBATCH --exclude=g3070
 #SBATCH --requeue
 #SBATCH --output=slurm-ldos-%A_%a.out
