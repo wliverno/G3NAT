@@ -155,7 +155,19 @@ case "${PHASE}" in
     TAG="A_b0.0_s${SEED}${NORB_TAG}${GEOM_TAG}"
     ;;
   B)
-    B_GRID=(0.1 0.25 0.5 0.75 0.9)
+    # B_B overrides the grid, mirroring O_B in phase O, so a single b value can
+    # be added to the factorial without editing this list.
+    #
+    # b = 1.0 was missing from the original grid and is the symmetric endpoint to
+    # phase A's b = 0.0: b weights b*LDOS + (1-b)*DOS, so b=0 is DOS-only and
+    # b=1 is LDOS-only. It is safe at b=1 because shape_loss defaults False (and
+    # is retracted, config.py:35): the shape path derives its alignment offset
+    # from dos_pred - dos_target and applies it to LDOS, which at b=1 would anchor
+    # on a channel receiving no gradient. On the absolute loss that path is not
+    # taken and the objective is simply a*T + LDOS.
+    #
+    #   PHASE=B B_B=1.0 N_ORB=2 sbatch --array=0-2 scripts/run_ldos_phases.sh
+    IFS=' ' read -ra B_GRID <<< "${B_B:-0.1 0.25 0.5 0.75 0.9}"
     N=$(( ${#B_GRID[@]} * ${#SEEDS[@]} ))
     if [ "$i" -ge "$N" ]; then
       echo "ERROR: array task $i out of range for phase B (valid range 0-$(( N - 1 )), $N cells = ${#B_GRID[@]} b-values x ${#SEEDS[@]} seeds)" >&2
