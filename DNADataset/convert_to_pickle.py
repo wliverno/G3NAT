@@ -251,7 +251,7 @@ def validate_record(rec, n_orbitals):
 
     n_orbitals: per-atom basis-function counts, same order as rec["atoms"], from
     parse_orbitals_set(). REQUIRED -- not stored in the record itself (DOSAtom is
-    already summed per atom, and the published archive has no Fock/Overlap/H0 for
+    already summed per atom, and the archive has no Fock/Overlap/H0 for
     AO-space data to be indexed against, so the counts have no consumer once
     validated), but they are the only thing that catches a permuted atom table, so
     they must still be checked every time. No default is given on purpose: an

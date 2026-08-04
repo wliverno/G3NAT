@@ -178,7 +178,7 @@ def test_validate_rejects_negative_dosatom_directly():
 
 def test_atoms_dict_does_not_contain_n_orbitals():
     """n_orbitals must not ship in the record: DOSAtom is already per-atom (summed
-    over AOs), and the published archive has no Fock/Overlap/H0 for AO-space data
+    over AOs), and the archive has no Fock/Overlap/H0 for AO-space data
     to be indexed against, so the counts have no consumer once validated."""
     _, rec, _ = _rec()
     assert "n_orbitals" not in rec["atoms"]

@@ -47,7 +47,7 @@ PKL_DIR = Path('pickle_files_v2')
 
 pytestmark = pytest.mark.skipif(
     not (H5_PATH.exists() and PKL_DIR.exists()),
-    reason="published archive or pickle_files_v2 not present in this checkout",
+    reason="local HDF5 archive or pickle_files_v2 not present in this checkout",
 )
 
 
