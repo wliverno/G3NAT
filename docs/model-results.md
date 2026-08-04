@@ -1921,6 +1921,26 @@ attributing any of it to a factor.
 
 ### 14a. The recommendation
 
+**PRIMARY ANALYSIS IS THE BALANCED n=48 SUBSET, `b` in {0, 0.25, 0.5, 0.9}** -- a complete
+4 x 2 x 2 x 3 factorial. The `b=0.1` and `b=0.75` runs were exploratory add-ons that were
+never completed (`b=0.1` has no (alpha=0, geom=1) cell; `b=0.75` exists ONLY at
+(alpha=0, geom=0)) and were folded into the regression as if they were design cells. They are
+excluded. Both sat at alpha=0, so they diluted the alpha contrast; removing them restores
+orthogonality between `b` and `alpha` and every conclusion either holds or strengthens. The
+unbalanced n=60 fit is retained as a supplementary check in `statistics-section.md`: exactly
+one term changes side of raw p=0.05 (`sub_dos:alpha:b`, 0.0198 -> 0.0501) and it never
+survived multiplicity correction under either fit.
+
+**`b = 1.0` IS IN FLIGHT** (12 runs, 4 cells x 3 seeds, submitted 2026-08-03). It is the
+symmetric endpoint to `b = 0.0` and was missing from the original grid, leaving `b=0.9`
+standing in for an endpoint it is not. It discards no supervision: DOS and LDOS are both
+stored in log10, and in linear space the sum over residues of `10**LDOS` divided by `10**DOS`
+is 1.000000 at median, p10 and p90 -- the residue aggregation is complete, so per-residue
+LDOS carries the entire DOS constraint plus its spatial decomposition. Section 14 will be
+re-derived on the 5-level balanced design when they land; the `b` conclusions below are the
+best available now, not final.
+
+
 **`n_orb=2`, `alpha=0`, geometry OFF, `b=0.5`.**
 
 `alpha=0` and geometry OFF are STATISTICALLY ESTABLISHED. `b=0.5` is a JUDGMENT CALL --
@@ -1951,10 +1971,25 @@ established optimum and must not be reported as one.
 | **extreme eigenvalue** | **11.29** | **7.72** |
 | spectrum width | 7.76 | 9.06 |
 
-**Choose alpha = 0.** The dispersion analysis settles this: **alpha = 1 significantly increases
-seed spread on 5 of 11 responses** (`dos_t`, `len_slope`, `len_r2`, `eig_spread`, `eig_excess`),
-two surviving full Bonferroni, and it is the largest and most consistent signal in the entire
-test family -- with **no matching benefit on the location side**. The apparent alpha=1 advantage
+**Choose alpha = 0.** On the balanced primary fit, alpha is the only factor with an effect on
+BOTH location and dispersion, and it is the largest signal in the family:
+
+| | responses |
+|---|---|
+| location, surviving BH | `dos_t` (p=0.0048), `ldos` (p=0.0015) |
+| dispersion, surviving BH | `len_slope`, `len_r2`, `eig_excess` |
+| dispersion, raw p < 0.05 only | + `dos_t` (0.0101), `eig_spread` (0.0102), `ldos` (0.0309) |
+
+**Six responses show alpha=1 inflating seed spread at raw significance; three of the six
+survive BH.** Be precise about which number is being quoted -- the six-response count is raw,
+and the 16-cell dispersion design is why BH is strict here.
+
+What makes it convincing is not any single p-value but that the effect is UNANIMOUS IN
+DIRECTION and holds under transformation. All six point the same way, with alpha=1 spread
+larger by 2.3x (`ldos`) to 14.9x (`len_r2`), and the same six are significant on the log scale
+as on the raw scale. All 11 dispersion responses now pass raw-scale Shapiro-Wilk on the
+balanced subset, against two failures on the unbalanced fit, so the non-normality concern about
+using max-min of n=3 as a response is resolved rather than assumed away. The apparent alpha=1 advantage
 on the extreme eigenvalue (11.29 -> 7.72) is not significant and does not survive as a reason
 to pay the reproducibility cost.
 
