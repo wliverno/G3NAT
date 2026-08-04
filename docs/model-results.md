@@ -1899,67 +1899,125 @@ resolvable at n = 3. That is a different question from which settings to use, an
 answered the first several times when asked the second. Every objective has a best observed
 configuration whether or not any marginal ANOVA term reaches significance.
 
-Best cell per objective, over the 60-run factorial. "gap" is best-vs-worst cell divided by the
-residual SD from the ANOVA -- a bigger contrast than a marginal main effect, which is why these
-clear the noise floor where individual terms did not.
+Best cell per objective, over the **balanced 60-run 5 x 2 x 2 x 3 factorial**, `b` in
+{0, 0.25, 0.5, 0.75, 1.0} (re-derived 2026-08-04, superseding the n=48 version). "gap" is
+best-vs-worst cell divided by the residual SD from the ANOVA -- a bigger contrast than a
+marginal main effect, which is why these clear the noise floor where individual terms did not.
 
 | objective | direction | best config | value [seed range] | gap |
 |---|---|---|---|---|
-| DOS+T fit | lower | alpha=1, b=0.25 | 0.4237 [0.379, 0.508] | 3.4x |
-| LDOS agreement | lower | alpha=0, b=0.9 | 0.1878 [0.182, 0.192] | **7.3x** |
-| localisation gap | -> 0 | alpha=0, **b=0.5** | 0.0260 | 2.5x |
-| convergence speed | lower | alpha=0, b=0.25 | 756 epochs | 2.3x |
-| length linearity | higher | alpha=0, b=0, geom | 0.9922 | 2.0x |
-| substitution response, DOS | higher | alpha=0, **b=0.5** | 0.1787 | 4.4x |
-| substitution response, T | higher | alpha=0, **b=0.5** | 0.5439 | 3.6x |
-| spectrum width | lower | alpha=1, **b=0.5** | 4.77 | 1.6x |
-| distance outside window | lower | alpha=1, b=0.9, geom | 0.690 | 1.5x |
-| extreme eigenvalue | lower | alpha=1, **b=0.5** | 3.99 | 2.4x |
+| DOS+T fit | lower | alpha=1, b=0.25 | 0.4237 [0.379, 0.508] | 3.9x |
+| LDOS agreement | lower | alpha=0, **b=1.0** | 0.1899 [0.186, 0.193] | **7.2x** |
+| localisation gap | -> 0 | alpha=0, **b=0.5** | 0.0260 [-0.021, 0.033] | 2.5x |
+| convergence speed | lower | alpha=0, **b=1.0** | 703 epochs [507, 965] | 3.1x |
+| length linearity | higher | alpha=1, b=0.75, geom | 0.9952 [0.9932, 0.9979] | 1.9x |
+| substitution response, DOS | higher | alpha=0, **b=0.5** | 0.1787 [0.111, 0.307] | 4.4x |
+| substitution response, T | higher | alpha=0, **b=0.5** | 0.5439 [0.470, 0.613] | 3.5x |
+| spectrum width | lower | alpha=1, **b=0.5** | 4.77 [1.28, 10.57] | 1.7x |
+| distance outside window | lower | alpha=1, **b=1.0** | 0.5113 [0.186, 0.837] | 2.2x |
+| extreme eigenvalue | lower | alpha=1, **b=0.5** | 3.99 [1.35, 7.31] | 2.8x |
 
-**Every gap exceeds the residual SD**, from 1.5x to 7.3x -- but see the warning below before
-attributing any of it to a factor.
+**Every gap exceeds the residual SD**, from 1.7x to 7.2x -- but see the warning below before
+attributing any of it to a factor. Win tally: `alpha=0, b=0.5` takes 3, `alpha=0, b=1.0` and
+`alpha=1, b=0.5` take 2 each. No configuration dominates.
 
 ### 14a. The recommendation
 
-**PRIMARY ANALYSIS IS THE BALANCED n=48 SUBSET, `b` in {0, 0.25, 0.5, 0.9}** -- a complete
-4 x 2 x 2 x 3 factorial. The `b=0.1` and `b=0.75` runs were exploratory add-ons that were
-never completed (`b=0.1` has no (alpha=0, geom=1) cell; `b=0.75` exists ONLY at
-(alpha=0, geom=0)) and were folded into the regression as if they were design cells. They are
-excluded. Both sat at alpha=0, so they diluted the alpha contrast; removing them restores
-orthogonality between `b` and `alpha` and every conclusion either holds or strengthens. The
-unbalanced n=60 fit is retained as a supplementary check in `statistics-section.md`: exactly
-one term changes side of raw p=0.05 (`sub_dos:alpha:b`, 0.0198 -> 0.0501) and it never
-survived multiplicity correction under either fit.
+**PRIMARY ANALYSIS IS THE BALANCED n=60 DESIGN, `b` in {0, 0.25, 0.5, 0.75, 1.0}** -- a
+complete 5 x 2 x 2 x 3 factorial on a uniform 0.25 grid with both endpoints. The `b=0.75` and
+`b=1.0` cells completed 2026-08-04, which closed the design; every one of the 20 cells now has
+exactly 3 seeds.
 
-**`b = 1.0` IS IN FLIGHT** (12 runs, 4 cells x 3 seeds, submitted 2026-08-03). It is the
-symmetric endpoint to `b = 0.0` and was missing from the original grid, leaving `b=0.9`
-standing in for an endpoint it is not. It discards no supervision: DOS and LDOS are both
-stored in log10, and in linear space the sum over residues of `10**LDOS` divided by `10**DOS`
-is 1.000000 at median, p10 and p90 -- the residue aggregation is complete, so per-residue
-LDOS carries the entire DOS constraint plus its spatial decomposition. Section 14 will be
-re-derived on the 5-level balanced design when they land; the `b` conclusions below are the
+`b=0.1` and `b=0.9` are EXCLUDED from the primary analysis. `b=0.1` was never a complete
+design cell (it has no (alpha=0, geom=1) cell). `b=0.9` IS complete at 4 cells x 3 seeds but
+sits off the uniform grid; it is held in reserve as an interior verification point, per
+`outline.md` 4.5, and is not part of the reported design.
+
+**This supersedes the earlier n=48 subset, `b` in {0, 0.25, 0.5, 0.9}**, which was the largest
+balanced set available before the endpoint cells landed and used `b=0.9` as a stand-in for an
+endpoint it is not. The old numbers are preserved at
+`G3NAT-internal/scratch/analysis/_stats_final_review.py.bak-4level` and the corresponding
+`*.bak-preb1` cell tables.
+
+`b = 1.0` discards no supervision: DOS and LDOS are both stored in log10, and in linear space
+the sum over residues of `10**LDOS` divided by `10**DOS` is 1.000000 at median, p10 and p90 --
+the residue aggregation is complete, so per-residue LDOS carries the entire DOS constraint
+plus its spatial decomposition.
+
+**WHAT CHANGED ON THE COMPLETE DESIGN.** Two things, one in each direction.
+
+1. **`b` now has non-circular evidence, and it favours HIGHER b.** On the n=48 subset, `b`'s
+   only surviving effect anywhere was on `ldos`, which `b` directly weights in the loss and is
+   therefore circular -- which is why `b=0.5` was recorded below as a judgment call. On the
+   complete design, `b` significantly reduces the seed-to-seed SPREAD of `len_slope`
+   (dispersion, p = 0.0076, survives Benjamini-Hochberg over the 88-test family). This is not
+   circular: `b` weights the LDOS term, while `len_slope` is the length-extrapolation decay
+   measured at lengths never trained on. The effect is monotone and large:
+
+   | b | mean `len_slope` spread across 3 seeds |
+   |---|---|
+   | 0.0 | 0.5803 |
+   | 0.25 | 0.6056 |
+   | 0.5 | 0.3824 |
+   | 0.75 | 0.3516 |
+   | 1.0 | **0.2353** |
+
+   b=1.0 is 2.5x tighter than b=0.0, coefficient -0.3776 per unit b -- the ONLY dispersion
+   effect anywhere that exceeds its own minimum detectable effect (109% of MDE). Supporting
+   but not individually significant: **all 11 dispersion coefficients for `b` are negative**
+   (`len_r2` 87% of MDE, `eig_spread` 88%, `eig_excess` 81%). Higher `b` tightens everything
+   measured. Those 11 responses are correlated (`eig_spread`/`eig_excess` at r = 0.95), so
+   read this as one consistent direction, not eleven confirmations.
+
+   **What this does NOT license:** it is a statement about REPRODUCIBILITY, not correctness.
+   `len_slope` has no a-priori good direction -- the pre-registered rule in
+   `G3NAT-internal/paper/dft-validation-strands.md` is that DFT decides which slope is right.
+   Higher `b` gives a more repeatable answer, not a verified one.
+
+2. **`dos_t:alpha` weakened and no longer survives correction.** p = 0.0048 on the n=48
+   subset, p = 0.0139 on the complete n=60 design -- still raw-significant, but it now fails
+   Benjamini-Hochberg. Any claim that alpha=1 measurably helps the DOS+T fit should be
+   dropped; the alpha case rests on reproducibility, not on location.
+
+The `b` conclusions below are the
 best available now, not final.
 
 
-**`n_orb=2`, `alpha=0`, geometry OFF, `b=0.5`.**
+**`n_orb=2`, `alpha=0`, geometry OFF. For `b`, see the split recommendation below.**
 
-`alpha=0` and geometry OFF are STATISTICALLY ESTABLISHED. `b=0.5` is a JUDGMENT CALL --
-see the correction immediately below. "alpha chosen by purpose" was the earlier framing and is
-retracted: the alpha=1 spectrum advantage is not significant, and alpha=1 costs reproducibility.
+`alpha=0` and geometry OFF are STATISTICALLY ESTABLISHED and unchanged by the complete design.
+"alpha chosen by purpose" was an earlier framing and stays retracted: the alpha=1 spectrum
+advantage is not significant, alpha=1 costs reproducibility, and on the n=60 design the
+alpha effect on DOS+T fit no longer survives multiplicity correction either.
 
-**CORRECTED 2026-08-03. The best-cell table above does NOT establish anything about `b`.**
-A full re-derivation (`G3NAT-internal/statistics-section.md`) traced the "b=0.5 wins five of
-ten objectives" claim and found it confounded: **in every one of those five wins, the
-worst-comparator cell differs from the winner in alpha and/or geom as well**, and one uses the
-`b=0.75` singleton cell as its anchor. A best-vs-worst cell gap shows that the twenty cells
-differ; it does not show which factor caused the difference. Only the per-term F-test holds the
-other factors constant, and across an 88-test family **`b`'s only surviving effect anywhere is
-on `ldos` -- the response `b` directly weights in the loss, so it is circular.** No `b` or `b^2`
-term reaches even raw p < 0.05 on any of the other ten responses, at location or dispersion.
+**`b` IS NO LONGER A PURE JUDGMENT CALL, AND THE EVIDENCE POINTS AWAY FROM 0.5 (2026-08-04).**
+The complete design produced one non-circular, BH-surviving, monotone effect of `b`: higher
+`b` tightens the seed spread of `len_slope` (see "WHAT CHANGED" above). That is the first
+evidence about `b` that does not run through the response `b` weights in the loss.
 
-`b = 0.5` remains the recommended value as a **judgment call**: it captures most of the
-achievable `ldos` gain while sitting in the well-replicated part of the design. It is not an
-established optimum and must not be reported as one.
+The honest recommendation is therefore SPLIT BY PURPOSE, and the two halves disagree:
+
+- **For reproducibility, use `b = 1.0`.** It is the only value with non-circular per-term
+  support: 2.5x tighter `len_slope` spread than b=0, the sole dispersion effect exceeding its
+  MDE, with all 11 dispersion coefficients sharing its sign. It also gives the best `ldos`
+  (circular, discount it) and the fastest convergence (703 epochs).
+- **For substitution response, `b = 0.5` remains the best observed**, taking both `sub_dos`
+  (0.1787, 4.4x SD) and `sub_t` (0.5439, 3.5x SD) and the localisation gap. **But this is a
+  best-cell contrast and is NOT established** -- see the standing warning below, which still
+  applies in full.
+
+If one value must be chosen and reproducibility is the priority, that is now `b = 1.0`.
+`b = 0.5` should no longer be presented as the default without stating that the only
+factor-isolating evidence about `b` favours the opposite end of the grid.
+
+**STANDING WARNING, unchanged. The best-cell table above does NOT establish anything about
+`b`.** A full re-derivation (`G3NAT-internal/statistics-section.md`) traced the earlier
+"b=0.5 wins five of ten objectives" claim and found it confounded: **in every one of those
+five wins, the worst-comparator cell differs from the winner in alpha and/or geom as well.**
+A best-vs-worst cell gap shows that the twenty cells differ; it does not show which factor
+caused the difference. Only the per-term F-test holds the other factors constant. That is
+exactly why the `len_slope` dispersion result is the one `b` finding that counts -- it comes
+from the per-term test, not from a cell contrast.
 
 **alpha is a trade with a known price, not a cost.** Marginal means:
 
