@@ -6,7 +6,7 @@ C     This example program reads a binary array file.  It illustrates
 C     use of the Fortran interface.  The name of the file is the first
 C     argument on the command line.
 C
-      Parameter (LStr=64,IOut=6,MaxAt=30000,MaxBf=10000,MaxArr=1000000000,
+      Parameter (LStr=64,IOut=6,MaxAt=30000,MaxBf=30000,MaxArr=1000000000,
      $  MaxAr5=(MaxArr/5),MaxChArr=10000000,NCPLine=80,LRec11=16)
       Character*(LStr) LabFil, GVers, Title, CBuf, FileName*80,
      $  ChArr*(MaxChArr)

@@ -75,24 +75,33 @@ readable before this build is trusted for new records.
 The pipeline invokes it as `readmat <seq>.mat > <seq>.txt` -- see
 `DNADataset/combined_script.slurm`.
 
-## KNOWN LIMIT: `MaxBf = 10000` basis functions
+## `MaxBf`: raised from 10000 to 30000 on 2026-08-05
 
-This was left at the example's value and is a **hard compile-time ceiling**, checked at
-`readmat.F:70-71`, which prints a diagnostic and stops rather than producing bad output.
+`MaxBf` is a **hard compile-time ceiling** on basis functions, checked at `readmat.F:70-71`,
+which prints a diagnostic and stops rather than producing bad output. It was left at the
+upstream example's value of 10000, which was about to become a problem.
 
-Measured basis-function density in this dataset is ~11.48 per atom at B3LYP/6-31G(d,p),
-and structures run ~63.5 atoms per base pair:
+Measured basis-function density in this dataset is ~11.48 per atom at B3LYP/6-31G(d,p), and
+structures run ~63.5 atoms per base pair:
 
-| duplex length | atoms | basis functions | status |
-|---|---|---|---|
-| 8  | 507  | 5806 (measured)  | ok |
-| 12 | 762  | 8748 (measured)  | ok, 12.5% under the ceiling |
-| 14 | ~889 | ~10200 (projected) | **exceeds MaxBf** |
-| 16 | ~1016 | ~11700 (projected) | **exceeds MaxBf** |
+| duplex length | atoms | basis functions | vs old 10000 | vs current 30000 |
+|---|---|---|---|---|
+| 8  | 507  | 5806 (measured)  | ok | ok |
+| 12 | 762  | 8748 (measured)  | ok, 12.5% under | ok |
+| 14 | ~889 | ~10200 (projected) | **REJECTED** | ok |
+| 16 | ~1016 | ~11700 (projected) | **REJECTED** | ok |
+| 20 | ~1270 | ~14600 (projected) | REJECTED | ok |
+| 24 | ~1524 | ~17500 (projected) | REJECTED | ok |
 
-So anything at 14 base pairs or longer needs `MaxBf` raised and `readmat` rebuilt *before*
-the DFT is run -- otherwise the conversion rejects a calculation that has already consumed
-several hours of Gaussian time. Raising it costs only memory in this small utility.
+The failure mode this avoids is expensive: the ceiling is checked at CONVERSION time, so a
+14-bp run would have consumed a full Gaussian calculation (~8 h at L=12, more at L=14) and
+then been rejected at the step that reads the result. Raising it costs only memory in this
+small utility -- `IBfAtm` and `IBfTyp` are integer arrays, so 30000 costs a few hundred KB.
+
+Note `MaxBf=30000` keeps line 9 at exactly 74 characters, so the
+`-ffixed-line-length-none` requirement below is unchanged. If you raise it further, count
+the digits: adding a character does not break the build given that flag, but the line is
+already past the column-72 fixed-form limit and depends on it.
 
 ## Upstream
 
