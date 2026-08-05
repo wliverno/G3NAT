@@ -171,13 +171,26 @@ def compute_eigenvalues(overlap: np.ndarray, fock: np.ndarray) -> np.ndarray:
     """EV = eig(Overlap^-1 * Fock), matching readMAT.m literally (general,
     non-symmetric eigendecomposition of the explicit matrix product -- NOT
     a symmetric generalized eigh on the (Fock, Overlap) pencil). Returns a
-    complex128 array as MATLAB's `eig` would for a non-symmetric input;
-    values should be numerically real (up to round-off) because
-    Overlap^-1 Fock is similar to the symmetric matrix S^-1/2 F S^-1/2.
+    REAL array. Overlap^-1 Fock is similar to the symmetric S^-1/2 F S^-1/2, so
+    its eigenvalues are real and any imaginary part is numerical dust -- measured
+    at exactly 0.0 for the L=12 record (8748 eigenvalues, max|imag| = 0.000e+00).
+
+    Returning complex here caused a real failure: the downstream HOMO/LUMO search
+    in TransportSetup.py propagated complex values into the energy range, and
+    `np.arange` with complex bounds silently returns an EMPTY array. The whole
+    conversion then completed with exit code 0 and produced Energy of shape
+    (1, 0), DOS (1, 0) and DOSAtom (760, 0) -- correct atom count, no spectrum.
+    Nothing errored. Cast here so that cannot recur.
     """
     M = sla.solve(overlap, fock)  # == overlap^-1 @ fock, better conditioned
     ev = sla.eig(M, right=False)
-    return ev
+    imag_max = float(np.abs(np.imag(ev)).max())
+    if imag_max > 1e-6 * max(1.0, float(np.abs(np.real(ev)).max())):
+        raise ValueError(
+            "eigenvalues of Overlap^-1 Fock are not real (max|imag| = %.3e); "
+            "the Fock/Overlap pair is not symmetric-definite as assumed" % imag_max
+        )
+    return np.real(ev)
 
 
 def ascii_roundtrip(M: np.ndarray, sig_digits: int = 8) -> np.ndarray:
