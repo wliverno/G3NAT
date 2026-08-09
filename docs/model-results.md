@@ -1936,6 +1936,38 @@ chosen statistic coming back empty. Measured with `eig_responses.py` in the priv
 
 ## 14. RECOMMENDED CONFIGURATION -- the answer, per objective (2026-08-03)
 
+> **PARTIALLY SUSPENDED 2026-08-09 -- do not cite the length-derived parts.** Two of the eight
+> factorial responses, `len_slope` and `len_r2`, are computed by `doe_analysis.py:113` from the
+> transmission curves that section 12a shows were clamped at a hardcoded `1e-16`.
+>
+> **The magnitude is moderate, not severe. An earlier version of this banner said otherwise and
+> was wrong.** `length_stats` uses `FLOOR = -15.5` and keeps only points above it
+> (`doe_analysis.py:43,75`), so the ANOVA used section 12a's **arm1** (drop-clamped), NOT the
+> arm2 (fit-through-the-clamped-tail) that produced 12a's published slopes. Comparing arm1 to
+> the true floor: mean R2 ~0.969 versus 0.993, mean slope -1.397 versus -1.415. Per family the
+> slope agreement ranges from ~1% (poly-G, -1.278 vs -1.286) to ~24% (random-2, -1.310 vs
+> -1.628).
+>
+> **The concern is dispersion, not the mean.** Dropping points below -15.5 means different seeds
+> are fit over different length ranges depending on where each one crosses the floor. That
+> injects seed-to-seed variance that is an artifact of point-dropping rather than of the model.
+> Any result about the SPREAD of `len_slope` across seeds is therefore suspect in a way the
+> means are not -- and the `b` claim below was exactly such a result.
+>
+> `dos_t` and `sub_t` are mildly affected -- their transmission halves sit in the training range,
+> where 2.6% of grid points fall below the floor. `ldos`, `loc_gap` and `sub_dos` are clean:
+> LDOS never binds and DOS never touches the clamp.
+>
+> **The `b` episode is affected directly.** The retracted `b`-reproducibility claim was a
+> `len_slope` dispersion result, and the held-out `b=0.9` slice that falsified it was measured on
+> the same contaminated response. Both the claim and its retraction need re-deriving. `b = 0.5`
+> remains a judgment call, now unresolved for two independent reasons.
+>
+> `alpha = 0` and `geom = 0` draw on several responses including clean ones and are likelier to
+> survive, but must be rechecked rather than assumed. Re-running is inference only and cheap.
+> **Trap: `doe_cells.json` short-circuits as its own cache and will silently reprint the old
+> design -- move it aside first.**
+
 **Read this section first.** Sections 12 and 13 report which factors are statistically
 resolvable at n = 3. That is a different question from which settings to use, and this document
 answered the first several times when asked the second. Every objective has a best observed
