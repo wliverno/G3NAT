@@ -1588,57 +1588,95 @@ Two analyses on existing checkpoints. No new training, no new DFT.
 reference exists beyond it, so the length section measures what the models DO, not which is
 right. DFT strands to settle it are specified in the internal notes.
 
-### 12a. Length: the two models disagree by 1.5-4.8x (CORRECTED 2026-08-03)
+### 12a. Length: the Hamiltonian model decays 3.2-6.7x faster (THIRD CORRECTION, 2026-08-09)
 
 Predicted `log10 T` at window centre against strand length, L = 4..20, both models, 3 seeds
 each, six sequence families including three non-periodic controls.
 
-**This section originally reported a 3-7x slope gap, seed ranges disjoint in all six families,
-and R2 favouring the Hamiltonian model 6/6. Two of those three were artifacts of an
-evaluation-time clamp.** `log_floor = 1e-16` (`hamiltonian.py`, read from `self.log_floor` at
-forward time) truncated the Hamiltonian model's curve at L >= 16, so it was fit on 5-7 points
-while the direct model -- whose MLP emits unclamped values -- was fit on all 10. Lowering the
-clamp to 1e-30 requires no retraining and removes the asymmetry.
+**This section has now been published three times and the first two were both wrong. The
+2026-08-03 "correction" was worse than what it replaced, and its stated mechanism never
+executed.** Read the history below before citing anything here.
 
-**Slope, both models on all 10 points:**
+#### The mechanism error
 
-| family | Hamiltonian | direct | ratio |
-|---|---|---|---|
-| poly-G | -0.926 | -0.191 | 4.84x |
-| (GC)n | -0.831 | -0.238 | 3.49x |
-| (AT)n | -0.746 | -0.287 | 2.60x |
-| random-0 | -0.712 | -0.466 | 1.53x |
-| random-1 | -0.923 | -0.372 | 2.48x |
-| random-2 | -0.795 | -0.357 | 2.23x |
+`NEGFProjection` clamped transmission at a **hardcoded** `1e-16` (`hamiltonian.py:609` before
+commit c8b6ee8), while only `NEGFProjectionComplex` read `self.log_floor`. Checkpoints store no
+`solver_type`, so `inference.py` reconstructs every model for evaluation as `'frobenius'` -- the
+hardcoded path. **Setting `model.log_floor = 1e-30`, which is what the 2026-08-03 rerun did,
+therefore changed nothing.** Measured: floors of 1e-16, 1e-30 and 1e-300 give bit-identical
+curves, `max abs diff = 0.000e+00`, with L = 16 and L = 20 pinned at exactly -16.0000.
 
-**Seed ranges are disjoint in all six families.** That includes (AT)n, whose disjointness
-failed under an adversarial reviewer's range-matched refit -- the correct fix was removing the
-clamp, not weakening the claim. The published 3-7x is wrong; the honest figure is **1.5-4.8x**.
+So the two arms of that rerun had **identical predictions** and differed only in whether points
+sitting at the clamp were included in the linear fit.
 
-The non-periodic control holds. The pooled readout is NOT length-blind -- it averages over 2
-contact nodes plus 2L base nodes, so the contact fraction `2/(2L+2)` carries an `O(1/L)` signal
--- and any receptive-field saturation argument is most exact for periodic motifs. Random
-families were added for that reason and separate just as cleanly.
+#### What each version actually computed
 
-**RETRACTED: R2 does not favour the Hamiltonian model.** This section reported R2 of the linear
-fit at 0.969 against 0.879, favouring the Hamiltonian model in all six families, and called it
-the surviving evidence for the tunneling functional form. That was measured on the truncated
-curve. On all 10 points:
+Per-family mean slope, 3 seeds. `arm1` drops clamped points (the ORIGINAL published method);
+`arm2` includes all 10 points with the tail still clamped (what the 2026-08-03 "correction"
+actually computed); `arm3` is the genuinely lowered floor, possible only after commit c8b6ee8.
+
+| family | arm1 drop-clamped | arm2 all-10 clamped | arm3 TRUE floor | published |
+|---|---|---|---|---|
+| poly-G | -1.278 (R2 0.999) | -0.926 (R2 0.913) | **-1.286 (R2 1.000)** | -0.926 |
+| (GC)n | -1.523 (R2 0.978) | -0.831 (R2 0.824) | **-1.537 (R2 0.997)** | -0.831 |
+| (AT)n | -0.929 (R2 0.996) | -0.746 (R2 0.957) | **-0.914 (R2 0.998)** | -0.746 |
+| random-0 | -1.666 (R2 0.940) | -0.712 (R2 0.736) | **-1.482 (R2 0.984)** | -0.712 |
+| random-1 | -1.673 (R2 0.967) | -0.923 (R2 0.824) | **-1.643 (R2 0.990)** | -0.923 |
+| random-2 | -1.310 (R2 0.935) | -0.795 (R2 0.827) | **-1.628 (R2 0.988)** | -0.795 |
+
+`arm2` reproduces the published column to three decimals in all six families. That is the
+evidence the "floor-fixed" numbers were never floor-fixed.
+
+**The original method was close to right.** `arm1` sits within a few percent of the true answer
+in four of six families. The range-asymmetry criticism that prompted the 2026-08-03 rewrite was
+legitimate, but the fix it motivated moved every slope roughly 40% toward zero and cost R2 about
+0.15. Dropping clamped points was a cruder estimator of the right quantity; including them was a
+precise estimator of the wrong one.
+
+#### The corrected result
+
+At the true floor, slope ratios against the direct model are **3.2-6.7x**, which is steeper than
+either published figure (the original 3-7x, the revised 1.5-4.8x). Seed ranges remain disjoint
+in all six families.
+
+**RETRACTION OF THE RETRACTION: R2 does favour the Hamiltonian model.** The 2026-08-03 entry
+retracted this, reporting mean R2 0.846 against the direct model's 0.879 and concluding the
+direct model produced the cleaner exponential. That 0.846 is the `arm2` mean -- a fit through a
+horizontal artificial tail. At the true floor:
 
 | | Hamiltonian | direct |
 |---|---|---|
-| mean R2 | **0.846** | **0.879** |
-| mean quadratic curvature | +0.068 | +0.016 |
+| mean R2 | **0.993** (range 0.984-1.000) | 0.879 |
+| mean quadratic curvature | **~0.00** (-0.003 to +0.013) | +0.016 |
 
-The direct model produces the CLEANER exponential -- higher R2 and less curvature -- while the
-Hamiltonian model flattens at long L. This is the reverse of what was published, and it was the
-correction of our own confound that produced it.
+The Hamiltonian model produces a near-exact exponential in every family. The "flattening at long
+L" reported on 2026-08-03 was the clamp, not model behaviour.
+
+**This correction moves in our favour, which is why the audit trail above is complete rather than
+a silent renumbering.** Both prior versions, the mechanism that produced each, and the
+reproduction of the published numbers by `arm2` are recorded so the switch can be checked by
+someone who does not trust it. Source: `G3NAT-internal/scratch/analysis/audit_c1_c2.out`,
+independently reproduced by a second agent in `length_floor_fix_RERUN.out`.
+
+**Downstream consequence, not yet resolved.** `doe_analysis.py:113` computes the factorial
+responses `len_slope` and `len_r2` from these same clamped curves. Both are contaminated --
+`len_r2` severely (0.847 vs 0.993). Every ANOVA conclusion resting on them, including the
+retracted `b`-reproducibility claim and its own retraction, needs re-deriving. See section 14.
 
 **Recorded so the statistic switch can be audited.** Curvature was originally proposed as the
 exponential-vs-flattening discriminator, came out unfavourable, and was set aside as
 floor-confounded in favour of R2. The rejected numbers were never written down, which made the
 switch unauditable. Both statistics are now reported at both floors, and at the corrected floor
-both favour the direct model.
+both favour the direct model. **That last clause is void as of 2026-08-09** -- both statistics
+were computed on the clamped `arm2` curve; at the true floor both favour the Hamiltonian model.
+
+**SUPERSEDED 2026-08-09. The investigation below is internally correct and answers the wrong
+question.** It asked whether float32 could represent T ~ 1e-18, concluded correctly that it can,
+and therefore attributed the flattening to the model. It never tested the clamp, which is what
+was actually flattening the curve at exactly -16.0000. Kept in full because the reasoning is
+sound and the underflow analysis remains useful; its closing sentence is wrong. A later direct
+test on an actual learned H confirms float32 matches float64 to 4 decimals in log10 T down to
+**-35** at L = 20, so precision was never in play at any length we evaluate.
 
 **CHECKED 2026-08-03: the flattening is NOT a precision artifact.** The concern was that at
 L = 20 the model predicts T ~ 1e-18 from inverting an 80x80 Green's function, so the flattening
@@ -1662,6 +1700,10 @@ product underflows to zero while the linear algebra remains sound.
 The trained model operates at T ~ 1e-18, twenty orders of magnitude above that threshold, and
 in that regime the analytic control shows float32 and float64 agreeing to four decimal places.
 **So the flattening is model behaviour, not numerics, and the R2 reversal above stands.**
+**WRONG, corrected 2026-08-09.** The premise holds -- float32 is sound at these magnitudes --
+but the conclusion does not follow, because the flattening was not a precision artifact OR model
+behaviour. It was the hardcoded `1e-16` clamp, which this analysis did not consider. The R2
+reversal it endorses is itself retracted above.
 
 Caveat: this is inference from the analytic bound. A direct float64 run of the trained model
 still fails on a dtype mismatch between the converted module and its stored energy grid, so the
