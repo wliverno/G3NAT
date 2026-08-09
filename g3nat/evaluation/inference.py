@@ -57,6 +57,13 @@ def load_trained_model(model_path: str, device: str = 'auto') -> Tuple[Union[DNA
 
     # Initialize model with same architecture
     if model_type == 'hamiltonian':
+        if 'solver_type' not in args:
+            print("WARNING: this checkpoint predates solver_type being recorded in args "
+                  "(scripts/train.py). Falling back to the constructor default 'complex', "
+                  "which is what training actually used. NOTE: evaluations of this "
+                  "checkpoint made before 2026-08-09 ran the 'frobenius' path instead, so "
+                  "numbers may differ from previously published ones by ~4e-5 in log10 T. "
+                  "Pass solver_type explicitly if you need to reproduce an older result.")
         model = DNATransportHamiltonianGNN(
             hidden_dim=args.get('hidden_dim', 128),
             num_layers=args.get('num_layers', 4),
@@ -64,7 +71,14 @@ def load_trained_model(model_path: str, device: str = 'auto') -> Tuple[Union[DNA
             energy_grid=energy_grid,
             n_orb=args.get('n_orb', 1),
             enforce_hermiticity=args.get('enforce_hermiticity', True),
-            solver_type=args.get('solver_type', 'frobenius'),
+            # solver_type MUST default to the CONSTRUCTOR default, which is what training
+            # used. It previously defaulted to 'frobenius' here while the constructor
+            # default is 'complex' and train.py passed neither -- so every model on record
+            # was evaluated through a solver it was not trained with. Since 'frobenius'
+            # clamped at a hardcoded 1e-16 and 'complex' honours self.log_floor, that
+            # mismatch is also what made log_floor a dead knob at evaluation time and
+            # silently invalidated the length curves behind model-results.md 12a.
+            solver_type=args.get('solver_type', 'complex'),
             use_log_outputs=args.get('use_log_outputs', True),
             log_floor=args.get('log_floor', 1e-16),
             complex_eta=args.get('complex_eta', 1e-12),
