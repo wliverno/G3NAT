@@ -1,5 +1,8 @@
 # Generator Module — Architecture & How It Works
 
+> **STATUS (2026-08-09):** side capability, not currently used by the training
+> pipeline or discussed in the paper. Kept functional and under test, but dormant.
+
 ## Overview
 
 The generator module (`g3nat/models/generator.py`) contains **`SequenceOptimizer`** — learns DNA sequences that maximize the change in electrical transmission upon hybridization (complementary strand binding). Uses a differentiable GNN predictor with Softmax Straight-Through gradient flow and adaptive entropy. Based on Fast SeqProp (Linder & Seelig, 2021).

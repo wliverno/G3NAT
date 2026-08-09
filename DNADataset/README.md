@@ -77,14 +77,16 @@ MATLAB functions for processing DFT outputs and computing transmission propertie
 **`combined_script.slurm`**:  Master pipeline script for automated DNA transmission dataset generation
 - Completes the following steps:
    1) Generates a DNA sequence between 4-8 units.
-   2) Builds the molecular structure and Gaussian input files using NAB tools.
-   3) Runs a first Gaussian calculation to produce checkpoint and log files.
-   4) Modifies the Gaussian input to enable matrix output and inserts the required trailer for matrix dumping.
-   5) Runs a second Gaussian calculation to produce the Hamiltonian and overlap matrices in .mat format.
-   6) Converts Gaussian matrix output using readmat and MATLAB processing.
-   7) Runs transmission simulations (ballistic or decoherence) using MATLAB transport scripts.
-   8) Organizes outputs into structured run folders.
-   9) Converts results into pickle files for machine learning training within the G3NAT framework.
+   2) Builds the molecular structure and Gaussian input files using NAB tools (the
+      .gjf already carries the matrix-output flags and .mat trailer, as of 2026-08-09).
+   3) Derives a first-pass SCF input by STRIPPING the matrix flags and trailer, and
+      runs it to produce checkpoint and log files.
+   4) Runs the unmodified input as a second Gaussian pass, restarting from the
+      checkpoint, to dump the Fock and overlap matrices in .mat format.
+   5) Converts Gaussian matrix output using readmat and MATLAB processing.
+   6) Runs transmission simulations (ballistic or decoherence) using MATLAB transport scripts.
+   7) Organizes outputs into structured run folders.
+   8) Converts results into pickle files for machine learning training within the G3NAT framework.
 
 
 **`TransportScript.slurm`**: Sets up multiple transmission runs
@@ -199,13 +201,13 @@ directly on the run group, and `coupling_eV` / `contact_type` are **attrs** on t
 group, not datasets. `energy_reference_eV` is also a run-group attr. There is no HDF5
 group or dataset literally named `contacts`.
 
-#### Root attrs (14 total; global to the file, identical for every group)
+#### Root attrs (16 total; global to the file, identical for every group)
 
 `units_energy`, `units_xyz`, `energy_convention`, `dos_definition`,
 `transmission_definition`, `strand_identity`, `spin`, `contact_model`,
 `orthogonalization`, `atom_index_base`, `geometry`, `regime`, `run_map`, `limitations`.
 
-Every one of these 14 is quoted verbatim in section 2 below (or in section 3/4/6, where
+Every one of these 16 is quoted verbatim in section 2 below (or in section 3/4/6, where
 noted). There is no `n_orbitals` root attr and no `n_orbitals` field anywhere in the
 archive.
 
@@ -252,15 +254,26 @@ AO-indexed data to be checked against it -- see section 6).
 ### 2. Physics conventions (verbatim from the root HDF5 attrs)
 
 Quoted directly from `export_hdf5.py` so this text cannot drift from the shipped file.
-Read all 14 before drawing conclusions from this dataset. The six below are the ones
+Read all 16 before drawing conclusions from this dataset. The eight below are the ones
 most likely to be silently misread, and are flagged first.
+
+**`level_of_theory`** -- the DFT ran in implicit water, not vacuum. Verbatim:
+
+> B3LYP/6-31G(d,p) in implicit water (SCRF continuum, scrf=(solvent=water));
+> single-point on the idealized geometry, no optimization.
+
+**`charge_and_multiplicity`** -- the duplex is highly charged. Verbatim:
+
+> Net charge -2(L-1) for an L-bp duplex (every internal phosphodiester phosphate
+> deprotonated, free 5'/3'-OH termini, no counterions); closed-shell singlet.
 
 **`contact_model`** -- wide-band-limit leads; NO physical Fermi level. Verbatim:
 
 > Sigma_L,R = -i*Gamma/2 * I; wide-band limit, energy-independent, purely imaginary, no
 > real part and no work function. Applied to EVERY atomic orbital of EVERY atom in the
-> terminal base. coupling_eV is used for both leads (gammaL == gammaR). There is
-> therefore no physical Fermi level in this model.
+> terminal RESIDUE (the full nucleotide: base, sugar and phosphate). coupling_eV is
+> used for both leads (gammaL == gammaR). There is therefore no physical Fermi level
+> in this model.
 
 In plain terms: the leads are NOT a real metal electrode with a work function. `Sigma` is
 a constant, purely imaginary self-energy applied uniformly to every orbital of every atom
@@ -453,7 +466,7 @@ Python (`h5py`):
 import h5py
 
 with h5py.File("g3nat_dna_transport.h5", "r") as h:
-    print(list(h.attrs))                # the 14 physics-convention root attrs
+    print(list(h.attrs))                # the 16 physics-convention root attrs
     g = h["aaac/run1"]                  # one (sequence, run) group; replace with any
                                          # group path actually present in your file
     Egrid, DOS, T = g["Egrid"][:], g["DOS"][:], g["T"][:]

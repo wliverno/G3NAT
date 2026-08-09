@@ -6,7 +6,9 @@ A compact Graph Neural Network project for predicting DNA transport properties (
 
 **Demo:** [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/13gInyEBZVMuL1ma-jB5U1pHU917bT9U8?usp=sharing)
 
-Full DNA DFT dataset status: _In Progress_
+Full DNA DFT dataset: 520 sequences x 4 contact/coupling variants = 2077 records
+(lengths 4-8 bp); the archive is released with the preprint. Format and conventions:
+`DNADataset/README.md`.
 
 ### Core modules
 - `g3nat/models/`: GNN models (standard and Hamiltonian), NEGF projection
@@ -67,14 +69,17 @@ H_TB = model.H[0].detach().cpu().numpy()  # Converts PyTorch tensor to NumPy arr
 from g3nat.graph import sequence_to_graph
 from g3nat.visualization import visualize_dna_graph
 
-G = sequence_to_graph("ACGTACGT", "TGCATGCA", left_contact_positions=0, right_contact_positions=7)
-fig, ax = visualize_dna_graph(G, "ACGTACGT", "TGCATGCA")
+# NOTE: the complementary strand is given 5'->3' on its OWN strand (antiparallel
+# pairing: primary i pairs complementary L-1-i), so it is the REVERSE complement.
+# ACGTACGT is its own reverse complement.
+G = sequence_to_graph("ACGTACGT", "ACGTACGT", left_contact_positions=0, right_contact_positions=7)
+fig, ax = visualize_dna_graph(G, "ACGTACGT", "ACGTACGT")
 ```
 
 
 ### Training from dataset (pickle format)
 
-For this work, we have generated a dataset of ~515 sequences, each with 4 contact/coupling variants (2 contact types x 2 couplings), for a total of ~2058 data points **(NOTE: in progress, link to be uploaded when complete)**
+For this work, we have generated a dataset of 520 sequences, each with up to 4 contact/coupling variants (2 contact types x 2 couplings), for a total of 2077 data points **(archive released with the preprint; see `DNADataset/README.md` for the format)**
 
 To use this data set, ensure that all pickle files are in the correct directory, and use the unified training script:
 
@@ -145,7 +150,7 @@ geometric variation (MD / crystal / predicted structures).
 
     G = sequence_to_graph(
         primary_sequence="ACGTACGT",
-        complementary_sequence="TGCATGCA",
+        complementary_sequence="ACGTACGT",  # reverse complement, read 5'->3'
         left_contact_positions=("primary", 0),
         right_contact_positions=("primary", 7),
         left_contact_coupling=0.1,
