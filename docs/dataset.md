@@ -107,6 +107,24 @@ generated from a finite Hermitian H with fixed Gamma are sums of Lorentzians and
 smooth. This is the target for any comparison against a model that emits 201 independent
 values with no constraint tying neighbouring energies.
 
+## Electronic-structure conventions (2026-08-09)
+
+Recorded here because none of it appeared in any public document before this date
+(found during the methods-section scan; confirmed against the production input decks
+and `DNADataset/export_hdf5.py`):
+
+- **Level of theory: B3LYP/6-31G(d,p) in implicit water** (SCRF continuum,
+  `scrf=(solvent=water)`), single point on the idealized NAB geometry. Route line
+  verbatim in `tests/fixtures/dataset/aaac/aaac.gjf:2`.
+- **Charge and multiplicity: net charge -2(L-1), closed-shell singlet** -- every
+  internal phosphate deprotonated, free 5'/3'-OH termini, no counterions
+  (`DNADataset/dnabuilder`).
+- **Spin: spin-restricted; DOS and T are ONE spin-degenerate channel** -- double for
+  total-electron DOS or conductance (`DNADataset/export_hdf5.py`).
+- **Transport regime: zero-bias, coherent, ballistic**, eta = 0 (hardcoded on the
+  transmission side; read-from-Parameters and always 0 on the DOS side), no physical
+  Fermi level in the wide-band contact model.
+
 ## Energy convention
 
 Raw `Egrid` is 201 points spanning exactly 2 eV, e.g. `aaac` is `[-6.3031, -4.3031]` with

@@ -75,9 +75,17 @@ if __name__ == "__main__":
                  "spin-degenerate channel; double for total-electron DOS or conductance."),
         "contact_model": ("Sigma_L,R = -i*Gamma/2 * I; wide-band limit, energy-independent, "
                           "purely imaginary, no real part and no work function. Applied to "
-                          "EVERY atomic orbital of EVERY atom in the terminal base. "
+                          "EVERY atomic orbital of EVERY atom in the terminal RESIDUE "
+                          "(the full nucleotide: base, sugar and phosphate). "
                           "coupling_eV is used for both leads (gammaL == gammaR). "
                           "There is therefore no physical Fermi level in this model."),
+        "level_of_theory": ("B3LYP/6-31G(d,p) in implicit water (SCRF continuum, "
+                            "scrf=(solvent=water)); single-point on the idealized "
+                            "geometry, no optimization."),
+        "charge_and_multiplicity": ("Net charge -2(L-1) for an L-bp duplex (every "
+                                    "internal phosphodiester phosphate deprotonated, "
+                                    "free 5'/3'-OH termini, no counterions); "
+                                    "closed-shell singlet."),
         "orthogonalization": "H0 = S^-1/2 F S^-1/2 (Lowdin symmetric)",
         "atom_index_base": "contacts left_atoms/right_atoms are 1-BASED into atoms/*",
         "geometry": ("Idealized NAB fiber B-DNA template (dnabuilder); no MD, no "
