@@ -1940,39 +1940,62 @@ chosen statistic coming back empty. Measured with `eig_responses.py` in the priv
 
 ## 14. RECOMMENDED CONFIGURATION -- the answer, per objective (2026-08-03)
 
-> **RE-DERIVED 2026-08-09 ON CLEAN DATA. The suspension below is LIFTED; the numbers in this
-> section are superseded by the summary immediately following.**
+> **RE-DERIVED 2026-08-09 ON CLEAN DATA. The suspension below is LIFTED. Everything in this
+> section is superseded by the summary here.**
 >
-> The whole factorial was recomputed after commits c8b6ee8 (log_floor made real) and 6f83758
-> (solver_type recorded; train/eval mismatch closed), on a cache whose every column now comes
-> from one measurement era -- see `doe_cells_lowfloor.PROVENANCE.md`. Substitution was
-> regenerated (job 38329021), which grew its coverage from 63 to 84 cells and completed the
-> balanced design: all 20 cells now carry 3 seeds on every response, for the first time.
+> **CORRECTION, same day: the first version of this banner quoted "m = 168, 15 survivors,
+> geom p = 0.033 / 0.008" and those numbers were NOT REPRODUCIBLE.** They were computed from
+> a run whose output was piped through a filter instead of being saved, after which the
+> analysis script changed. The nearest preserved artifact gives 13 survivors, not 15, and no
+> geom p-value at all. Numbers with no artifact behind them are exactly what this project's
+> doc-loop rule exists to prevent, and the rule was broken here. Every figure below is now
+> quoted from a PRESERVED FILE, named inline.
 >
-> Clamp exposure was MEASURED, not assumed. `sub_dos` is bit-identical at floor 1e-37 vs
-> 1e-16; `sub_t` moves by at most 0.0015 (5.95% of cells) against a residual SD of 0.22-0.29.
-> `dos_t`, `ldos`, `loc_gap`, `best_epoch` are training-time metrics and never touched the
-> frobenius path. `len_slope`/`len_r2` moved by at most 0.094 / 0.019 on regeneration.
+> **Source of record: `G3NAT-internal/scratch/analysis/factorial_PRIMARY_2026-08-09.out`**
+> (model + reduction + BH) and `best_cell_table.out` (settings). Produced by
+> `factorial_unified.py` and `best_cell_table.py` after commits c8b6ee8 (log_floor made real)
+> and 6f83758 (solver_type recorded), on a cache with per-column provenance recorded in
+> `doe_cells_lowfloor.PROVENANCE.md`.
 >
-> **RESULT, one model for location and dispersion (7 terms, b centred, geom interactions
-> included), BH over the actual family, m = 168, 15 survivors:**
-> - **`alpha` is the finding: 12 of the 15 survivors.** Location AND dispersion, both scales,
->   across dos_t, ldos, best_epoch, len_slope, len_r2 and sub_dos. `alpha = 0` is the
->   best-supported call in the design by a wide margin.
-> - **`b`: only `ldos ~ b` and `ldos ~ b^2`, which are CIRCULAR** (b weights LDOS in the loss).
->   Nothing else anywhere. The twice-retracted `len_slope` dispersion claim is p = 0.970 on
->   corrected curves. `b = 0.5` stays a judgment call -- now a demonstrated null, not an
->   open question.
-> - **`geom` is WEAKER THAN THIS DOCUMENT CLAIMS ELSEWHERE.** On the complete design it is
->   raw-significant on both substitution channels (sub_dos p = 0.033, sub_t p = 0.008) with
->   both geometry interactions null, but it does **NOT survive BH at m = 168** (survivors stop
->   at p = 0.00316). Statements elsewhere in this file that geometry "survives Bonferroni on
->   both channels" rest on a smaller family and incomplete coverage and must be revised down.
->   `geom = 0` remains the right default, but as a dilution-cost argument -- these structures
->   are idealized fiber B-DNA with bit-identical phosphorus coordinates, so the channel carries
->   no information the one-hot lacks -- not as a demonstrated statistical effect.
+> **DESIGN.** b in {0, 0.25, 0.5, 0.75, 1.0}, 60 runs, 20 cells, 3 seeds. **b = 0.9 is a
+> held-out reserve slice and is EXCLUDED from primary analysis by design** -- it exists to
+> test claims formed without it and already falsified one. An earlier 2026-08-04 decision to
+> include it, still described further down this section, is SUPERSEDED.
 >
-> Reference implementation: `G3NAT-internal/scratch/analysis/factorial_unified.py`.
+> **MODEL.** All 11 terms implied by alpha x (b, b^2) x geom, enumerated rather than
+> inherited, b centred. Every term is estimable here (rank 12, df2 48). Terms are dropped
+> only when the design cannot support them, never for being non-significant.
+>
+> **SIGNIFICANCE, BH over m = 264 -- 2 survivors, and one is circular:**
+> ```
+> ldos ~ b       location   p = 0.00000    CIRCULAR: b weights LDOS in the loss
+> ldos ~ alpha   location   p = 0.00022
+> ```
+> That is the honest result of testing the complete term set at n = 60. Reduced models fit
+> per response (hierarchical, p > 0.10, effect hierarchy) retain alpha alone for `dos_t`,
+> `len_slope` and `len_r2`; alpha + geom for `loc_gap`; and 10-11 of 11 terms for
+> `best_epoch`, `sub_dos` and `sub_t`. So the historical 5-term model was simultaneously
+> OVER-specified for the fit and length responses and UNDER-specified for the substitution
+> channels -- which is why geometry conclusions moved every time the model changed.
+>
+> **GEOMETRY: the main effect is NOT significant on the complete design.** `sub_dos ~ geom`
+> p = 0.350, `sub_t ~ geom` p = 0.184. What is raw-significant is the INTERACTION
+> `geom:alpha` (p = 0.003 and 0.026), and neither survives BH. **Every statement elsewhere in
+> this file that geometry "survives Bonferroni on both channels" is superseded and wrong.**
+> `geom = 0` remains the right default as a dilution-cost argument -- these structures are
+> idealized fiber B-DNA with bit-identical phosphorus coordinates, so the channel carries no
+> information the one-hot lacks -- NOT as a demonstrated statistical effect.
+>
+> **`b`: a demonstrated null.** No non-circular effect anywhere. The twice-retracted
+> `len_slope` dispersion claim is p = 0.970 on corrected curves.
+>
+> **WHAT SETTINGS TO USE -- a different question from significance, and the one that matters.**
+> From `best_cell_table.out`, best-vs-worst cell contrast in units of the seed noise floor:
+> ldos 8.6, sub_dos 6.0, sub_t 4.4, dos_t 4.3. These dwarf any marginal main effect. Best-cell
+> tallies: alpha=0 wins 4 of 6 responses with a defined optimum, geom=0 wins 5 of 6,
+> **b=0.5 wins 3 of 6** -- so b = 0.5 has empirical support as a SETTING despite having none
+> as an EFFECT. **Recommended: alpha = 0, b = 0.5, geom = 0.** Exceptions worth naming:
+> `dos_t` prefers alpha=1, and `len_r2` prefers alpha=1, geom=1.
 >
 > ---
 >
