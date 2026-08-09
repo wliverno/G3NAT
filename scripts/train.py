@@ -180,6 +180,10 @@ def main():
         left_coupling_list = [c['coupling'] for c in contact_configs]
         right_coupling_list = [c['coupling'] for c in contact_configs]
 
+        if args.num_energy_points != len(energy_grid):
+            print(f"NOTE: --num_energy_points ({args.num_energy_points}) is ignored for "
+                  f"pickle data; the grid comes from the files ({len(energy_grid)} points).")
+
     print(f"Loaded {len(seqs)} samples")
 
     # Optional SE(3)-invariant edge geometry (hamiltonian model only)
@@ -260,6 +264,10 @@ def main():
             conv_type=args.conv_type
         )
     else:
+        if args.dropout != 0.0:
+            print(f"WARNING: --dropout ({args.dropout}) has no effect on the hamiltonian "
+                  "model (it has no dropout layers); the flag applies to --model_type "
+                  "standard only.")
         model = g3nat.DNATransportHamiltonianGNN(
             hidden_dim=args.hidden_dim,
             num_layers=args.num_layers,

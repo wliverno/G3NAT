@@ -1,5 +1,8 @@
 """Direct sequence optimizer using Softmax Straight-Through with adaptive entropy.
 
+STATUS (2026-08-09, willll): side capability, NOT currently used by the training
+pipeline or discussed in the paper. Kept functional and under test, but dormant.
+
 Based on Fast SeqProp:
     Linder, J., & Seelig, G. (2021). Fast activation maximization for molecular
     sequence design. BMC Bioinformatics, 22, 510.
