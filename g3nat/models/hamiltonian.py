@@ -578,7 +578,7 @@ class DNATransportHamiltonianGNN(nn.Module):
         # DOS = -Im(Tr(Gr)) / π, but we omit π factor for consistency
         dos_raw = -1*torch.einsum('benn->be', Gr_imag)/np.pi
         # DOS should be positive by construction in NEGF, but add safety check
-        dos_safe = torch.clamp(dos_raw, min=1e-16)  # Ensure positive values without abs()
+        dos_safe = torch.clamp(dos_raw, min=self.log_floor)
         DOS = torch.log10(dos_safe)
 
         # Per-site local DOS (LDOS): diagonal of the same spectral quantity whose
@@ -606,7 +606,7 @@ class DNATransportHamiltonianGNN(nn.Module):
         Tcoh = torch.matmul(gamma1Gr_real, gamma2Ga_real) - torch.matmul(gamma1Gr_imag, gamma2Ga_imag)
         T_raw = torch.einsum('benn->be', Tcoh)
         # Transmission should be positive by construction, add safety check
-        T_safe = torch.clamp(T_raw, min=1e-16)  # Ensure positive values
+        T_safe = torch.clamp(T_raw, min=self.log_floor)
         T = torch.log10(T_safe)
 
         if squeeze_output:
