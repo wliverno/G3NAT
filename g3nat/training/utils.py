@@ -1,4 +1,10 @@
-"""Training utilities including batch samplers, dataset splitting and seeding."""
+"""Training utilities: length-bucketing batch sampler and init seeding.
+
+The flat-index `split_dataset` that used to live here (sklearn train_test_split
+over raw indices) was REMOVED on 2026-08-09: the DFT dataset has ~4 contact
+variants per sequence, so a flat split leaks sequences across train/val. Use
+`g3nat.data.splits.grouped_split`, which is what scripts/train.py uses.
+"""
 
 import random
 from typing import List, Optional
@@ -6,8 +12,6 @@ from typing import List, Optional
 import numpy as np
 import torch
 from torch.utils.data import Sampler
-from sklearn.model_selection import train_test_split
-from torch.utils.data import Subset
 
 
 def set_init_seed(seed: Optional[int]) -> bool:
@@ -79,19 +83,3 @@ class LengthBucketBatchSampler(Sampler[List[int]]):
         return len(self._batches)
 
 
-def split_dataset(dataset, train_split: float = 0.8):
-    """Split dataset into training and validation sets."""
-    dataset_size = len(dataset)
-    train_indices, val_indices = train_test_split(
-        range(dataset_size),
-        test_size=1-train_split,
-        random_state=42
-    )
-
-    train_dataset = Subset(dataset, train_indices)
-    val_dataset = Subset(dataset, val_indices)
-
-    print(f"Training set: {len(train_dataset)} samples")
-    print(f"Validation set: {len(val_dataset)} samples")
-
-    return train_dataset, val_dataset

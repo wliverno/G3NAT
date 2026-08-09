@@ -1,15 +1,7 @@
-from numpy._typing import _128Bit
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GATConv, TransformerConv, global_mean_pool, global_add_pool
-from torch_geometric.data import Data, Batch
-from torch_geometric.loader import DataLoader
-import numpy as np
-from typing import List, Tuple, Dict, Optional, Union
-import pandas as pd
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
+from torch_geometric.nn import GATConv, TransformerConv, global_mean_pool
 
 
 class DNATransportGNN(nn.Module):
@@ -20,7 +12,10 @@ class DNATransportGNN(nn.Module):
                  num_layers: int = 4,
                  num_heads: int = 4,
                  output_dim: int = 100,  # Number of energy points
-                 dropout: float = 0.2,
+                 # 0.0 matches scripts/train.py's --dropout default, so a model built
+                 # with class defaults matches a trained run (was 0.2 before 2026-08-09;
+                 # dropout only acts in train mode, so eval behavior is unchanged).
+                 dropout: float = 0.0,
                  conv_type: str = 'transformer'):
         super().__init__()
         # Use features specified in dataset.py
