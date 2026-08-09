@@ -82,11 +82,21 @@ def create_hamiltonian(seq: str,
                 continue
             elif i%len(seq) == j%len(seq):
                 H[i, j] = HBond_energies[base_1 + base_2]
-            elif i == j+1 and i//len(seq) == j//len(seq):
-                BP = base_1 + base_2
-                H[i, j] = nn_energies[BP]
-            elif i == j-1 and i//len(seq) == j//len(seq):
-                BP = base_2 + base_1
+            elif abs(i - j) == 1 and i//len(seq) == j//len(seq):
+                # Stacking keys are the 5'->3' dinucleotide (the convention the
+                # nn_energies table is entered in, per Voityuk 2001 t(XY)). The
+                # primary half of full_seq ascends 5'->3', but the complementary
+                # half is stored REVERSED (full_seq = seq + comp[::-1]), so there
+                # ascending index walks 3'->5' and the key order flips. Before
+                # 2026-08-09 the primary strand was keyed with the REVERSED
+                # dinucleotide (methods-anomalies A2, confirmed by willll); if the
+                # table were ever re-entered in a 3'->5' convention, transpose the
+                # TABLE, not this indexing.
+                lo, hi = (j, i) if i > j else (i, j)
+                if lo // len(seq) == 0:   # primary strand: ascending index = 5'->3'
+                    BP = full_seq[lo] + full_seq[hi]
+                else:                     # complementary strand: ascending = 3'->5'
+                    BP = full_seq[hi] + full_seq[lo]
                 H[i, j] = nn_energies[BP]
 
     ind = 0
@@ -114,7 +124,8 @@ def calculate_NEGF(H: np.ndarray,
                   energy_grid: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """
     Calculate transmission and DOS using NEGF method.
-    This implementation should match NEGFProjection() in models.py exactly.
+    This implementation matches the NEGF layer in g3nat/models/hamiltonian.py
+    (both solvers) up to the singular-matrix fallback path.
 
     Args:
         H: Hamiltonian matrix [H_size, H_size]
@@ -132,8 +143,11 @@ def calculate_NEGF(H: np.ndarray,
     transmission_data = np.zeros(len(energy_grid))
     dos_data = np.zeros(len(energy_grid))
 
-    # Add small imaginary part for numerical stability (match models.py)
-    delta = 1e-12j
+    # Small imaginary regularization on the DIAGONAL, matching the model's NEGF
+    # layer ((E + i*eta)I with eta = 1e-12). Before 2026-08-09 this was a scalar
+    # added to EVERY matrix element (methods-anomalies A7); numerically invisible
+    # at 1e-12, fixed for exactness of the "matches the model" claim.
+    delta = 1e-12j * np.eye(H.shape[0])
 
     for n, energy in enumerate(energy_grid):
         # Self-energy matrices (match models.py exactly)

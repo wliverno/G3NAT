@@ -9,9 +9,16 @@ from g3nat.utils import create_hamiltonian, calculate_NEGF
 
 
 def generate_tight_binding_data(num_samples: int = 1000, seq_length: int = 10,
-                                num_energy_points: int = 100, min_length: int = -1) -> Tuple[List[str], List[str], List[np.ndarray], List[np.ndarray], np.ndarray]:
-    """Generate sample data for demonstration."""
-    np.random.seed(42)
+                                num_energy_points: int = 100, min_length: int = -1,
+                                seed: int = 42) -> Tuple[List[str], List[str], List[np.ndarray], List[np.ndarray], np.ndarray]:
+    """Generate sample data for demonstration.
+
+    NOTE: seeds numpy's GLOBAL RNG (deliberately kept global rather than a local
+    Generator so that seed=42 reproduces every historical synthetic dataset
+    byte-for-byte). Callers relying on global numpy RNG state should reseed
+    after calling this.
+    """
+    np.random.seed(seed)
 
     # Generate random DNA sequences
     bases = ['A', 'T', 'G', 'C']
