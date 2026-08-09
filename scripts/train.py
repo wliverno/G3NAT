@@ -73,6 +73,22 @@ def parse_args():
     parser.add_argument('--num_heads', type=int, default=4)
     parser.add_argument('--dropout', type=float, default=0.0)
     parser.add_argument('--n_orb', type=int, default=1)
+
+    # NEGF-layer knobs. These previously existed ONLY as constructor defaults, so they
+    # were never written into the checkpoint's `args`, and evaluation re-specified its own
+    # defaults independently. For solver_type the two disagreed -- training used 'complex',
+    # inference used 'frobenius' -- so every model on record was evaluated with a solver it
+    # was not trained with, and log_floor became a dead knob at eval time. Defaults here
+    # match DNATransportHamiltonianGNN.__init__ exactly, so behaviour is unchanged; the
+    # point is that vars(args) now records them and the checkpoint carries them forward.
+    parser.add_argument('--solver_type', choices=['complex', 'frobenius'], default='complex',
+                        help='NEGF solver. Must match at train and eval time.')
+    parser.add_argument('--log_floor', type=float, default=1e-16,
+                        help='Clamp on linear DOS/T before log10. Guards log10(0) only -- '
+                             'both quantities are positive semidefinite by construction.')
+    parser.add_argument('--complex_eta', type=float, default=1e-12)
+    parser.add_argument('--use_log_outputs', type=lambda s: s.lower() != 'false', default=True)
+    parser.add_argument('--enforce_hermiticity', type=lambda s: s.lower() != 'false', default=True)
     parser.add_argument('--conv_type', type=str, default='gat',
                        choices=['gat', 'transformer'],
                        help='Graph convolution type for the hamiltonian model. Default gat '
@@ -250,6 +266,11 @@ def main():
             num_heads=args.num_heads,
             energy_grid=energy_grid,
             n_orb=args.n_orb,
+            solver_type=args.solver_type,
+            log_floor=args.log_floor,
+            complex_eta=args.complex_eta,
+            use_log_outputs=args.use_log_outputs,
+            enforce_hermiticity=args.enforce_hermiticity,
             conv_type=args.conv_type,
             use_geometry=args.use_geometry,
             geom_norm_stats=geom_norm_stats,
