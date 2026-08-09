@@ -1369,7 +1369,9 @@ resolve it either way.
 ### 9b. Recommendation: default geometry ON -- SUPERSEDED 2026-08-03
 
 **REVERSED by the completed factorial. See sections 12b and 14.** Geometry significantly
-DAMAGES substitution response (-0.357 / -0.443, p < 1e-5, surviving Bonferroni) -- the largest
+DAMAGES substitution response (-0.357 / -0.443, p < 1e-5, surviving Bonferroni) **[REVISED
+2026-08-09: on the complete design with clean data this is p = 0.033 / 0.008 and does NOT
+survive BH at m=168 -- see the banner at section 14]** -- the largest
 effect anywhere in the design. The reasoning below is preserved because its capability argument
 still holds, but its premise, "the measured cost is zero within resolution", was measured only
 on val loss and is false on the response that matters. **Default geometry OFF on this dataset.**
@@ -1766,7 +1768,9 @@ at fixed budget is partly a convergence-rate comparison.
 **CONFIRMED and strengthened: geometry damages substitution response, and only that.** Under
 the completed factorial, geometry is the largest effect anywhere in the design and the only one
 affecting substitution: **-0.357 [-0.49, -0.23] on `sub_dos` and -0.443 [-0.61, -0.27] on
-`sub_t`, both p < 1e-5, surviving Bonferroni and Benjamini-Hochberg.** Present in 9/9 and 8/9
+`sub_t`, both p < 1e-5, surviving Bonferroni and Benjamini-Hochberg.** **[REVISED 2026-08-09:
+re-derived on the completed design at p = 0.033 / 0.008, raw-significant but NOT surviving BH
+at m=168. See the section 14 banner.]** Present in 9/9 and 8/9
 crossed cells across both alpha levels, verified cell-by-cell as not outlier-driven.
 
 Its nulls elsewhere are genuine on 4 of 6 responses (`dos_t`, `loc_gap`, `best_epoch`,
@@ -1936,6 +1940,44 @@ chosen statistic coming back empty. Measured with `eig_responses.py` in the priv
 
 ## 14. RECOMMENDED CONFIGURATION -- the answer, per objective (2026-08-03)
 
+> **RE-DERIVED 2026-08-09 ON CLEAN DATA. The suspension below is LIFTED; the numbers in this
+> section are superseded by the summary immediately following.**
+>
+> The whole factorial was recomputed after commits c8b6ee8 (log_floor made real) and 6f83758
+> (solver_type recorded; train/eval mismatch closed), on a cache whose every column now comes
+> from one measurement era -- see `doe_cells_lowfloor.PROVENANCE.md`. Substitution was
+> regenerated (job 38329021), which grew its coverage from 63 to 84 cells and completed the
+> balanced design: all 20 cells now carry 3 seeds on every response, for the first time.
+>
+> Clamp exposure was MEASURED, not assumed. `sub_dos` is bit-identical at floor 1e-37 vs
+> 1e-16; `sub_t` moves by at most 0.0015 (5.95% of cells) against a residual SD of 0.22-0.29.
+> `dos_t`, `ldos`, `loc_gap`, `best_epoch` are training-time metrics and never touched the
+> frobenius path. `len_slope`/`len_r2` moved by at most 0.094 / 0.019 on regeneration.
+>
+> **RESULT, one model for location and dispersion (7 terms, b centred, geom interactions
+> included), BH over the actual family, m = 168, 15 survivors:**
+> - **`alpha` is the finding: 12 of the 15 survivors.** Location AND dispersion, both scales,
+>   across dos_t, ldos, best_epoch, len_slope, len_r2 and sub_dos. `alpha = 0` is the
+>   best-supported call in the design by a wide margin.
+> - **`b`: only `ldos ~ b` and `ldos ~ b^2`, which are CIRCULAR** (b weights LDOS in the loss).
+>   Nothing else anywhere. The twice-retracted `len_slope` dispersion claim is p = 0.970 on
+>   corrected curves. `b = 0.5` stays a judgment call -- now a demonstrated null, not an
+>   open question.
+> - **`geom` is WEAKER THAN THIS DOCUMENT CLAIMS ELSEWHERE.** On the complete design it is
+>   raw-significant on both substitution channels (sub_dos p = 0.033, sub_t p = 0.008) with
+>   both geometry interactions null, but it does **NOT survive BH at m = 168** (survivors stop
+>   at p = 0.00316). Statements elsewhere in this file that geometry "survives Bonferroni on
+>   both channels" rest on a smaller family and incomplete coverage and must be revised down.
+>   `geom = 0` remains the right default, but as a dilution-cost argument -- these structures
+>   are idealized fiber B-DNA with bit-identical phosphorus coordinates, so the channel carries
+>   no information the one-hot lacks -- not as a demonstrated statistical effect.
+>
+> Reference implementation: `G3NAT-internal/scratch/analysis/factorial_unified.py`.
+>
+> ---
+>
+> *Superseded detail, retained for the audit trail:*
+>
 > **PARTIALLY SUSPENDED 2026-08-09 -- do not cite the length-derived parts.** Two of the eight
 > factorial responses, `len_slope` and `len_r2`, are computed by `doe_analysis.py:113` from the
 > transmission curves that section 12a shows were clamped at a hardcoded `1e-16`.
