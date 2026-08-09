@@ -1,15 +1,9 @@
-from numpy._typing import _128Bit
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GATConv, TransformerConv, global_mean_pool, global_add_pool
-from torch_geometric.data import Data, Batch
-from torch_geometric.loader import DataLoader
+from torch_geometric.nn import GATConv, TransformerConv, global_mean_pool
 import numpy as np
 from typing import List, Tuple, Dict, Optional, Union
-import pandas as pd
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
 
 
 def site_ldos_log10(ldos_raw: torch.Tensor, n_sites: int, log_floor: float) -> torch.Tensor:
@@ -350,8 +344,10 @@ class DNATransportHamiltonianGNN(nn.Module):
                     H_matrix[batch_idx, u_orb_start:u_orb_end, v_orb_start:v_orb_end] = coupling_block
                     H_matrix[batch_idx, v_orb_start:v_orb_end, u_orb_start:u_orb_end] = coupling_block.conj().T
 
-        # Ensure H is positive definite by adding a diagonal shift
-        shift = 1e-6  # Small positive value
+        # Small constant diagonal offset (1e-6 eV). Historical; it does NOT make H
+        # positive definite (a Hamiltonian need not be) and is physically negligible.
+        # Kept so existing trained checkpoints reproduce bit-for-bit.
+        shift = 1e-6
         identity = torch.eye(H_matrix.size(-1), device=device)
         H_matrix = H_matrix + shift * identity.unsqueeze(0).expand(batch_size, -1, -1)
 
@@ -485,7 +481,9 @@ class DNATransportHamiltonianGNN(nn.Module):
         # H_offdiag has values only in upper triangle, so transpose gives lower triangle
         H_matrix = H_diag + H_offdiag + H_offdiag.transpose(-1, -2)
 
-        # Diagonal shift for positive definiteness
+        # Small constant diagonal offset (1e-6 eV); historical, physically negligible,
+        # kept for bit-for-bit reproducibility of existing checkpoints (see the
+        # reference implementation's comment above).
         shift = 1e-6
         identity = torch.eye(H_size, device=device)
         H_matrix = H_matrix + shift * identity.unsqueeze(0).expand(batch_size, -1, -1)
@@ -574,12 +572,11 @@ class DNATransportHamiltonianGNN(nn.Module):
         #Gr = Gr_real - 1j * Gr_imag
         #Ga = Gr_real.transpose(-2, -1) - 1j*Gr_imag.transpose(-2, -1)
 
-        # Calculate DOS using correct NEGF formula
-        # DOS = -Im(Tr(Gr)) / π, but we omit π factor for consistency
+        # DOS = -Im(Tr(Gr)) / pi, matching calculate_NEGF and the DFT reference
         dos_raw = -1*torch.einsum('benn->be', Gr_imag)/np.pi
         # DOS should be positive by construction in NEGF, but add safety check
         dos_safe = torch.clamp(dos_raw, min=self.log_floor)
-        DOS = torch.log10(dos_safe)
+        DOS = torch.log10(dos_safe) if self.use_log_outputs else dos_safe
 
         # Per-site local DOS (LDOS): diagonal of the same spectral quantity whose
         # trace gives dos_raw above. Linear units, unclamped -- side channel only,
@@ -607,7 +604,7 @@ class DNATransportHamiltonianGNN(nn.Module):
         T_raw = torch.einsum('benn->be', Tcoh)
         # Transmission should be positive by construction, add safety check
         T_safe = torch.clamp(T_raw, min=self.log_floor)
-        T = torch.log10(T_safe)
+        T = torch.log10(T_safe) if self.use_log_outputs else T_safe
 
         if squeeze_output:
             self.ldos = ldos_lin.squeeze(0)
