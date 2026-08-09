@@ -283,3 +283,29 @@ guanosine derivative; 2007: adenosine versus the A-T pair, with no thymidine oxi
 detected). These are NOT gas-phase vertical ionization potentials and are not directly
 comparable to them -- see `docs/model-results.md` section 4b for why, and for the retraction
 of an earlier entry that wrongly implied the citation could not be traced.
+
+## Statistical methodology for the training-configuration factorial (EVIDENCED, retrieved 2026-08-09)
+
+Cited from `docs/doe-methods.md`. Each entry below was verified by web retrieval on
+2026-08-09 (title, authors, venue, volume and pages checked against the publisher's or an
+indexing service's record), not quoted from memory.
+
+- Benjamini, Y.; Hochberg, Y. (1995). "Controlling the false discovery rate: a practical
+  and powerful approach to multiple testing." *J. R. Statist. Soc. B* 57(1), 289-300.
+  doi:10.1111/j.2517-6161.1995.tb02031.x -- the FDR procedure used for multiplicity
+  control over the factorial's test family.
+- Box, G.E.P.; Meyer, R.D. (1986). "Dispersion effects from fractional designs."
+  *Technometrics* 28(1), 19-27. -- precedent for analysing dispersion (spread) responses
+  from factorial designs on a log scale.
+- Nelder, J.A. (1977). "A reformulation of linear models." *J. R. Statist. Soc. A* 140(1),
+  48-63. doi:10.2307/2344517 -- the marginality principle: interactions are meaningful
+  only in models containing their parent terms; the basis for hierarchical backward
+  elimination.
+- Peixoto, J.L. (1990). "A property of well-formulated polynomial regression models."
+  *The American Statistician* 44(1), 26-30. doi:10.1080/00031305.1990.10475687 -- a
+  polynomial model is invariant under coding transformations (e.g. centring) iff it
+  respects effect hierarchy; the basis for centring b and restricting elimination to
+  well-formulated models.
+- Shapiro, S.S.; Wilk, M.B. (1965). "An analysis of variance test for normality (complete
+  samples)." *Biometrika* 52(3/4), 591-611. -- the normality check applied to raw
+  cell-level spreads before trusting the raw-scale dispersion analysis.
