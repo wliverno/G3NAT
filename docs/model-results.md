@@ -2240,3 +2240,190 @@ Computed with `optimal_config.py` in the private notes tree. PENDING: the onsite
 objectives are not yet in this table -- they need the graph-distance fix of 13a first, and they
 are the objectives where the physics model's effect is largest relative to its noise, so they
 may move the alpha recommendation.
+
+
+## 15. L=12 DFT validation and the scalability verdict (2026-08-09/10)
+
+The first new reference data this project has produced, and the answer to the question the
+paper turns on. willll's directive, verbatim: "the hamiltonian method MUST be scalable over
+the standard method, if it isn't something is seriously wrong or you need to have a very
+grounded explanation." **Verdict: scalable, with the mechanism measured; nothing wrong.**
+Everything here is MEASURED; artifacts live in `G3NAT-internal/scratch/analysis/` (the
+`scal_*` set, plus `scal_verdict.md` for the full writeup) and
+`G3NAT/DNADataset/validation_L12/`.
+
+### 15a. The four new records, verified end to end
+
+Four 12-bp duplexes -- 50% beyond every training length -- through the identical pipeline
+(same route line, charge formula, solvent, eta = 0, HOMO +/- 1 eV 201-point grid, 4
+gamma/mode variants; Gaussian pinned c01; the Python NEGF port): `GTCAGGATCTGA` (random-0),
+`ACTTGACAGTCA` (random-1), `GGGGGGGGGGGG` (poly-G), `ATATATATATAT` ((AT)n). 16 records, all
+validating; `sum(DOSAtom)/DOS` at machine epsilon.
+
+**The unforced end-to-end check:** the four HOMOs order by composition -- poly-G shallowest
+(-4.6940 eV), (AT)n deepest (-5.5235) -- a 0.83 eV spread reproducing the 0.813 eV / 13.6
+sigma AT-vs-GC separation measured across the training set (dataset.md), at a length nothing
+in the pipeline was tuned for.
+
+An agent-authored "pre-registered decision rule" for a slope test on these records
+(`G3NAT-internal/paper/dft-validation-strands.md`) is NOT part of the record: willll does
+not recognize or trust it (2026-08-09, methods-anomalies B3), its required L=8 anchors do
+not exist in the dataset (verified: no gtcaggat / acttgaca / gggggggg / atatatat), and his
+operative instruction stands -- evaluate on the standard metrics. That is what follows.
+
+### 15b. Protocol, and two corrections to earlier L=12 numbers
+
+All 81 Hamiltonian checkpoints (27 configs x 3 seeds) and all 6 direct-model checkpoints
+(baseline gat/transformer x 3 seeds), scored per checkpoint on ITS OWN grouped-split
+held-out records at L=4..8 from `pickle_files_v2` (37,497 model-record evaluations,
+`scal_lensweep.out`) plus the 16 L=12 records; `log_floor = 1e-30` (real since c8b6ee8);
+training-consistent complex solver throughout.
+
+Two corrections to numbers previously circulated from the first-pass artifacts:
+
+1. **Reference basis (B12).** `l12_deepdive_sweep.py`'s L=8 reference was 20 records sampled
+   from `pickle_files` (v1) over the whole pool -- ~16 of them TRAINING records for models
+   trained on v2. On the corrected held-out-v2 basis the degradation ratio barely moves and
+   the conclusion is identical (below); the corrected numbers are the quotable ones.
+2. **Solver path (B10).** The `l12_deepdive_*` / `audit_l12*` artifacts ran the frobenius
+   evaluation path on pre-fix checkpoints. Median disagreement with the training-consistent
+   path is 3.2e-5 in log10 T, but the tail is heavy: 1.4% of the 1296 model-record pairs
+   differ by > 0.1 decade, max 3.82 decades (DOS max 2e-3). A few T values in those files
+   are therefore materially wrong; the `scal_*` numbers below supersede them (deep tail:
+   3.195 vs 4.524 on the corrected path, against 2.910 vs 4.502 first-pass -- direction
+   unchanged).
+
+Also recorded here because anyone comparing H0 files will hit it: **cross-session H0
+comparisons scatter at ~1e-7** (last ASCII digit; measured 56,931,680 of 76,003,524
+elements on the poly-G L=12 control, recorded in methods-anomalies B13) purely from
+BLAS library drift through the 8-significant-digit roundtrip -- reproduced by reparsing
+the reference's own txt. Bit-level H0 claims require same-session controls.
+
+### 15c. Transmission: the crossover has already happened
+
+The DFT transmission minimum deepens linearly at **2.088 decades per bp** (R2 0.925 over
+1013 held-out L=4..8 records; the law predicts the held-out L=12 minimum to 0.43 decades on
+a 24-decade extrapolation) [`scal_crossover.out`]. DOMAIN (willll): this is the expected
+exponential tunneling decay; 2.09 decades/bp = 4.81 per bp in natural log. In distribution BOTH families track it
+(direct -2.058, Hamiltonian -2.086 dec/bp). Out of distribution the direct model's output
+range extends at **-0.787 dec/bp -- 40% of truth -- while the Hamiltonian keeps -1.917,
+96%** [`scal_crossover.out` S2]. The direct model is rate-limited, not floor-limited: its
+emitted minimum tracks the DFT minimum to 0.02-0.27 decades at every training length, then
+stops extending, leaving it 4.93 decades short of the deepest L=12 target vs the
+Hamiltonian's 0.55 [`scal_lenmetrics.out` sec 4].
+
+Consequence, measured [`scal_lenmetrics.out` sec 3; `scal_final.out` B]:
+
+| L | tail frac (<-16) | full-grid T ham | full-grid T direct | ham beating worst direct |
+|----|------|-------|-------|-------|
+| 4-7 | 0.000 | 1.07-1.78 | 0.45-0.79 | 0/81 at every length |
+| 8  | 0.138 | 2.091 | 0.889 | 0/81 |
+| 12 | 0.482 | 4.679 | 3.793 | **57/81** |
+
+Best Hamiltonian cell at L=12 (b=1.0, alpha=1, geom=0): **2.870 vs the direct family mean
+3.793 -- 24% ahead**; deep tail (targets < -16, 48.2% of the grid): best cell 1.456 vs
+direct 4.524, **3.1x ahead**. At L=8 the direct model still WINS the tail (its range
+reaches -17.9); the governing variable is target depth relative to what the model can
+emit, not tail fraction.
+
+**The structural lower bound** (no fitted error model: a target below a model's reachable
+range costs at least the shortfall) validates at L=12 (bound 2.770, measured 3.793) and
+predicts the direct family cannot beat **5.99 decades at L=16** while the best Hamiltonian
+cell projects 4.37 [bound: `scal_bootstrap.out` sec 4; projection: sec 3]. Full-grid T
+crossover estimates: against
+the best Hamiltonian cell it has ALREADY happened (projected onset L = 9.4); against the
+family mean -- which averages in the nine geometry-on cells that are independently the
+worst -- L = 23.2 (cluster-bootstrap median 15.7, 50% CI [12.8, 23.3])
+[`scal_final.out` C; `scal_bootstrap.out`]. Floor governance: the measured target
+noise floor is clean to log10 T = -24.17 (zero replicate scatter under 1e-8 H0
+perturbation; 1 record x 15 energies x 4 replicates -- extend before the paper ships it)
+[`target_noise_38326039.out`]. The symmetric -16-floor variant is reported alongside
+(direct 2.248 vs ham 3.814, best cell 2.351 overlapping) so the floor choice is visible
+-- NOTE these three numbers are from the PRE-FIX evaluation path [`audit_l12.out`;
+never recomputed on the corrected path, expected shift <= the B10 tail] and carry the
+SESSION-STATE caveat verbatim: the symmetric -16 floor and the deep-tail win are
+mutually exclusive by construction, so the floor must be set by the independent noise
+measurement and a sensitivity sweep, never by which value flatters the model.
+
+### 15d. DOS: transfers now, absolute crossover predicted
+
+DOS touches no clamp anywhere (dos_floor_frac = 0.0, all 87 checkpoints
+[`audit_l12.out`; DOS is solver-path-insensitive to 2e-3, so the pre-fix source is
+sound here]). On the corrected
+held-out-v2 basis: L=8 -> L=12 degradation **Hamiltonian 1.074x [0.889, 1.371] vs direct
+1.510x [1.435, 1.636]** -- Mann-Whitney U=0, p = 1.98e-9 [`scal_final.out` A]. The absolute
+gap is inherited from in-distribution fit, not created by extrapolation, and closes
+monotonically: 2.70x (L=4), 2.40x (L=8), **1.71x (L=12)**; OOD rates +0.0117 vs +0.0351
+dec/bp [`scal_bootstrap.out` sec 1]. Projected absolute crossover **L ~ 25** (cluster bootstrap
+over sequences x checkpoints: median 25.0, 50% CI [21.1, 32.7], 90% CI [17.9, 48.0], 100%
+of replicates finite), or L ~ 19 for the best DOS cell [`scal_bootstrap.out`]. **This is a
+prediction, not a result**: a 2-point extrapolation off ONE out-of-distribution length and
+FOUR sequences, and the bootstrap says sequence count -- not seed noise -- dominates every
+interval.
+
+The offset/shape decomposition [`scal_decomp.out`] killed the candidate mechanism: in-window
+DOS magnitude is FLAT over L=4..8 (regressed exponent 0.117, not ~1), so there was no
+log10(L) step for a length-blind model to miss; ~84% of the direct model's L=12 DOS
+degradation is SHAPE error. The cleanest single signature of length blindness is the direct
+model's signed offset: -0.002..-0.011 at every training length, -0.092 at L=12 -- unbiased
+where it has seen data, biased the moment it has not.
+
+### 15e. In distribution the ordering REVERSES -- state it before a referee does
+
+Fitting L=4..8 only: the Hamiltonian degrades FASTER with length (+0.0231 vs +0.0142
+dec/bp, p = 0.0055) [`scal_lenmetrics.out` sec 2]. The scalability case lives entirely
+outside the training range, and the diagnostic that licenses the OOD basis is the L=12
+trend-break: every direct checkpoint breaks its own in-distribution line UPWARD
+(+0.086 [+0.061, +0.117]) while the Hamiltonian family sits on trend (-0.044).
+
+### 15f. Defect checks -- all four clean
+
+(a) Dropping the capacity-exceeded (AT)n barely moves anything (ham 0.7092 -> 0.6829,
+direct 0.4159 -> 0.3992; still 0/81 on absolute DOS) -- and AT-content correlates with
+DOS error at L=4 and L=12 but not L=5..8, and hits the direct model too, so AT
+under-provisioning at n_orb=2 is real and publishable but NOT the driver here.
+(b) The energy-resolved ham/direct error ratio SHRINKS in all 10 bins from L=8 to L=12;
+the Hamiltonian's worst relative bins are in-distribution, in the empty gap region -- no
+localized pathology at the HOMO or band edges. (c) Cell ranking transfers L=8 -> L=12 at
+Spearman +0.945 (DOS) / +0.925 (T). The standing answer (b=0.5, alpha=0, geom=0) is 4/27
+on L=12 DOS and 5th-flattest on degradation -- sound for DOS transfer -- but 12/27 on
+length-extrapolated TRANSMISSION, where the top three cells are all alpha=1, geom=0: the
+standing answer summarises other responses, exactly per its own warning. Geometry-on is
+the worst cell on every L=12 response. (d) All 16 records' contacts verify against their
+own `Parameters.txt` through the loader. [`scal_checks.out`, `scal_contact_check.out`]
+
+**(e) The L=12 DOS-magnitude anomaly, CLOSED 2026-08-10** [`scal_b8_b11_closure.out`].
+The investigation flagged the L=12 in-window DOS as out of family with the training
+lengths in two directions at once. Broadening is ruled out (all 16 L=12 `Parameters.txt`
+carry 0.000000, same as training). The ratio>100 cut excludes EXACTLY 147 records --
+independently reproducing dataset.md's eta=0 artifact count -- and softens the
+linear-integral growth from L^3.71 to L^2.58 while mean log10 DOS stays flat either way.
+Verdict: heavy-tail artifact statistics plus (AT)n composition; no pipeline defect. (The
+same artifact also measured the substitution-response floor question: the 1e-16 floor
+moves 12 of 168 sub_dos/sub_t values by at most 1.5e-3 = 0.76% of the residual SD --
+real, immaterial.)
+
+Best-vs-worst cells at L=12, mean over 16 records then 3 seeds [`scal_final.out` B]:
+
+| response | best cell | value [seeds] | worst cell | value | ratio |
+|---|---|---|---|---|---|
+| DOS RMSE | b=0.10, alpha=1, geom=0 | 0.601 [0.556, 0.618, 0.630] | b=0.75, alpha=1, geom=1 | 0.965 | 1.61x |
+| full-grid T | b=1.00, alpha=1, geom=0 | 2.870 [2.085, 2.500, 4.026] | b=0.25, alpha=1, geom=1 | 8.210 | 2.86x |
+| deep-tail T | b=0.25, alpha=1, geom=0 | 1.456 [0.817, 1.481, 2.069] | b=0.25, alpha=1, geom=1 | 9.643 | 6.62x |
+
+Best-vs-worst contrasts show the cells differ, not which factor caused it -- only the
+per-term F-test isolates a factor (the standing caution; doe-methods.md sec. 9).
+
+### 15g. What one more DFT length settles
+
+**L=16 discriminates the two DOS laws at 3.7x the direct family's seed noise** (OOD-rate
+law predicts direct dos_rmse 0.556, in-distribution-trend law 0.387) and tests the
+structural transmission bound (direct cannot beat 5.99; best cell projects 4.37). L=20
+tests the DOS crossover itself. Sequence COUNT matters more than length: the current OOD
+base is four sequences, half of them composition extremes. **The L=16 campaign (12
+sequences: poly-G and random-0 continuity anchors + 10 composition-matched, seeded
+manifest) was submitted 2026-08-10** -- 12 jobs, 38371462-74 with 38371464 skipped
+(not ours), serialized on compute-bigmem;
+`DNADataset/validation_L16/CAMPAIGN-STATUS.md` is the running record, including the
+readmat MaxBf=30000 rebuild that unblocked L>=14 conversions (byte-parity verified;
+gauopen/README.md).

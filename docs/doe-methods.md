@@ -216,6 +216,11 @@ responses with a defined optimum, alpha = 0 wins 4, geom = 0 wins 5, and b = 0.5
 wins 3 (no other b level wins more than 1). A factor level that wins on most
 responses is a defensible default even when its ANOVA term is not significant.
 
+The standing guardrail travels with the table: a best-vs-worst contrast shows the
+CELLS differ, not which factor caused it -- cells differ in more than one factor at a
+time, and only the per-term F-test of section 5 holds the others constant. Best-cell
+results select settings; they never establish effects.
+
 ## 10. Reference implementation
 
 The analysis is implemented in three scripts (internal repository,
