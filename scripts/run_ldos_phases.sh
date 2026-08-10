@@ -48,6 +48,7 @@
 #   PHASE=C B_BEST=<b> B_NEIGHBOUR=<b> sbatch --array=0-5 scripts/run_ldos_phases.sh
 #   PHASE=O sbatch --array=0-8  scripts/run_ldos_phases.sh      # 3 b-values x 3 seeds
 #   PHASE=O O_B="0.0 0.1" sbatch --array=0-5 scripts/run_ldos_phases.sh
+#   PHASE=T N_ORB=2 sbatch --array=0-2 scripts/run_ldos_phases.sh   # transmission-only
 
 module load cuda
 source /gscratch/anantram/willll/miniconda3/etc/profile.d/conda.sh
@@ -247,8 +248,31 @@ case "${PHASE}" in
     TAG="O_a1.0_b${B_VAL}_s${SEED}${NORB_TAG}${GEOM_TAG}"
     EXTRA=(--structured_onsite --alpha_granularity global --alpha_mode fixed --alpha_value 1.0)
     ;;
+  T)
+    # TRANSMISSION-ONLY (loss_c = 0), willll 2026-08-10. The previously
+    # UNREACHABLE arm: b and (1-b) sum to 1, so the DOS family always carried
+    # weight 1 and "train on T alone" had never been run in either model family.
+    # What it tests: whether DOS/LDOS supervision is what disciplines H (the
+    # REASONED prediction is that T-only reproduces the -33 eV-era junk H --
+    # under-determination worsens with less supervision), and whether dropping
+    # the DOS family helps, hurts, or does nothing to held-out T. Held-out DOS
+    # and LDOS agreement are still MEASURED every epoch (trainer diagnostics
+    # and metric_history are unconditional), so the arm reports what it was
+    # never trained on. Matched to the factorial replication config; run with
+    # N_ORB=2 for comparability with the 60-run design.
+    N=${#SEEDS[@]}
+    if [ "$i" -ge "$N" ]; then
+      echo "ERROR: array task $i out of range for phase T (valid range 0-$(( N - 1 )), $N cells = ${#SEEDS[@]} seeds)" >&2
+      exit 1
+    fi
+    SEED="${SEEDS[$(( i % ${#SEEDS[@]} ))]}"
+    B_VAL=0.0
+    TARGET=residue
+    TAG="T_c0.0_s${SEED}${NORB_TAG}${GEOM_TAG}"
+    EXTRA=(--loss_c 0.0)
+    ;;
   *)
-    echo "unknown PHASE=${PHASE}; this runner covers A, B, C and O." >&2
+    echo "unknown PHASE=${PHASE}; this runner covers A, B, C, O and T." >&2
     echo "Phase D (composition holdout) gets its own plan once Phase B lands." >&2
     exit 1
     ;;

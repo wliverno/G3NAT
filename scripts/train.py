@@ -47,6 +47,12 @@ def parse_args():
                         help='weight on the transmission loss term')
     parser.add_argument('--loss_b', type=float, default=0.0,
                         help='convex mixing weight: b*LDOS + (1-b)*DOS')
+    parser.add_argument('--loss_c', type=float, default=1.0,
+                        help='weight on the whole DOS family: total = a*T + '
+                             'c*(b*LDOS + (1-b)*DOS). Default 1.0 reproduces every '
+                             'run on record exactly; 0.0 is transmission-only '
+                             'training, the previously unreachable arm '
+                             '(willll, 2026-08-10 -- see TrainingConfig.loss_c).')
     parser.add_argument('--raw_scale_loss', action='store_true',
                        help='Compare DOS/LDOS by absolute magnitude. This is now the '
                             'DEFAULT (the flag is a no-op kept for older scripts/notes '
@@ -384,6 +390,7 @@ def main():
         optimizer=resume_optimizer,
         loss_a=args.loss_a,
         loss_b=args.loss_b,
+        loss_c=args.loss_c,
         ldos_target=args.ldos_target,
         shape_loss=args.shape_loss,
         metric_history=resume_metric_history,

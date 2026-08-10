@@ -209,12 +209,21 @@ class Trainer:
 
         a = self.config.loss_a
         b = self.config.loss_b
+        c = getattr(self.config, 'loss_c', 1.0)
         shape = self.config.shape_loss
         dos_term = dos_shape_loss if shape else dos_loss
 
         ldos_loss = None
         ldos_shape_loss = None
-        if b != 0.0:
+        if c == 0.0:
+            # Transmission-only training (loss_c=0): the previously unreachable
+            # arm. The whole DOS family is skipped by branch -- no LDOS target is
+            # required, no backward graph is built for DOS/LDOS -- while the
+            # diagnostics above (dos_loss, dos_shape_loss) remain measured and
+            # logged, so held-out DOS is still tracked on a model never trained
+            # on it.
+            total = a * transmission_loss
+        elif b != 0.0:
             # PyG drops an attribute assigned None, so presence is hasattr,
             # never `is not None`.
             if not hasattr(batch, 'ldos'):
@@ -238,11 +247,11 @@ class Trainer:
             # rather than independently -- see the docstring above.
             ldos_shape_loss = self.criterion(ldos_pred - off.unsqueeze(-1), ldos_target)
             ldos_term = ldos_shape_loss if shape else ldos_loss
-            total = a * transmission_loss + b * ldos_term + (1.0 - b) * dos_term
+            total = a * transmission_loss + c * (b * ldos_term + (1.0 - b) * dos_term)
         else:
             # Skipped by branch, never multiplied by zero, so a dataset with no
             # LDOS target still trains and no backward pass is built for it.
-            total = a * transmission_loss + dos_term
+            total = a * transmission_loss + c * dos_term
 
         return {
             'total': total,
@@ -461,6 +470,7 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
                checkpoint_callback=None, progress_callback=None, max_grad_norm: float = 1.0,
                warmup_epochs: int = 50, optimizer_name: str = 'adam',
                weight_decay: float = 1e-5, loss_a: float = 1.0, loss_b: float = 0.0,
+               loss_c: float = 1.0,
                ldos_target: str = 'residue', shape_loss: bool = False,
                metric_history: Optional[List[Dict[str, float]]] = None,
                metric_history_out: Optional[List[Dict[str, float]]] = None):
@@ -523,6 +533,7 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         weight_decay=weight_decay,
         loss_a=loss_a,
         loss_b=loss_b,
+        loss_c=loss_c,
         ldos_target=ldos_target,
         shape_loss=shape_loss
     )

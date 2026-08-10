@@ -19,12 +19,22 @@ class TrainingConfig:
     # weaker and parameter-dependent. See docs/references.md.
     optimizer: str = 'adam'          # 'adam' | 'adamw'
     weight_decay: float = 1e-5
-    # Loss weights: total = loss_a * T + loss_b * LDOS + (1 - loss_b) * DOS.
-    # loss_a=1.0, loss_b=0.0 reproduces the historical dos + transmission loss
-    # exactly. loss_b is a convex mixing weight between local and global DOS;
+    # Loss weights: total = loss_a * T + loss_c * (loss_b * LDOS + (1 - loss_b) * DOS).
+    # loss_a=1.0, loss_b=0.0, loss_c=1.0 reproduces the historical dos + transmission
+    # loss exactly. loss_b is a convex mixing weight between local and global DOS;
     # the model cannot rescale it, unlike alpha.
+    #
+    # loss_c (added 2026-08-10, willll) scales the WHOLE DOS-family term. Before it
+    # existed, transmission-only training was structurally unreachable: b and (1-b)
+    # sum to 1, so the DOS family always carried weight 1 and the knob "train on T
+    # alone" had never been run in either model family. loss_c=0 is that arm. The
+    # prediction on record (REASONED, not measured): T-only training worsens the
+    # under-determination of H (the -33 eV era) -- running it tests whether the
+    # DOS/LDOS supervision is what disciplines H, which is the honest version of
+    # "DOS is a training tool for transmission accuracy".
     loss_a: float = 1.0
     loss_b: float = 0.0
+    loss_c: float = 1.0
     # Which LDOS aggregation this run is trained/measured against. Controls
     # only which of val_ldos_residue / val_ldos_base_only in metric_history
     # holds the measured value (the other stays nan) -- it does not change
