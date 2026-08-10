@@ -34,13 +34,24 @@ C
      $  '  NBTot=',I7,' NDeriv=',I7,'   ND12=',I7,' NFrqPt=',I7,/,
      $  ' NShNEO=',I7,' NPrNEO=',I7,' R11-11=',I7,' R11-12=',I7,
      $  ' R11-13=',I7,' R11-14=',I7,' R11-15=',I7,' R11-16=',I7)
- 1110 Format(1x,A40,' NI=',I2,' NR=',I2,' NRI=',I2,' NTot=',I8,
-     $  ' LenBuf=',I5,' N=',5I6,' IType=',I5)
+C     Block-header and array formats below reproduce the ORIGINAL working
+C     binary's output byte-for-byte (asyed4/DNADataSet/scripts/readmat, whose
+C     source is lost). The as-vendored upstream revision printed no 'Label '
+C     prefix, no 'RArr='/'IArr=' data prefixes, NRI as I2, LenBuf as I5 and a
+C     trailing 'IType=' integer -- and BOTH the MATLAB readMAT.m and its
+C     Python port readmat_parse.py key on 'Label OVERLAP' + 'RArr=' and size
+C     the matrix from the LAST integer on the header line (so the trailer
+C     must be the non-integer 'ASym='). Patched 2026-08-10; regression: on
+C     gggggggggggg.mat the OVERLAP and ALPHA FOCK RArr streams are byte-
+C     identical to the working binary's (3,800,613 lines each, 0 differing)
+C     and H0 is bit-identical under a same-session parse.
+ 1110 Format(' Label ',A49,'NI=',I2,' NR=',I2,' NRI=',I1,' NTot=',I8,
+     $  ' LenBuf=',I8,' N=',5I6,' ASym=',L1)
  1120 Format(' Length=',I12,' exceeds MaxArr=',I12,'.')
  1140 Format(' LR=',I12,' but NTot=',I12,'.')
- 1150 Format(1X,10I12)
- 1160 Format(1X,10F12.6)
- 1170 Format(1X,10F12.6)
+ 1150 Format('    IArr=',10I12)
+ 1160 Format('    RArr=',10F12.6)
+ 1170 Format('    RArr=',10F12.6)
  1180 Format(5I9,3D15.6)
  1190 Format(1X,A)
  1200 Format(' NAtoms=',I7,' NBasis=',I8,' but MaxAt=',I7,' MaxBf=',I8,
@@ -92,7 +103,8 @@ C     do not recognize is skipped using Rd_Skip.
 C
    10 Call Rd_Labl(IU,IVers,CBuf,NI,NR,NTot,LenBuf,N1,N2,N3,N4,N5,IType,
      $  NRI,EOF)
-      Write(IOut,1110) CBuf,NI,NR,NRI,NTot,LenBuf,N1,N2,N3,N4,N5,IType
+      Write(IOut,1110) CBuf,NI,NR,NRI,NTot,LenBuf,N1,N2,N3,N4,N5,
+     $  IType.ne.0
       If(.not.EOF) then
         LR = LenArr(N1,N2,N3,N4,N5)
         If((NI*NR).eq.0.and.LR.ne.NTot) then
