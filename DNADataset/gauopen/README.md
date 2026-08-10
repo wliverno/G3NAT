@@ -66,11 +66,36 @@ None of these are optional, and a naive `gfortran -O2 -o readmat *.F` fails at e
 `-g -O0` also comes from that debug string. Optimisation is irrelevant for a utility that
 does one pass of file I/O.
 
-**Not yet verified: that a freshly built `readmat` reproduces the shipped binary's output
-byte for byte.** Both binaries were run against `aaacgacg_gaussian.mat` and both returned
-after one line without reading it, with different status codes (`IU=0` from the fresh build,
-`IU=-1` from the shipped one). That needs checking against a matrix-element file known to be
-readable before this build is trusted for new records.
+**VERIFIED 2026-08-10 (after the output-format patch below): a freshly built `readmat`
+reproduces the working binary's output byte for byte on everything the pipeline reads.**
+The earlier inconclusive test used `aaacgacg_gaussian.mat`, which neither binary could
+read -- the file, not the build, was the problem. Regression on
+`validation_L12/gggggggggggg/gggggggggggg.mat` against the working binary's shipped
+`gggggggggggg.txt`:
+
+- all 47 `Label` lines present and the `Label OVERLAP` header byte-identical;
+- the `Label OVERLAP` and `Label ALPHA FOCK MATRIX` `RArr=` data streams are
+  byte-identical (3,800,613 lines each, 0 differing);
+- the parsed H0 is bit-identical to a same-session control parse of the working
+  binary's own dump. (Cross-session H0 comparisons show a benign 1e-7 last-ASCII-digit
+  scatter from BLAS library drift in the S^-1/2 eigendecomposition -- present even when
+  reparsing the reference's own txt -- so bit-level comparisons must be same-session.)
+
+**The as-vendored source was a DIFFERENT PRINTER REVISION from the working binary's
+(lost) source**, and the 2026-08-05 "unlabelled numbers" failure was exactly that, not a
+compile-flag problem: no `' Label '` prefix on block headers, no `'RArr='`/`'IArr='`
+prefixes on array data, `NRI` as I2, `LenBuf` as I5, and a trailing `IType=` integer.
+The last one is load-bearing: `readMAT.m` and `readmat_parse.py` size the matrix from
+the LAST integer on the header line, so a trailing `IType=    0` silently yields 0x0
+matrices. Patched in `readmat.F` (Formats 1110/1150/1160/1170 and the block-header
+Write) to reproduce the working layout byte-for-byte; see the comment above Format 1110.
+
+Two header-array quirks observed and deliberately NOT chased (the pipeline never reads
+them): the patched build prints `IAtTyp=` as zeros where the working binary printed
+constants (604/628 etc.), and the WORKING binary's `IBfAtm=` lines contain what appear
+to be shell-type codes rather than a basis-to-atom map (the patched build's ascending
+atom indices look more plausible). Anyone consuming those arrays should verify them
+independently first.
 
 The pipeline invokes it as `readmat <seq>.mat > <seq>.txt` -- see
 `DNADataset/combined_script.slurm`.
