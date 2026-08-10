@@ -61,9 +61,16 @@ def load_trained_model(model_path: str, device: str = 'auto') -> Tuple[Union[DNA
             print("WARNING: this checkpoint predates solver_type being recorded in args "
                   "(scripts/train.py). Falling back to the constructor default 'complex', "
                   "which is what training actually used. NOTE: evaluations of this "
-                  "checkpoint made before 2026-08-09 ran the 'frobenius' path instead, so "
-                  "numbers may differ from previously published ones by ~4e-5 in log10 T. "
-                  "Pass solver_type explicitly if you need to reproduce an older result.")
+                  "checkpoint made before 2026-08-09 ran the 'frobenius' path instead. "
+                  "The two solvers TYPICALLY agree to ~3e-5 in log10 T (measured median "
+                  "3.2e-5 over 1296 L=12 model-record pairs), but the disagreement is "
+                  "heavy-tailed at isolated near-resonance energies: 1.4% of pairs "
+                  "differ by >0.1 decade and the worst measured case is 3.8 decades "
+                  "(DOS is unaffected, max 2e-3; see "
+                  "G3NAT-internal/scratch/analysis/scal_crossover.out S1). Transmission "
+                  "numbers from pre-2026-08-09 evaluations of this checkpoint are "
+                  "typically fine but not guaranteed. Pass solver_type explicitly if "
+                  "you need to reproduce an older result.")
         model = DNATransportHamiltonianGNN(
             hidden_dim=args.get('hidden_dim', 128),
             num_layers=args.get('num_layers', 4),
