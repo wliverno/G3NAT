@@ -763,37 +763,98 @@ of work, not as unrelated points.
 
 ## NOVELTY ASSESSMENT -- what is actually ours
 
+> **REVISED 2026-08-11 after willll's pushback, having checked the actual systems.** The
+> first version of this assessment said flatly that "the pipeline exists" and that the
+> architecture claim "will not survive review". That was over-conceded -- it adopted a
+> literature pass's confidence without checking WHAT SYSTEMS the precedents run on. They
+> matter, and they are not ours. Revised below. willll's two objections both hold: the
+> ML-Hamiltonian literature is periodic/extended-materials work, and the coarse-graining is
+> a real innovation.
+
+**The precedents, by system and by representation -- this is the load-bearing table:**
+
+| work | representation | system class | transport? | supervised on |
+|---|---|---|---|---|
+| DeepH, DeepH-E3 | atomic orbitals (PAO) | crystals/periodic | no | H matrix elements |
+| HamGNN | atomic orbitals | molecules + solids | no | H matrix elements |
+| SchNOrb, PhiSNet | atomic orbitals | finite molecules | **no** | H (+ S) matrix elements |
+| Wang et al. 2021 | TB matrix elements | crystals | no | ab-initio band structure |
+| DeePTB | Slater-Koster (atomic) | crystals, finite-T | no | ab-initio eigenvalues |
+| DeePTB-NEGF | Slater-Koster (atomic) | **Au break junctions, CNT-FETs** | yes | eigenvalues / DFT H,S |
+| AD-NEGF | TB params, per-system | model systems | yes | transport, but no generator |
+| **this work** | **one orbital per BASE** | **sequence-defined finite molecule** | **yes** | **transport spectra only** |
+
+Two things fall out that the first version of this assessment got wrong.
+
+**1. No precedent runs on a finite molecule with sequence identity.** DeePTB-NEGF's abstract
+names its two applications: *"comprehensive break junction simulations"* and *"carbon
+nanotube field-effect transistors (CNT-FET) at experimental dimensions"*. Those are metallic
+atomic contacts and an extended quasi-1D carbon system -- neither is a finite molecule whose
+chemical identity varies discretely from instance to instance. The fetch of the abstract
+found **no molecular-bridge junction treated at all.** Conversely the methods that DO handle
+finite molecules -- SchNOrb, PhiSNet -- compute wavefunctions, energies and forces, and no
+transport whatever. SchNOrb's abstract: *"prediction of the quantum mechanical wavefunction
+in a local basis of atomic orbitals from which all other ground-state properties can be
+derived."* Ground-state properties. Not transmission.
+
+**2. Every single precedent works at ATOMIC-ORBITAL resolution.** DeepH's PAO basis,
+SchNOrb's "local basis of atomic orbitals", DeePTB's Slater-Koster integrals -- all of them
+reproduce or parameterize electronic structure at the level of atoms and their orbitals.
+Their H has as many degrees of freedom as the reference calculation. **Nobody learns a
+Hamiltonian coarser than the atoms.** One orbital per nucleobase is a representation an
+order of magnitude below atomic resolution: for `aaac`, 8 sites against 2869 basis
+functions. [DOMAIN, willll 2026-08-11: this coarse-graining is the innovation.]
+
 **Not novel, do not claim:**
-1. "A GNN produces a TB Hamiltonian and NEGF produces transport." DeePTB-NEGF (2025) is a
-   published, experimentally validated system doing exactly this.
+1. "A neural network can predict a tight-binding Hamiltonian." Broadly established.
 2. "We learn a Hamiltonian without Hamiltonian labels." DeePTB trains on ab-initio
    eigenvalues; Wang et al. 2021 fit TB elements so the band structure matches.
 3. "ML for DNA charge transport." Korol and Segal 2019.
-4. "ML -> Hamiltonian element -> transport, for DNA." Aggarwal et al. 2021 already does this.
+4. "ML -> Hamiltonian element -> transport, for DNA." Aggarwal et al. 2021 already does this
+   -- though note it predicts PAIRWISE couplings from geometry with DFT coupling labels, not
+   a whole-sequence Hamiltonian from sequence with transport labels.
 
-**Defensible, and not found anywhere in this search:**
-1. **Supervision exclusively on transport observables, with gradients flowing back through
-   the solve.** Every H-learning method above is supervised on H, on H and S, or on
-   eigenvalues. DeePTB-NEGF has the full pipeline but runs it as two decoupled stages with
-   non-transport labels. AD-NEGF does backpropagate through NEGF but optimizes a small
-   per-system parameter vector rather than training a generator that generalizes to unseen
-   inputs. The combination -- a sequence-conditioned generator, trained end-to-end through
-   the NEGF solve, with transport spectra as the only labels -- is the contribution. **State
-   it as a combination claim, not a new mechanism.**
-2. **A coarse-grained target, which makes identifiability a real problem rather than a
-   non-issue.** The DeepH/SchNOrb/HamGNN family reproduces DFT's own matrix in an atomic
-   basis: ground-truth label, enough degrees of freedom, a regression problem. Ours is one
-   orbital per base -- far fewer degrees of freedom than the data, no ground-truth H, no
-   guarantee the observables pin the matrix down. This is why the identifiability analysis
-   and the LDOS weighting are load-bearing here and absent there, and it connects directly
-   to the von Strachwitz entry above, which reports the same under-determination in
-   differentiable DFT.
-3. **Domain.** No ML-Hamiltonian work for DNA was found. This is context, not novelty on its
-   own.
+**Defensible, and not found anywhere in this search -- three independent legs, not one:**
 
-The strongest honest framing: **the pipeline exists; the supervision signal, the
-coarse-grained parameterization, and the resulting identifiability question do not.** Points
-1 and 2 are the paper.
+1. **COARSE-GRAINING BELOW ATOMIC RESOLUTION.** [DOMAIN: willll] Every precedent
+   parameterizes electronic structure at atomic-orbital resolution and has as many degrees
+   of freedom as the reference calculation. One orbital per nucleobase is a different kind
+   of object: a physically interpretable reduced model, not a compressed reproduction of
+   DFT. This is what makes the H readable as onsite energies and couplings per base, and it
+   is what no prior method attempts.
+
+2. **FINITE, SEQUENCE-DEFINED MOLECULES.** [DOMAIN: willll] The learned-Hamiltonian
+   transport work is on periodic and extended systems -- crystals, carbon nanotubes -- and
+   on metallic break junctions. The finite-molecule methods (SchNOrb, PhiSNet) do not do
+   transport. A molecule whose identity is a discrete sequence, where the model must
+   generalize across a combinatorial space of chemically distinct instances rather than
+   across geometric perturbations of one system, is not treated anywhere found.
+
+3. **SUPERVISION EXCLUSIVELY ON TRANSPORT OBSERVABLES, gradients flowing back through the
+   solve.** Every H-learning method is supervised on H, on H and S, or on eigenvalues.
+   DeePTB-NEGF has a full pipeline but runs it as two decoupled stages with non-transport
+   labels -- no gradient reaches the Hamiltonian generator from transmission. AD-NEGF does
+   backpropagate through NEGF, but optimizes a small per-system parameter vector rather than
+   training a generator that generalizes to unseen inputs.
+
+**And the consequence that ties 1 and 3 together, which is the paper's real intellectual
+content:** because the target is coarse-grained AND the labels are transport observables,
+there is no ground-truth H, far fewer degrees of freedom than the data, and no guarantee the
+observables pin the matrix down. Identifiability is a genuine open question here, where for
+the DeepH/SchNOrb family it is a non-issue -- they have a labelled target with enough
+freedom to represent it, so recovering it is regression. This is why the identifiability
+analysis and the LDOS weighting are load-bearing in this work and absent in all of theirs,
+and it connects directly to the von Strachwitz entry above, which reports the same
+under-determination in differentiable DFT.
+
+**The framing to write:** learned tight-binding Hamiltonians are established for periodic
+and extended systems at atomic resolution, supervised on the electronic structure they
+reproduce. This work moves that to a finite, sequence-defined molecule, at a coarse-grained
+resolution far below the atomic basis, supervised only on the transport observables one can
+actually measure -- and the under-determination that follows is a real question rather than
+a solved one. Cite DeePTB-NEGF and the DeepH family as the established line, and be specific
+about which axis each is on; do not claim they do not exist, and do not concede that they
+cover this case.
 
 ## PROCESS NOTE -- the Caruso failure mode, reproduced live
 
