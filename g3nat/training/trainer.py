@@ -160,10 +160,12 @@ class Trainer:
         """Compose the loss for one batch.
 
         DOS/LDOS are compared BY ABSOLUTE MAGNITUDE by default (config.shape_loss
-        =False): the measured DOS offset matches level-counting in the HOMO+/-1eV
-        window, not basis size (see TrainingConfig.shape_loss's docstring), so it
-        is a real measurement of the ansatz's missing frontier states, not an
-        artifact to be centered away.
+        =False): the DOS offset is large, systematic and composition-dependent, so
+        it is a real measurement of what the one-orbital-per-base ansatz is
+        missing, not an artifact to be centered away. The level-counting
+        explanation this docstring used to give for the offset's SIZE is retracted
+        (see TrainingConfig.shape_loss's docstring and docs/model-results.md sec.
+        7a); the decision does not rest on it.
 
         Both the raw (magnitude) and shape (offset-corrected) versions of
         DOS/LDOS are always computed here, regardless of config.shape_loss, so

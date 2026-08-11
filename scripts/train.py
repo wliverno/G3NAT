@@ -319,16 +319,29 @@ def main():
                        vars(args), energy_grid,
                        os.path.join(args.checkpoint_dir, 'checkpoint_latest.pth'),
                        metric_history=metric_history)
-        # Save only when THIS epoch is the running minimum, so the stored weights actually
-        # correspond to the stored value. Testing min(val_losses) instead would fire at the
-        # next checkpoint after a dip and save weights from a worse epoch under the name
-        # "best" (observed: best at epoch 44, weights saved from epoch 50).
-        # Consequence: this is the best among CHECKPOINTED epochs, not the global best
-        # epoch. With checkpoint_frequency=10 we sample every 10th epoch. The reported
-        # 'best_val' below is the true global minimum of the curve and may be slightly
-        # lower than the val loss of these weights; both are stored so the gap is visible.
-        if val_losses and float(val_losses[-1]) <= float(min(val_losses)) + 1e-12 \
-                and float(val_losses[-1]) < best_val['value'] - 1e-12:
+        # Save whenever THIS checkpointed epoch beats the best CHECKPOINTED epoch so far.
+        # best_val['value'] already tracks exactly that running minimum, so this single
+        # test is the whole condition.
+        #
+        # BUG FIXED 2026-08-11 (see docs/model-results.md sec. 16). This used to also
+        # require `val_losses[-1] <= min(val_losses)`, i.e. that the checkpointed epoch be
+        # the minimum over ALL epochs -- including the nine between checkpoints that this
+        # callback never sees, because the trainer appends a val loss every epoch while
+        # this fires every checkpoint_frequency epochs. Early in training the curve falls
+        # steeply and that held; once epoch-to-epoch noise exceeded the improvement over
+        # ten epochs it stopped firing essentially permanently. Measured over the 84
+        # published runs: stored weights came from median epoch 874 against a true optimum
+        # at median epoch 1730, a median 0.0124 and worst 0.2031 above the true best val,
+        # and in 14 of 84 runs the stored "best" weights were worse than the final epoch.
+        # Two of three transmission-only runs produced no best checkpoint at all.
+        #
+        # Consequence of the correct version: this is the best among CHECKPOINTED epochs,
+        # not the global best epoch. With checkpoint_frequency=10 we sample every 10th
+        # epoch, so the stored weights are within 10 epochs of the sampled optimum. The
+        # reported 'best_val' below is the true global minimum of the curve and may be
+        # slightly lower than the val loss of these weights; both are stored, along with
+        # saved_at_epoch, so the residual gap stays visible.
+        if val_losses and float(val_losses[-1]) < best_val['value'] - 1e-12:
             best_val['value'] = float(val_losses[-1])
             save_checkpoint(model, opt, epoch, train_losses, val_losses,
                            vars(args), energy_grid,

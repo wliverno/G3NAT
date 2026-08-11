@@ -1091,20 +1091,34 @@ sampled records, `levels/2L` is essentially flat with length:
 
 | L | median levels | levels/2L | predicted bias | measured (n_orb=1) | residual |
 |---|---|---|---|---|---|
-| 4 | 11.0 | 1.375 | -0.138 | -0.4943 | -0.633 |
-| 5 | 15.0 | 1.500 | -0.176 | -0.4972 | -0.673 |
-| 6 | 18.0 | 1.500 | -0.176 | -0.5114 | -0.687 |
-| 7 | 22.0 | 1.571 | -0.196 | -0.4371 | -0.633 |
-| 8 | 24.5 | 1.531 | -0.185 | -0.4501 | -0.635 |
+| 4 | 11.0 | 1.375 | -0.138 | -0.4943 | -0.356 |
+| 5 | 15.0 | 1.500 | -0.176 | -0.4972 | -0.321 |
+| 6 | 18.0 | 1.500 | -0.176 | -0.5114 | -0.335 |
+| 7 | 22.0 | 1.571 | -0.196 | -0.4371 | -0.241 |
+| 8 | 24.5 | 1.531 | -0.185 | -0.4501 | -0.265 |
+
+> **Residual column corrected 2026-08-11.** It previously read -0.633/-0.673/-0.687/
+> -0.633/-0.635: the predicted bias had been **added** to the measured instead of
+> subtracted. Residual = measured - predicted. The correction matters beyond the
+> arithmetic -- see below.
 
 Predicted spread across L: 0.058 decades. Measured: 0.074. **The argument gets the shape
 right** -- both are flat, and an earlier claim in this section that it predicted a 0.85-decade
 gradient was itself computed from the integrated DOS rather than from levels, and is
 withdrawn.
 
-What it does not get is the size. There is a **constant -0.63 decade residual at every
-length**, remarkably constant (spread 0.054). Level counting accounts for roughly a quarter of
-the measured offset and something else accounts for the rest.
+What it does not get is the size. There is a **-0.30 decade mean residual**, and level
+counting accounts for **37% of the measured offset** (27.9% at L=4 rising to 44.8% at L=7);
+something else accounts for the rest.
+
+The residual is **not** constant across length: it runs -0.356, -0.321, -0.335, -0.241,
+-0.265 over L=4..8, a spread of 0.115. The earlier text called it "remarkably constant
+(spread 0.054)", which was an artifact of the sign error -- the predicted bias grows in
+magnitude with L, so adding it instead of subtracting it cancelled the trend and halved the
+apparent spread. Corrected, the residual shrinks with length, i.e. level counting explains
+progressively more of the offset as the strand gets longer. Whether that trend is real is
+not established here: it is five points at one seed against a cross-seed scatter of +-0.40
+(below), which is more than three times the whole trend.
 
 That residual is **not** dataset contamination. Excluding all 147 sum-rule-violating records
 moves the DOS bias by 0.0004 decades (`docs/dataset.md`), because the artifact occupies one
@@ -1114,7 +1128,7 @@ adds nothing: AT-poor -0.4874, mid -0.4267, AT-rich -0.5133, against a cross-see
 +-0.40.
 
 So the original claim of agreement "to 0.02 decades" was a lucky single seed meeting a
-prediction that is off by a factor of ~2.8 in linear terms. The mechanism is partially right
+prediction that is off by a factor of ~2.7 in linear terms. The mechanism is partially right
 and was oversold, which is a different failure from being wrong.
 
 **3. `eigen.mat` is usable -- the earlier confusion here was a units error.** Identified by
@@ -2427,3 +2441,179 @@ manifest) was submitted 2026-08-10** -- 12 jobs, 38371462-74 with 38371464 skipp
 `DNADataset/validation_L16/CAMPAIGN-STATUS.md` is the running record, including the
 readmat MaxBf=30000 rebuild that unblocked L>=14 conversions (byte-parity verified;
 gauopen/README.md).
+
+## 16. The best-val checkpoint condition saved the wrong weights (2026-08-11)
+
+Found while checking the transmission-only arm (sec. 17): two of its three seeds finished
+with **no best-val checkpoint at all** -- zero saves across 1172 checkpoint writes. The
+third saved twice, both before epoch 30, while its validation loss went on to fall from
+0.82 to 0.31.
+
+### 16a. The mechanism
+
+`g3nat/training/trainer.py:136` appends a validation loss **every epoch**.
+`trainer.py:144` fires the checkpoint callback **every `checkpoint_frequency` epochs**
+(default 10). The save condition at `scripts/train.py:330-331` is
+
+```python
+if val_losses and float(val_losses[-1]) <= float(min(val_losses)) + 1e-12 \
+        and float(val_losses[-1]) < best_val['value'] - 1e-12:
+```
+
+The first clause requires the checkpointed epoch to be the running minimum over **all**
+epochs -- including the nine between checkpoints that the callback never sees. Early in
+training the curve falls steeply and the checkpointed epoch usually is the running
+minimum, so the condition fires. Once epoch-to-epoch noise exceeds the improvement
+accumulated over ten epochs, the probability that the 10th epoch is also the global
+minimum-so-far collapses, and the condition stops firing essentially permanently.
+
+The second clause alone is the correct test: `best_val['value']` already tracks the
+running minimum **of checkpointed values**, which is what the surrounding comment
+(`train.py:322-329`) says the code is trying to keep.
+
+Observed save counts: 2-7 saves per run across ~1500 checkpoint writes in the phase A/B/O
+logs; 0, 0 and 2 in the three transmission-only runs.
+
+### 16b. How far the stored weights actually are from the optimum
+
+Measured across all **84** published `outputs_ldos_*/hamiltonian_pickle_model_best.pth`
+(`G3NAT-internal/scratch/analysis/_bestval_gap.py`). Every file records both
+`saved_at_epoch` (where the weights came from) and `best_val_epoch` (the true minimum of
+the full per-epoch curve), so the gap is directly measurable:
+
+| quantity | min | median | max |
+|---|---|---|---|
+| epoch the stored weights came from | 39 | **874** | 13269 |
+| epoch of the true validation minimum | 123 | **1730** | 14600 |
+
+| gap = val(stored weights) - true best val | value |
+|---|---|
+| median | 0.0124 |
+| mean | 0.0280 |
+| max | **0.2031** |
+| runs with gap > 0.05 | 16 / 84 |
+| runs where the stored "best" weights are **worse than the final epoch** | **14 / 84** |
+| runs whose stored weights are exactly at the optimum | 11 / 84 |
+
+For reference the final-epoch weights sit a median 0.0481 above the true best, so the
+stored weights are usually better than final-epoch -- just not best.
+
+### 16c. Blast radius: the factorial is not affected
+
+**Every DOE/ANOVA number stands.** `doe_analysis.py:102-104` reads
+`metric_history` at `int(val_losses.argmin())` -- the true optimum taken off the complete
+per-epoch curve -- and never loads the stored weights. Section 14's recommended
+configuration, all 11 responses, and the BH survivors are computed at the real optimum.
+
+**What is affected is anything that loads `model_state_dict`**: the L=12 evaluation, the
+substitution response, onsite/eta2 probes, and the DOS-magnitude analysis. For the three
+checkpoints the L=12 scalability result actually rides on, the gaps are **0.029, 0.006 and
+0.000** (`B_b0.5_s42/43/44_n2`; seed 44's weights sit exactly at its optimum, seed 43's are
+11 epochs off). Section 15's conclusions do not move. That is luck rather than design and
+should be read as such, not as evidence of robustness.
+
+### 16d. Recovery
+
+The true-best-epoch weights were never written to disk and cannot be recovered from
+existing files. What is recoverable is a re-run: `checkpoint_best.pth` carries
+`optimizer_state_dict`, and every run's true best epoch is recorded, so a run can be
+repeated **only as far as its recorded optimum** rather than to 15000.
+
+- runs needing recovery (gap > 0.005): **58 / 84**
+- epochs to re-run: 223,784 against 1,260,000 in the original campaign = **17.8%**
+- ~97 serial GPU-hours at the measured 15000-epoch = 6.5 h rate; ~8 h wall at 12 concurrent
+- 18 of the 58 need more than 5000 epochs; the worst needs 13834
+
+**OPEN QUESTION that decides whether recovery is exact.** No RNG state is checkpointed
+(`_recovery_scope.py` confirms: no rng/random key in any checkpoint). If training is
+bit-reproducible from `init_seed`/`split_seed` alone, a re-run reproduces the original
+trajectory and stopping at the recorded best epoch recovers exactly the intended weights.
+If it is not, the re-run is a **new draw**, its curve will not match the recorded one, and
+the recovered checkpoint must be reported with its own achieved validation loss rather than
+the recorded `best_val`. Determinism must be tested -- re-run one configuration for a few
+hundred epochs and compare against the stored `metric_history` -- before the recovery
+campaign is trusted.
+
+## 17. Transmission-only training: DOS supervision is free (2026-08-11)
+
+The knob that had never been run. Every configuration on record trained on a DOS-family
+term, because `b` and `1-b` sum to 1 and the family always carried weight 1. `loss_c`
+(added 2026-08-10, commit b647c69) makes the weight explicit --
+`total = a*T + c*(b*LDOS + (1-b)*DOS)` -- so `c=0` trains on transmission alone.
+
+**Runs:** `T_c0.0_s{42,43,44}_n2`, array job 38380861, n_orb=2, alpha=0, geometry off,
+15000 epochs, all three complete (rc=0).
+
+**Metric.** `metric_history` records `val_transmission`, `val_dos` and `val_ldos_residue`
+every epoch regardless of what the loss weighted, so the c=0 runs are comparable to the
+b-sweep on the original objective with no retraining (willll's call, 2026-08-11).
+Comparison set is the T arm's own configuration -- n_orb=2, alpha=0, geometry off -- over
+the full 15000 epochs, so the T arm is never given fewer epochs to find its optimum.
+
+### 17a. Training on transmission alone does not improve transmission
+
+Best held-out transmission, min over epochs of `val_transmission`, 3 seeds:
+
+| config | s42 | s43 | s44 | mean | sd |
+|---|---|---|---|---|---|
+| b=0.0 | 0.2954 | 0.3760 | 0.3752 | 0.3488 | 0.0463 |
+| b=0.1 | 0.3720 | 0.3459 | 0.3703 | 0.3627 | 0.0146 |
+| b=0.25 | 0.3036 | 0.3726 | 0.3611 | **0.3458** | 0.0370 |
+| b=0.5 | 0.3772 | 0.3816 | 0.3617 | 0.3735 | 0.0105 |
+| b=0.75 | 0.3728 | 0.4065 | 0.3876 | 0.3890 | 0.0169 |
+| b=0.9 | 0.3389 | 0.3960 | 0.3592 | 0.3647 | 0.0289 |
+| b=1.0 | 0.3630 | 0.4152 | 0.3624 | 0.3802 | 0.0303 |
+| **T-only (c=0)** | 0.3921 | 0.3102 | 0.5018 | **0.4014** | **0.0961** |
+
+The transmission-only arm has the **worst mean of any cell in the comparison**, and the
+largest seed spread by a factor of 2 to 9. Its seeds range over 0.19 where b=0.5 ranges
+over 0.02.
+
+**Honest limit at n=3:** 0.4014 - 0.3458 = 0.056 sits inside the T arm's own sd of 0.096,
+so the mean difference is not established. What does not require statistics: no b level is
+worse than T-only, and the arm's three seeds landed at 0.3102 and 0.5018 -- different
+basins, the behaviour already documented for alpha=1.0 in the replication section.
+
+The T-only optima also arrive absurdly early -- best epochs **356, 282 and 71** of 15000 --
+after which the arm overfits for the remaining ~14,600 epochs.
+
+### 17b. Unsupervised DOS degrades about twofold, and no further
+
+Held-out DOS at each run's transmission optimum:
+
+| config | mean val_dos | 
+|---|---|
+| b=0.0 | **0.0908** |
+| b=0.25 | 0.1016 |
+| b=0.5 | 0.1201 |
+| b=0.9 | 0.1234 |
+| b=1.0 | 0.1225 |
+| **T-only (c=0)** | **0.1848** |
+
+Never supervising DOS roughly doubles its error but leaves it at 0.18 decades rather than
+destroying it -- transmission alone still constrains DOS substantially, as it should, since
+both observables come from the same `G^r`.
+
+### 17c. What this settles about the framing
+
+The working framing had been "we want transmission to be accurate, and DOS is a good
+training tool for that" -- with the corollary that a DOS mismatch is acceptable because DOS
+is only instrumental. This run tests the corollary directly, and it does not survive:
+
+**There is no trade to make.** Dropping DOS from the loss does not buy transmission
+accuracy -- transmission gets no better (and trends worse and markedly less stable), while
+DOS roughly doubles its error. Supervising DOS is free with respect to the objective we
+care about.
+
+So the "DOS mismatch is acceptable" hedge was defending a trade-off that does not exist and
+should be replaced by the stronger claim it was standing in for: **DOS supervision costs
+nothing on transmission and yields a DOS that matches.**
+
+**Scope.** One configuration (n_orb=2, alpha=0, geometry off) at n=3. Single-config results
+are not results (doe-methods.md sec. 9); the c=0 arm has only been run at this cell, and
+whether the ordering holds at alpha=1 or with geometry on is untested.
+
+**Note.** Two of the three T-only runs finished with no best-val checkpoint file, which is
+what exposed the saving bug in section 16. Every number above is a min-over-epochs off the
+complete `metric_history`, which the final model carries, so none of them depend on the
+missing files.

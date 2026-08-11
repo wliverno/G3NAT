@@ -46,16 +46,21 @@ class TrainingConfig:
     # window is HOMO +/- 1 eV, which holds only frontier levels, not the whole
     # basis -- e.g. for `aaac` (2869 basis functions) the window contains 14
     # occupied MOs and ZERO virtual ones (HOMO-LUMO gap 4.43 eV puts the upper
-    # half of the window inside the gap). Against the model's 2L=8 sites that
-    # is log10(14/8) = 0.243 decades. The measured DOS offset across checked
-    # sequences is 0.2199 decades and the level-counting prediction (mean over
-    # those sequences) is 0.2005 -- they agree to 0.02. The basis-size story
-    # instead predicts log10(2869/8) = 2.55 decades, wrong by a factor of ~200
-    # in linear terms. So the offset is not a normalisation artifact to be
-    # centered away; it is a MEASUREMENT of how many frontier states the
-    # one-orbital-per-base ansatz is missing (and it varies with base
-    # composition), and absolute comparison is the default so that signal is
-    # not deleted. Transmission is a dimensionless probability and is NEVER
+    # half of the window inside the gap). The basis-size story predicts
+    # log10(2869/8) = 2.55 decades, wrong by a factor of ~200 in linear terms.
+    #
+    # The LEVEL-COUNTING replacement for it is ALSO retracted (2026-07-30, and
+    # again on other grounds 2026-08-09; docs/model-results.md sec. 7a). It was
+    # claimed to match the measurement to 0.02 decades; that was one seed against
+    # a cross-seed range 0.62 decades wide, and counted properly it explains only
+    # ~37% of the measured offset, leaving a -0.30 decade residual. Do not quote
+    # the level count as the reason for anything.
+    #
+    # The DECISION stands on its own and does not depend on either story: the
+    # offset is large, systematic, and varies with base composition, so it is a
+    # MEASUREMENT of what the one-orbital-per-base ansatz is missing rather than
+    # a normalisation artifact to be centered away. Absolute comparison is the
+    # default so that signal is not deleted. Transmission is a dimensionless probability and is NEVER
     # centered, under either setting. shape_loss=True remains available
     # (Trainer now shares one offset between the DOS and LDOS shape terms, see
     # trainer.py, so it no longer deletes the LDOS localization signal), kept
