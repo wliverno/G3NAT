@@ -309,3 +309,292 @@ indexing service's record), not quoted from memory.
 - Shapiro, S.S.; Wilk, M.B. (1965). "An analysis of variance test for normality (complete
   samples)." *Biometrika* 52(3/4), 591-611. -- the normality check applied to raw
   cell-level spreads before trusting the raw-scale dispersion analysis.
+
+---
+
+# INTRODUCTION AND RELATED WORK (EVIDENCED, retrieved 2026-08-11)
+
+Assembled by two independent literature passes, both instructed to verify every DOI against
+a registration-agency record rather than a search-engine summary. **Seven entries were then
+re-verified independently against the Crossref REST API before this section was written**
+(marked `[SPOT-CHECKED]`); all seven matched the reported metadata exactly, including one
+the search results actively misattribute. Diacritics are transliterated per the repo's
+ASCII rule -- restore them in the final BibTeX (Artes = Artes with acute e, Schonenberger,
+Rosch, Nogues, Kohler, Ordejon).
+
+## PRIOR ART -- machine learning applied to DNA charge transport
+
+**Read these before writing any novelty claim.** Both literature passes surfaced them
+independently, from different search framings.
+
+- **[SPOT-CHECKED]** Korol, R., Segal, D. "Machine Learning Prediction of DNA Charge
+  Transport." *J. Phys. Chem. B* **123**, 2801-2811 (2019).
+  doi:[10.1021/acs.jpcb.8b12557](https://doi.org/10.1021/acs.jpcb.8b12557)
+  ML trained on n = 3-7 bp junctions (conductance from quantum scattering) to predict
+  conductance of long duplexes. Predicts a SCALAR OBSERVABLE, not a Hamiltonian.
+
+- **[SPOT-CHECKED]** Aggarwal, A., Vinayak, V., Bag, S., Bhattacharyya, C., Waghmare, U. V.,
+  Maiti, P. K. "Predicting the DNA Conductance Using a Deep Feedforward Neural Network
+  Model." *J. Chem. Inf. Model.* **61**, 106-114 (2021).
+  doi:[10.1021/acs.jcim.0c01072](https://doi.org/10.1021/acs.jcim.0c01072)
+  Feedforward network for DNA conductance. Again a scalar readout, no intermediate H.
+  Cite as 2021 (issue); online 2020-12-15.
+
+The honest positioning: ML for DNA conductance is NOT new. What is not present in either is
+a learned intermediate **Hamiltonian** supervised only on transport spectra. That is the
+distinction the paper must draw, and it should be drawn explicitly rather than by omission.
+
+## PRIOR ART -- tight-binding models of DNA
+
+- **[SPOT-CHECKED]** Lambropoulos, K., Simserides, C. "Tight-Binding Modeling of Nucleic
+  Acid Sequences: Interplay between Various Types of Order or Disorder and Charge
+  Transport." *Symmetry* **11**(8), 968 (2019).
+  doi:[10.3390/sym11080968](https://doi.org/10.3390/sym11080968) [REVIEW]
+  The most direct prior-art review for a tight-binding-Hamiltonian paper: base-pair and
+  wire/ladder TB models, ordered vs disordered sequences.
+
+- Voityuk, A. A., Rosch, N., Bixon, M., Jortner, J. "Electronic Coupling for Charge Transfer
+  and Transport in DNA." *J. Phys. Chem. B* **104**, 9740-9745 (2000).
+  doi:[10.1021/jp001109w](https://doi.org/10.1021/jp001109w)
+  Sequence- and stacking-dependent inter-base couplings -- the off-diagonal elements a TB H
+  must reproduce. Companion to the Voityuk 2001 JCP entry already used in `physics.py`.
+
+## Direct measurements: DNA conducts, contradictorily
+
+- Fink, H.-W., Schonenberger, C. "Electrical conduction through DNA molecules." *Nature*
+  **398**, 407-410 (1999). doi:[10.1038/18855](https://doi.org/10.1038/18855) [PRIMARY]
+- de Pablo, P. J., Moreno-Herrero, F., Colchero, J., et al. "Absence of dc-Conductivity in
+  lambda-DNA." *Phys. Rev. Lett.* **85**, 4992-4995 (2000).
+  doi:[10.1103/PhysRevLett.85.4992](https://doi.org/10.1103/PhysRevLett.85.4992) [PRIMARY]
+  The opposite result. Cite WITH Fink to support "early measurements were contradictory".
+- **[SPOT-CHECKED via companion]** Porath, D., Bezryadin, A., de Vries, S., Dekker, C.
+  "Direct measurement of electrical transport through DNA molecules." *Nature* **403**,
+  635-638 (2000). doi:[10.1038/35001029](https://doi.org/10.1038/35001029) [PRIMARY]
+  10.4 nm poly(G)-poly(C); large-bandgap semiconducting behaviour.
+- Xu, B., Zhang, P., Li, X., Tao, N. "Direct Conductance Measurement of Single DNA Molecules
+  in Aqueous Solution." *Nano Lett.* **4**, 1105-1108 (2004).
+  doi:[10.1021/nl0494295](https://doi.org/10.1021/nl0494295) [PRIMARY]
+  STM break junction. NOTE: ACS deposits surnames only to Crossref; given names (Bingqian,
+  Peiming, Xiulan, Nongjian) come from Semantic Scholar, agreeing with a published reference
+  list. Confirm the byline from the PDF before submission.
+- Cohen, H., Nogues, C., Naaman, R., Porath, D. "Direct measurement of electrical transport
+  through single DNA molecules of complex sequence." *PNAS* **102**, 11589-11593 (2005).
+  doi:[10.1073/pnas.0505272102](https://doi.org/10.1073/pnas.0505272102) [PRIMARY]
+  Non-repeating 26-bp sequences, i.e. beyond homopolymers.
+- Guo, X., Gorodetsky, A. A., Hone, J., Barton, J. K., Nuckolls, C. "Conductivity of a single
+  DNA duplex bridging a carbon nanotube gap." *Nat. Nanotechnol.* **3**, 163-167 (2008).
+  doi:[10.1038/nnano.2008.4](https://doi.org/10.1038/nnano.2008.4) [PRIMARY]
+  A single GT or CA mismatch raises resistance ~300-fold.
+- Livshits, G. I., Stern, A., Rotem, D., et al. (14 authors) "Long-range charge transport in
+  single G-quadruplex DNA molecules." *Nat. Nanotechnol.* **9**, 1040-1046 (2014).
+  doi:[10.1038/nnano.2014.246](https://doi.org/10.1038/nnano.2014.246) [PRIMARY]
+- **[SPOT-CHECKED]** Artes, J. M., Li, Y., Qi, J., Anantram, M. P., Hihath, J.
+  "Conformational gating of DNA conductance." *Nat. Commun.* **6**, 8870 (2015).
+  doi:[10.1038/ncomms9870](https://doi.org/10.1038/ncomms9870) [PRIMARY]
+  Conductance rises ~1 order of magnitude on the B-to-A transition, reversibly, AT FIXED
+  SEQUENCE. **This is willll's own group.** Search engines misattribute it to
+  Bruot/Palma/Xiang/Mujica/Ratner/Tao; Crossref confirms the byline above. It also bears
+  directly on the `geom=off` default -- see the cautions below.
+- **[SPOT-CHECKED]** Zhuravel, R., Huang, H., Polycarpou, G., et al. (14 authors) "Backbone
+  charge transport in double-stranded DNA." *Nat. Nanotechnol.* **15**, 836-840 (2020).
+  doi:[10.1038/s41565-020-0741-2](https://doi.org/10.1038/s41565-020-0741-2) [PRIMARY]
+  Concludes the BACKBONE, not only the base stack, mediates long-distance transport in 30 nm
+  duplexes. A live challenge to any base-stack-only TB model. Cite it as a limitation.
+- Endres, R. G., Cox, D. L., Singh, R. R. P. "Colloquium: The quest for high-conductance
+  DNA." *Rev. Mod. Phys.* **76**, 195-214 (2004).
+  doi:[10.1103/RevModPhys.76.195](https://doi.org/10.1103/RevModPhys.76.195) [REVIEW]
+  Documents why the early measurements disagreed: contacts, environment, sample geometry.
+
+## Mechanism: tunnelling, hopping, and the regime between
+
+- Jortner, J., Bixon, M., Langenbacher, T., Michel-Beyerle, M. E. "Charge transfer and
+  transport in DNA." *PNAS* **95**, 12759-12765 (1998).
+  doi:[10.1073/pnas.95.22.12759](https://doi.org/10.1073/pnas.95.22.12759) [THEORY]
+- Giese, B. "Long-Distance Charge Transport in DNA: The Hopping Mechanism." *Acc. Chem. Res.*
+  **33**, 631-636 (2000). doi:[10.1021/ar990040b](https://doi.org/10.1021/ar990040b) [REVIEW]
+- Berlin, Y. A., Burin, A. L., Ratner, M. A. "Charge Hopping in DNA." *J. Am. Chem. Soc.*
+  **123**, 260-268 (2001). doi:[10.1021/ja001496n](https://doi.org/10.1021/ja001496n) [THEORY]
+  Cite as 2001 (issue); Crossref's bare `issued` says 2000-12-15, which is the ASAP posting.
+- Giese, B., Amaudrut, J., Kohler, A.-K., Spormann, M., Wessely, S. "Direct observation of
+  hole transfer through DNA by hopping between adenine bases and by tunnelling." *Nature*
+  **412**, 318-320 (2001). doi:[10.1038/35085542](https://doi.org/10.1038/35085542) [PRIMARY]
+  The distance dependence changes character past ~3 intervening A:T pairs. Best single
+  citation for "tunnelling at short range, hopping at long range".
+- Conwell, E. M. "Charge transport in DNA in solution: The role of polarons." *PNAS* **102**,
+  8795-8799 (2005). doi:[10.1073/pnas.0501406102](https://doi.org/10.1073/pnas.0501406102)
+  [THEORY] The competing polaron / self-trapping picture.
+- **[SPOT-CHECKED]** Xiang, L., Palma, J. L., Bruot, C., Mujica, V., Ratner, M. A., Tao, N.
+  "Intermediate tunnelling-hopping regime in DNA charge transport." *Nat. Chem.* **7**,
+  221-226 (2015). doi:[10.1038/nchem.2183](https://doi.org/10.1038/nchem.2183) [PRIMARY]
+  Coherent and incoherent transport COEXIST in stacked G:C sequences. The key modern
+  crossover citation. **A corrigendum exists** -- *Nat. Chem.* **9**, 295 (2017),
+  doi:[10.1038/nchem.2731](https://doi.org/10.1038/nchem.2731) -- check it before citing.
+- Genereux, J. C., Barton, J. K. "Mechanisms for DNA Charge Transport." *Chem. Rev.* **110**,
+  1642-1662 (2010). doi:[10.1021/cr900228f](https://doi.org/10.1021/cr900228f) [REVIEW]
+  The standard comprehensive mechanism review. Cite as 2010 (issue); online 2009-11-23.
+- Beratan, D. N. "Why Are DNA and Protein Electron Transfer So Different?" *Annu. Rev. Phys.
+  Chem.* **70**, 71-97 (2019).
+  doi:[10.1146/annurev-physchem-042018-052353](https://doi.org/10.1146/annurev-physchem-042018-052353)
+  [REVIEW] Which mechanism operates is set by donor-bridge energetics and fluctuations, not
+  fixed.
+
+## Sequence dependence
+
+- Sugiyama, H., Saito, I. "Theoretical Studies of GG-Specific Photocleavage of DNA via
+  Electron Transfer..." *J. Am. Chem. Soc.* **118**, 7063-7068 (1996).
+  doi:[10.1021/ja9609821](https://doi.org/10.1021/ja9609821) [THEORY]
+  Guanine has the lowest IP, lowered further by GG stacking, HOMO on the 5'-G. **This is the
+  properly-sourced citation for the guanine claim** that the UNRESOLVED section above could
+  not source to "Caruso".
+- Hihath, J., Xu, B., Zhang, P., Tao, N. "Study of single-nucleotide polymorphisms by means
+  of electrical conductance measurements." *PNAS* **102**, 16979-16983 (2005).
+  doi:[10.1073/pnas.0505175102](https://doi.org/10.1073/pnas.0505175102) [PRIMARY]
+  A single base-pair mismatch changes conductance by up to an order of magnitude.
+- **[SPOT-CHECKED]** Aminiranjbar, Z., Akin Gultakti, C., Zhang, A., Oren, E. E., Hihath, J.
+  "Developing design guidelines for controlling charge transport in DNA." *Nat. Chem.* **18**,
+  519-525 (2026). doi:[10.1038/s41557-025-01999-2](https://doi.org/10.1038/s41557-025-01999-2)
+  [PRIMARY] Nearest-neighbour effects reshape conductance in G:C-rich duplexes WITHOUT
+  changing composition; 20-bp designs above 1e-3 G0. The best "why sequence-resolved models
+  matter" hook, and the most current statement of the problem this paper addresses.
+  Cite as 2026 (issue); online 2025-11-18. A search engine returned a truncated 4-author
+  list omitting Hihath -- Crossref and PubMed both give the 5 above.
+
+## Length dependence and beta
+
+- Lewis, F. D., Wu, T., Zhang, Y., et al. "Distance-Dependent Electron Transfer in DNA
+  Hairpins." *Science* **277**, 673-676 (1997).
+  doi:[10.1126/science.277.5326.673](https://doi.org/10.1126/science.277.5326.673) [PRIMARY]
+- Kelley, S. O., Barton, J. K. "Electron Transfer Between Bases in Double Helical DNA."
+  *Science* **283**, 375-381 (1999).
+  doi:[10.1126/science.283.5400.375](https://doi.org/10.1126/science.283.5400.375) [PRIMARY]
+  beta spans **0.1 to 1.0 per angstrom** depending on stacking. The citation for "beta is
+  not a single number for DNA".
+- Slinker, J. D., Muren, N. B., Renfrew, S. E., Barton, J. K. "DNA charge transport over
+  34 nm." *Nat. Chem.* **3**, 228-233 (2011).
+  doi:[10.1038/nchem.982](https://doi.org/10.1038/nchem.982) [PRIMARY]
+  **Page caveat:** a widely-mirrored PMC-derived citation gives 230-235. That is wrong.
+  Crossref gives 228-233.
+
+## Applications: fabrication, sensing, damage detection
+
+- Braun, E., Eichen, Y., Sivan, U., Ben-Yoseph, G. "DNA-templated assembly and electrode
+  attachment of a conducting silver wire." *Nature* **391**, 775-778 (1998).
+  doi:[10.1038/35826](https://doi.org/10.1038/35826) [PRIMARY]
+  Exact title is "conducting", not the "conductive" form that circulates.
+- Rothemund, P. W. K. "Folding DNA to create nanoscale shapes and patterns." *Nature* **440**,
+  297-302 (2006). doi:[10.1038/nature04586](https://doi.org/10.1038/nature04586) [PRIMARY]
+- Maune, H. T., Han, S.-p., Barish, R. D., et al. "Self-assembly of carbon nanotubes into
+  two-dimensional geometries using DNA origami templates." *Nat. Nanotechnol.* **5**, 61-66
+  (2010). doi:[10.1038/nnano.2009.311](https://doi.org/10.1038/nnano.2009.311) [PRIMARY]
+  Cite as 2010 (issue); online 2009-11-08. Crossref renders Goddard as "III, W. A. G."; the
+  correct form is William A. Goddard III.
+- Dey, S., Fan, C., Gothelf, K. V., et al. "DNA origami." *Nat. Rev. Methods Primers* **1**,
+  13 (2021). doi:[10.1038/s43586-020-00009-8](https://doi.org/10.1038/s43586-020-00009-8)
+  [REVIEW] Article number from the publisher meta tag; Crossref carries no page.
+- Zhan, P., Peil, A., Jiang, Q., et al. "Recent advances in DNA origami-engineered
+  nanomaterials and applications." *Chem. Rev.* **123**, 3976-4050 (2023).
+  doi:[10.1021/acs.chemrev.3c00028](https://doi.org/10.1021/acs.chemrev.3c00028) [REVIEW]
+- Michelson, A., Shani, L., Kahn, J. S., et al. (13 authors) "Scalable fabrication of
+  chip-integrated 3D-nanostructured electronic devices via DNA-programmable assembly."
+  *Sci. Adv.* **11**(13), eadt5620 (2025).
+  doi:[10.1126/sciadv.adt5620](https://doi.org/10.1126/sciadv.adt5620) [PRIMARY]
+  DNA-programmed assembly reaching chip-integrated devices.
+- Dunn, K. E., Elfick, A. "Harnessing DNA nanotechnology and chemistry for applications in
+  photonics and electronics." *Bioconjugate Chem.* **34**, 97-104 (2023).
+  doi:[10.1021/acs.bioconjchem.2c00286](https://doi.org/10.1021/acs.bioconjchem.2c00286)
+  [REVIEW] Cite as 2023 (issue); online 2022-09-19.
+- Drummond, T. G., Hill, M. G., Barton, J. K. "Electrochemical DNA sensors." *Nat.
+  Biotechnol.* **21**, 1192-1199 (2003). doi:[10.1038/nbt873](https://doi.org/10.1038/nbt873)
+  [REVIEW] Sensing whose transduction mechanism IS base-stack charge transport.
+- Zwolak, M., Di Ventra, M. "Colloquium: Physical approaches to DNA sequencing and
+  detection." *Rev. Mod. Phys.* **80**, 141-165 (2008).
+  doi:[10.1103/RevModPhys.80.141](https://doi.org/10.1103/RevModPhys.80.141) [REVIEW]
+- Tsutsui, M., Taniguchi, M., Yokota, K., Kawai, T. "Identifying single nucleotides by
+  tunnelling current." *Nat. Nanotechnol.* **5**, 286-290 (2010).
+  doi:[10.1038/nnano.2010.42](https://doi.org/10.1038/nnano.2010.42) [PRIMARY]
+- Ivanov, A. P., Instuli, E., McGilvery, C. M., et al. "DNA tunneling detector embedded in a
+  nanopore." *Nano Lett.* **11**, 279-285 (2011).
+  doi:[10.1021/nl103873a](https://doi.org/10.1021/nl103873a) [PRIMARY]
+  Cite as 2011 (issue); online 2010-12-06.
+- Dorey, A., Howorka, S. "Nanopore DNA sequencing technologies and their applications towards
+  single-molecule proteomics." *Nat. Chem.* **16**, 314-334 (2024).
+  doi:[10.1038/s41557-023-01322-x](https://doi.org/10.1038/s41557-023-01322-x) [REVIEW]
+- Chu, M., Zhang, Y., Ji, C., et al. "DNA nanomaterial-based electrochemical biosensors for
+  clinical diagnosis." *ACS Nano* **18**, 31713-31736 (2024).
+  doi:[10.1021/acsnano.4c11857](https://doi.org/10.1021/acsnano.4c11857) [REVIEW]
+- Hall, D. B., Holmlin, R. E., Barton, J. K. "Oxidative DNA damage through long-range
+  electron transfer." *Nature* **382**, 731-735 (1996).
+  doi:[10.1038/382731a0](https://doi.org/10.1038/382731a0) [PRIMARY]
+- Boon, E. M., Ceres, D. M., Drummond, T. G., Hill, M. G., Barton, J. K. "Mutation detection
+  by electrocatalysis at DNA-modified electrodes." *Nat. Biotechnol.* **18**, 1096-1100
+  (2000). doi:[10.1038/80301](https://doi.org/10.1038/80301) [PRIMARY]
+  Single-base mismatch detection with charge transport as the transducer.
+- Genereux, J. C., Boal, A. K., Barton, J. K. "DNA-mediated charge transport in redox sensing
+  and signaling." *J. Am. Chem. Soc.* **132**, 891-905 (2010).
+  doi:[10.1021/ja907669c](https://doi.org/10.1021/ja907669c) [REVIEW]
+- Jang, J., Yoon, H. J. "Long-range charge transport in molecular wires." *J. Am. Chem. Soc.*
+  **146**, 32206-32221 (2024). doi:[10.1021/jacs.4c11431](https://doi.org/10.1021/jacs.4c11431)
+  [REVIEW] Places DNA in the wider molecular-wire context.
+- Yao, C., Li, Y., Zhang, H., et al. "Molecular electronic devices based on atomic
+  manufacturing methods." *Microsyst. Nanoeng.* **11**, 232 (2025).
+  doi:[10.1038/s41378-025-01037-8](https://doi.org/10.1038/s41378-025-01037-8) [REVIEW]
+
+### SCOPE WARNINGS -- verified real, but do not cite for what they look like
+
+- Wang, K., Deng, P., Lin, H., Sun, W., Shen, J. "DNA-Based Conductors: From Materials Design
+  to Ultra-Scaled Electronics." *Small Methods* **9**(6), 2400694 (2025).
+  doi:[10.1002/smtd.202400694](https://doi.org/10.1002/smtd.202400694) [REVIEW]
+  Verified real, but it is mostly about DNA-TEMPLATED / METALLIZED conductors and assembly,
+  plus ionic gating -- **not** intrinsic transport through the base stack. Do not cite it as
+  "a recent review of DNA charge transport".
+- **No strong 2020-2026 review of intrinsic base-stack DNA charge transport in a top venue
+  was found**, across four differently-phrased searches by one pass. If the intro needs one,
+  that gap is real. Beratan 2019 and Lambropoulos 2019 are the honest substitutes.
+
+### COULD NOT VERIFY -- do not cite
+
+- "Engineering the electronic properties of DNA." *Nat. Chem.* **18**, 441-442 (2026).
+  doi:10.1038/s41557-026-02066-0 -- the DOI resolves and the article is real (Crossref,
+  OpenAlex, PubMed PMID 41577961 all agree on title, venue, volume, pages), but **no source
+  checked lists any author**: Crossref has no author field, PubMed no AuthorList, OpenAlex
+  no authorships. Contextually it is near-certainly a commentary on Aminiranjbar et al. in
+  the same issue, but that is exactly the plausible reconstruction that manufactures a fake
+  citation. Either read the byline off the PDF, or cite Aminiranjbar et al. instead.
+
+## What the introduction may and may not claim from this set
+
+**May claim.** That transport through DNA was measured directly and contradictorily -- from
+efficient conduction (Fink 1999) to no measurable dc conductivity (de Pablo 2000) to
+semiconducting behaviour (Porath 2000) -- with the discrepancies traced to contacts,
+environment and geometry (Endres 2004); that single-molecule conductance of short duplexes
+in solution is now routine (Xu 2004, Cohen 2005); that the mechanism is not one mechanism,
+with superexchange tunnelling at short range and multistep hopping at long range (Jortner
+1998, Berlin 2001), a crossover observed at roughly three intervening A:T pairs (Giese 2001)
+and an intermediate regime where both coexist (Xiang 2015); that guanine is the hole carrier
+by virtue of the lowest ionization potential, lowered further by GG stacking (Sugiyama 1996);
+that inter-base couplings are sequence- and stacking-dependent (Voityuk 2000); that a single
+base substitution changes conductance by up to an order of magnitude (Hihath 2005, Guo 2008);
+that sequence rearrangement at FIXED composition substantially changes conductance
+(Aminiranjbar 2026); and that beta is not a constant, spanning 0.1-1.0 per angstrom
+(Kelley 1999), while transport is nonetheless detected over 34 nm (Slinker 2011).
+
+**Must not claim.**
+1. **A single canonical beta for duplex DNA.** Kelley 1999 is explicitly a range, and the
+   tunnelling-to-hopping crossover means one exponential does not hold across lengths. Quote
+   a number only with its sequence and measurement system named.
+2. **That transport is exclusively through the base stack.** Zhuravel 2020 concludes the
+   backbone mediates long-distance transport in 30 nm duplexes. This is a live challenge to
+   a base-stack-only TB model and belongs in Limitations, stated, not omitted.
+3. **That conductance is a function of sequence alone.** Artes 2015 -- willll's own group --
+   shows a reversible order-of-magnitude change from a B-to-A conformational transition at
+   fixed sequence. **This bears directly on the `geom=off` default.** Our own geometry result
+   is null (MR 9), but that is a statement about our IDEALIZED FIBER geometry, which is
+   near-constant across sequences by construction (see `docs/dataset.md`), not about geometry
+   being unimportant to DNA conductance. State the distinction ourselves rather than let a
+   referee draw it.
+4. **That ML for DNA charge transport is new.** Korol and Segal 2019 and Aggarwal et al. 2021
+   both predate this work. The novel element is the learned intermediate Hamiltonian
+   supervised only on transport spectra, and the claim must be scoped to that.
+5. **That commercial nanopore sequencing reads tunnelling current.** It reads ionic blockade
+   current. Tunnelling-current sequencing is demonstrated (Tsutsui 2010, Ivanov 2011) but is
+   not the deployed modality. Keep them separate.
