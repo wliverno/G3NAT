@@ -5,7 +5,12 @@ in this file unless it was checked against a real source (publisher page, DOI re
 arXiv, or the software's own citation page).** No reconstructing citations from memory --
 a wrong citation is worse than no citation.
 
-Last verification pass: 2026-07-24.
+Last verification pass: **2026-08-11** (introduction, related work, and ML-Hamiltonian prior
+art added; the AD-NEGF entry corrected). Previous pass 2026-07-24.
+
+**Before writing the introduction, read the NOVELTY ASSESSMENT at the end of this file.**
+The pipeline's headline shape has a published precedent; the defensible claim is narrower
+and specific.
 
 ## Tight-binding parameters
 
@@ -96,8 +101,23 @@ regime). This project's ML decisions must cite from here rather than be invented
   **This makes the planned LDOS loss EVIDENCED by close analogy rather than our own idea**, and
   independently motivates willll's `b` weighting.
 
-- **Zhou, Chen, Zhang, Wang, Wang, Guo. "AD-NEGF: An End-to-End Differentiable Quantum Transport
-  Simulator." *Phys. Rev. B* **108**, 195143 (2023).** arXiv:[2202.05098](https://arxiv.org/abs/2202.05098)
+- **Zhouyin, Z., Chen, X., Zhang, P., Wang, J., Wang, L. "Automatic differentiable
+  nonequilibrium Green's function formalism: An end-to-end differentiable quantum transport
+  simulator." *Phys. Rev. B* **108**, 195143 (2023).**
+  doi:[10.1103/PhysRevB.108.195143](https://doi.org/10.1103/PhysRevB.108.195143)
+  Preprint circulates as "AD-NEGF", arXiv:[2202.05098](https://arxiv.org/abs/2202.05098)
+
+  > **CITATION CORRECTED 2026-08-11, and one field is still unsettled.** This entry
+  > previously carried the arXiv title and a six-author list ("Zhou, Chen, Zhang, Wang,
+  > Wang, Guo"). The **published** record differs from the preprint in both title and
+  > byline. Crossref, checked directly against the DOI on 2026-08-11, returns the title
+  > above and **five** authors: Zhanghao Zhouyin, Xiang Chen, Peng Zhang, Jun Wang, Lei
+  > Wang -- a different first-author romanization, and no Hong Guo. The published title is
+  > independently corroborated by the APS journal page. The byline is not: APS returns 403
+  > to automated fetches, so nobody has read the printed byline. **Use the Crossref form,
+  > and eyeball the APS page by hand once before submission.** Reported rather than
+  > silently resolved.
+
   Closest full-pipeline precedent: optimizes Hamiltonian parameters against a target
   transmission spectrum through a differentiable NEGF solve. **Does NOT discuss gauge freedom,
   degenerate parameterizations, or ill-conditioning from backpropagating through the Green's
@@ -337,11 +357,25 @@ independently, from different search framings.
   Maiti, P. K. "Predicting the DNA Conductance Using a Deep Feedforward Neural Network
   Model." *J. Chem. Inf. Model.* **61**, 106-114 (2021).
   doi:[10.1021/acs.jcim.0c01072](https://doi.org/10.1021/acs.jcim.0c01072)
-  Feedforward network for DNA conductance. Again a scalar readout, no intermediate H.
+  arXiv:[2011.12018](https://arxiv.org/abs/2011.12018)
+  **The closest DNA-specific prior art, and closer than a first pass suggests.** It does NOT
+  predict a scalar. From the abstract, verbatim: *"we present a Machine Learning (ML) based
+  model to calculate the electronic coupling between any two bases of dsDNA/dsRNA of any
+  length and sequence"* ... *"We further use the NN predicted electronic coupling values to
+  compute the dsDNA/dsRNA conductance."* The chain ML -> Hamiltonian matrix element ->
+  transport **already exists for DNA**. Coulomb-matrix descriptors, MAE < 0.014 eV on the
+  couplings. Differences: supervised directly on DFT-computed couplings (Hamiltonian
+  labels), pairwise and geometry-driven rather than a whole-sequence graph model, and the
+  transport step sits downstream of training rather than inside it.
   Cite as 2021 (issue); online 2020-12-15.
 
-The honest positioning: ML for DNA conductance is NOT new. What is not present in either is
-a learned intermediate **Hamiltonian** supervised only on transport spectra. That is the
+  > **CORRECTION, 2026-08-11.** This entry first went into the file reading "a scalar
+  > readout, no intermediate H". That was wrong, it was mine, and it understated the nearest
+  > DNA prior art. Corrected against the arXiv abstract, quoted above.
+
+The honest positioning: ML for DNA conductance is NOT new, and neither is
+ML -> Hamiltonian -> transport for DNA. See the NOVELTY ASSESSMENT at the end of this
+section, which is narrower than it first appeared. What is not present in either is
 distinction the paper must draw, and it should be drawn explicitly rather than by omission.
 
 ## PRIOR ART -- tight-binding models of DNA
@@ -598,3 +632,175 @@ that sequence rearrangement at FIXED composition substantially changes conductan
 5. **That commercial nanopore sequencing reads tunnelling current.** It reads ionic blockade
    current. Tunnelling-current sequencing is demonstrated (Tsutsui 2010, Ivanov 2011) but is
    not the deployed modality. Keep them separate.
+
+---
+
+# ML-HAMILTONIAN AND DIFFERENTIABLE-SOLVER PRIOR ART (EVIDENCED, retrieved 2026-08-11)
+
+**Read the NOVELTY ASSESSMENT at the end of this section before writing the introduction.**
+The headline shape of this pipeline is not new, and a claim that it is will not survive
+review.
+
+## The closest prior art overall
+
+- **[SPOT-CHECKED]** Zou, J., Zhouyin, Z., Lin, D., Huang, Y., Zhang, L., Hou, S., Gu, Q.
+  "Deep learning accelerated quantum transport simulations in nanoelectronics: from break
+  junctions to field-effect transistors." *npj Comput. Mater.* **11**, 375 (2025).
+  doi:[10.1038/s41524-025-01853-6](https://doi.org/10.1038/s41524-025-01853-6)
+  arXiv:[2411.08800](https://arxiv.org/abs/2411.08800)
+  **DeePTB-NEGF.** An ML-predicted tight-binding Hamiltonian fed to NEGF to produce
+  transmission, validated against break-junction conductance histograms and CNT-FET transfer
+  characteristics at ~30,000 atoms. This is a published, validated system with the same
+  headline architecture as ours. Two differences that matter: (a) supervision is on DFT
+  eigenvalues and/or DFT-NEGF H and S matrices, **never on transport observables**; (b) NEGF
+  is applied **post hoc** to an already-trained Hamiltonian model -- two decoupled stages,
+  with no gradient flowing from transmission back into the Hamiltonian generator.
+
+## Learned Hamiltonians supervised ON the Hamiltonian
+
+All of these regress the DFT matrix itself in an atomic-orbital basis. Their H has a
+ground-truth label and enough degrees of freedom to represent it.
+
+- Schutt, K. T., Gastegger, M., Tkatchenko, A., Muller, K.-R., Maurer, R. J. "Unifying
+  machine learning and quantum chemistry with a deep neural network for molecular
+  wavefunctions." *Nat. Commun.* **10**, 5024 (2019).
+  doi:[10.1038/s41467-019-12875-2](https://doi.org/10.1038/s41467-019-12875-2)
+  **SchNOrb.** Predicts both H and the overlap matrix S; loss is explicitly Frobenius on the
+  matrix elements plus energy and force terms.
+- Unke, O. T., Bogojeski, M., Gastegger, M., et al. "SE(3)-equivariant prediction of
+  molecular wavefunctions and electronic densities." *NeurIPS 34* (2021).
+  arXiv:[2106.02347](https://arxiv.org/abs/2106.02347)
+  **PhiSNet.** Same target class, strict SE(3) equivariance built in.
+- Li, H., Wang, Z., Zou, N., et al. "Deep-learning density functional theory Hamiltonian for
+  efficient ab initio electronic-structure calculation." *Nat. Comput. Sci.* **2**(6),
+  367-377 (2022). doi:[10.1038/s43588-022-00265-6](https://doi.org/10.1038/s43588-022-00265-6)
+  **DeepH.** Full DFT H in a localized non-orthogonal PAO basis, supervised on converged DFT
+  matrix elements.
+- Gong, X., Li, H., Zou, N., et al. "General framework for E(3)-equivariant neural network
+  representation of density functional theory Hamiltonian." *Nat. Commun.* **14**, 2848
+  (2023). doi:[10.1038/s41467-023-38468-8](https://doi.org/10.1038/s41467-023-38468-8)
+  **DeepH-E3.**
+- Zhong, Y., Yu, H., Su, M., Gong, X., Xiang, H. "Transferable equivariant graph neural
+  networks for the Hamiltonians of molecules and solids." *npj Comput. Mater.* **9**, 182
+  (2023). doi:[10.1038/s41524-023-01130-4](https://doi.org/10.1038/s41524-023-01130-4)
+  **HamGNN.**
+
+## Learned Hamiltonians supervised on a DERIVED SPECTRAL quantity
+
+This is the epistemically closest class -- no H labels, only something computed from H.
+**It is not empty, so "we learn H without H labels" is not by itself a novel claim.**
+
+- Wang, Z., Ye, S., Wang, H., He, J., Huang, Q., Chang, S. "Machine learning method for
+  tight-binding Hamiltonian parameterization from ab-initio band structure." *npj Comput.
+  Mater.* **7**, 11 (2021).
+  doi:[10.1038/s41524-020-00490-5](https://doi.org/10.1038/s41524-020-00490-5)
+  A network whose neurons ARE the TB matrix elements, fitted so the resulting band structure
+  reproduces ab-initio bands. Note the DOI suffix is `-00490-5`.
+- Gu, Q., Zhouyin, Z., Pandey, S. K., et al. "Deep learning tight-binding approach for
+  large-scale electronic simulations at finite temperatures with ab initio accuracy."
+  *Nat. Commun.* **15**, 6772 (2024).
+  doi:[10.1038/s41467-024-51006-4](https://doi.org/10.1038/s41467-024-51006-4)
+  **DeePTB.** Abstract, verbatim: *"By training on structural data and corresponding ab
+  initio eigenvalues, the DeePTB model can efficiently predict tight-binding Hamiltonians
+  for unseen structures."* A learned generator of a coarse H trained on a derived spectral
+  quantity. Differs in that eigenvalues are not transport observables and no solver is
+  differentiated through.
+
+## Differentiable solvers with parameters learned inside
+
+- Kasim, M. F., Vinko, S. M. "Learning the Exchange-Correlation Functional from Nature with
+  Fully Differentiable Density Functional Theory." *Phys. Rev. Lett.* **127**, 126403 (2021).
+  doi:[10.1103/PhysRevLett.127.126403](https://doi.org/10.1103/PhysRevLett.127.126403)
+  Network parameterizes XC inside a differentiable Kohn-Sham solver, trained on eight
+  experimental data points. Same structural pattern as ours; different operator and
+  observable. Companion to the von Strachwitz entry above.
+
+## DFT+NEGF for DNA -- the expensive pipeline this replaces
+
+- Woiczikowski, P. B., Kubar, T., Gutierrez, R., Caetano, R. A., Cuniberti, G., Elstner, M.
+  "Combined density functional theory and Landauer approach for hole transfer in DNA along
+  classical molecular dynamics trajectories." *J. Chem. Phys.* **130**, 215104 (2009).
+  doi:[10.1063/1.3146905](https://doi.org/10.1063/1.3146905)
+- Qi, J., Govind, N., Anantram, M. P. "The role of cytosine methylation on charge transport
+  through a DNA strand." *J. Chem. Phys.* **143**(9), 094306 (2015).
+  doi:[10.1063/1.4929909](https://doi.org/10.1063/1.4929909)
+  **willll's own group.** DFT plus Landauer-Buttiker on an 8 bp strand, with TB onsite
+  energies and hopping integrals EXTRACTED from the DFT result -- our target quantity,
+  obtained the expensive way, one sequence at a time.
+
+## Hand-parameterized TB models for DNA
+
+- Cuniberti, G., Craco, L., Porath, D., Dekker, C. "Backbone-induced semiconducting behavior
+  in short DNA wires." *Phys. Rev. B* **65**, 241314 (2002).
+  doi:[10.1103/PhysRevB.65.241314](https://doi.org/10.1103/PhysRevB.65.241314)
+  The fishbone/ladder model. Same structural class of H we emit; parameters hand-set.
+- Hawke, L. G. D., Kalosakas, G., Simserides, C. "Electronic parameters for charge transfer
+  along DNA." *Eur. Phys. J. E* **32**(3), 291-305 (2010).
+  doi:[10.1140/epje/i2010-10650-y](https://doi.org/10.1140/epje/i2010-10650-y)
+  **Erratum:** *Eur. Phys. J. E* **34**, 118 (2011).
+  doi:[10.1140/epje/i2011-11118-4](https://doi.org/10.1140/epje/i2011-11118-4)
+  LCAO-derived complete parameter set. **The erratum revises parameters -- cite the pair.**
+  Page range confirmed against PubMed PMID 20680380 (Crossref carries first page only).
+- Simserides, C. "A systematic study of electron or hole transfer along DNA dimers, trimers
+  and polymers." *Chem. Phys.* **440**, 31-41 (2014).
+  doi:[10.1016/j.chemphys.2014.05.024](https://doi.org/10.1016/j.chemphys.2014.05.024)
+  One site per base pair -- the closest published model to our coarse-graining choice.
+
+## Backbone architecture
+
+- Schutt, K. T., Sauceda, H. E., Kindermans, P.-J., Tkatchenko, A., Muller, K.-R. "SchNet --
+  A deep learning architecture for molecules and materials." *J. Chem. Phys.* **148**(24),
+  241722 (2018). doi:[10.1063/1.5019779](https://doi.org/10.1063/1.5019779)
+  (Gilmer et al. MPNN and Velickovic et al. GAT are verified elsewhere in this file.)
+
+## ONE RESEARCH LINEAGE HAS BUILT MOST OF THIS PIPELINE
+
+Zhanghao Zhouyin, Peng Zhang and Linfeng Zhang appear across **AD-NEGF** (differentiable
+NEGF, 2023), **DeePTB** (learned TB Hamiltonian from eigenvalues, 2024) and **DeePTB-NEGF**
+(learned TB Hamiltonian into NEGF for transmission, 2025). These are not three scattered
+precedents; they are one group converging on this architecture. Cite them as a coherent line
+of work, not as unrelated points.
+
+## NOVELTY ASSESSMENT -- what is actually ours
+
+**Not novel, do not claim:**
+1. "A GNN produces a TB Hamiltonian and NEGF produces transport." DeePTB-NEGF (2025) is a
+   published, experimentally validated system doing exactly this.
+2. "We learn a Hamiltonian without Hamiltonian labels." DeePTB trains on ab-initio
+   eigenvalues; Wang et al. 2021 fit TB elements so the band structure matches.
+3. "ML for DNA charge transport." Korol and Segal 2019.
+4. "ML -> Hamiltonian element -> transport, for DNA." Aggarwal et al. 2021 already does this.
+
+**Defensible, and not found anywhere in this search:**
+1. **Supervision exclusively on transport observables, with gradients flowing back through
+   the solve.** Every H-learning method above is supervised on H, on H and S, or on
+   eigenvalues. DeePTB-NEGF has the full pipeline but runs it as two decoupled stages with
+   non-transport labels. AD-NEGF does backpropagate through NEGF but optimizes a small
+   per-system parameter vector rather than training a generator that generalizes to unseen
+   inputs. The combination -- a sequence-conditioned generator, trained end-to-end through
+   the NEGF solve, with transport spectra as the only labels -- is the contribution. **State
+   it as a combination claim, not a new mechanism.**
+2. **A coarse-grained target, which makes identifiability a real problem rather than a
+   non-issue.** The DeepH/SchNOrb/HamGNN family reproduces DFT's own matrix in an atomic
+   basis: ground-truth label, enough degrees of freedom, a regression problem. Ours is one
+   orbital per base -- far fewer degrees of freedom than the data, no ground-truth H, no
+   guarantee the observables pin the matrix down. This is why the identifiability analysis
+   and the LDOS weighting are load-bearing here and absent there, and it connects directly
+   to the von Strachwitz entry above, which reports the same under-determination in
+   differentiable DFT.
+3. **Domain.** No ML-Hamiltonian work for DNA was found. This is context, not novelty on its
+   own.
+
+The strongest honest framing: **the pipeline exists; the supervision signal, the
+coarse-grained parameterization, and the resulting identifiability question do not.** Points
+1 and 2 are the paper.
+
+## PROCESS NOTE -- the Caruso failure mode, reproduced live
+
+One literature pass reported that while chasing a full text it **constructed** a
+plausible-looking PMC identifier instead of retrieving one. It resolved to a real 2019
+*Scientific Reports* paper on acral malignant melanoma. Nothing from that fetch entered this
+file, and the details were re-obtained from the arXiv record. Recorded because it is exactly
+the failure this project's citation rule exists for: a confidently-formatted identifier that
+resolves to a real but entirely unrelated paper. Identifiers must be retrieved, never
+composed.
