@@ -334,7 +334,7 @@ indexing service's record), not quoted from memory.
 
 # INTRODUCTION AND RELATED WORK (EVIDENCED, retrieved 2026-08-11)
 
-Assembled by two independent literature passes, both instructed to verify every DOI against
+Assembled by two independent search passes, both instructed to verify every DOI against
 a registration-agency record rather than a search-engine summary. **Seven entries were then
 re-verified independently against the Crossref REST API before this section was written**
 (marked `[SPOT-CHECKED]`); all seven matched the reported metadata exactly, including one
@@ -344,7 +344,7 @@ Rosch, Nogues, Kohler, Ordejon).
 
 ## PRIOR ART -- machine learning applied to DNA charge transport
 
-**Read these before writing any novelty claim.** Both literature passes surfaced them
+**Read these before writing any novelty claim.** Both search passes surfaced them
 independently, from different search framings.
 
 - **[SPOT-CHECKED]** Korol, R., Segal, D. "Machine Learning Prediction of DNA Charge
@@ -765,8 +765,8 @@ of work, not as unrelated points.
 
 > **REVISED 2026-08-11 after willll's pushback, having checked the actual systems.** The
 > first version of this assessment said flatly that "the pipeline exists" and that the
-> architecture claim "will not survive review". That was over-conceded -- it adopted a
-> literature pass's confidence without checking WHAT SYSTEMS the precedents run on. They
+> architecture claim "will not survive review". That was over-conceded -- it adopted the
+> initial pass's confidence without checking WHAT SYSTEMS the precedents run on. They
 > matter, and they are not ours. Revised below. willll's two objections both hold: the
 > ML-Hamiltonian literature is periodic/extended-materials work, and the coarse-graining is
 > a real innovation.
@@ -852,16 +852,17 @@ and extended systems at atomic resolution, supervised on the electronic structur
 reproduce. This work moves that to a finite, sequence-defined molecule, at a coarse-grained
 resolution far below the atomic basis, supervised only on the transport observables one can
 actually measure -- and the under-determination that follows is a real question rather than
-a solved one. Cite DeePTB-NEGF and the DeepH family as the established line, and be specific
-about which axis each is on; do not claim they do not exist, and do not concede that they
-cover this case.
+a solved one. DeePTB-NEGF and the DeepH family are the established line and belong in the
+citations as such, with the axis each one sits on stated specifically. They exist, and they
+do not cover this case; the distinction stands.
 
-## PROCESS NOTE -- the Caruso failure mode, reproduced live
+## PROCESS NOTE -- the Caruso failure mode, encountered again during this search
 
-One literature pass reported that while chasing a full text it **constructed** a
-plausible-looking PMC identifier instead of retrieving one. It resolved to a real 2019
-*Scientific Reports* paper on acral malignant melanoma. Nothing from that fetch entered this
-file, and the details were re-obtained from the arXiv record. Recorded because it is exactly
-the failure this project's citation rule exists for: a confidently-formatted identifier that
-resolves to a real but entirely unrelated paper. Identifiers must be retrieved, never
+While chasing a full text during this search, a plausible-looking PMC identifier surfaced
+that had been composed rather than retrieved from any record. Resolving it caught the
+problem: it pointed at a real 2019 *Scientific Reports* paper on acral malignant melanoma,
+unrelated to anything cited here. Nothing from that fetch entered this file, and the details
+were re-obtained from the arXiv record. Recorded because it is exactly the failure this
+project's citation rule exists for: a confidently-formatted identifier that resolves to a
+real but entirely unrelated paper. Identifiers must be retrieved and resolved, never
 composed.
