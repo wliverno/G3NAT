@@ -67,7 +67,7 @@ def load_trained_model(model_path: str, device: str = 'auto') -> Tuple[Union[DNA
                   "heavy-tailed at isolated near-resonance energies: 1.4% of pairs "
                   "differ by >0.1 decade and the worst measured case is 3.8 decades "
                   "(DOS is unaffected, max 2e-3; see "
-                  "G3NAT-internal/scratch/analysis/scal_crossover.out S1). Transmission "
+                  "docs/model-results.md section 15b). Transmission "
                   "numbers from pre-2026-08-09 evaluations of this checkpoint are "
                   "typically fine but not guaranteed. Pass solver_type explicitly if "
                   "you need to reproduce an older result.")
