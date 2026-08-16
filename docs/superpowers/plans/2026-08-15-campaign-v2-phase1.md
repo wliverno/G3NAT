@@ -636,7 +636,7 @@ preempted run never loses its own best weights."
   `log10(clamp_min(x, 0) + self.log_floor)`; model attributes
   `last_floored_frac_dos: float`, `last_floored_frac_t: float` (fraction of grid
   points with linear value below log_floor, set on every forward).
-- DEFAULT CHANGE: `--log_floor` default 1e-16 -> **1e-30** and it is now a smoothing
+- DEFAULT CHANGE: `--log_floor` default 1e-16 -> **1e-38** and it is now a smoothing
   eps, not a clamp. Old checkpoints carry their own log_floor in args and keep it.
 - metric_history gains `'floored_frac_dos'`, `'floored_frac_t'` (nan for models
   without the attributes).
@@ -658,7 +658,7 @@ def _model(log_floor):
 
 
 def test_deep_tail_keeps_gradient():
-    m = _model(1e-30)
+    m = _model(1e-38)
     H = torch.zeros(1, 4, 4, requires_grad=True)
     GL = torch.tensor([[0.1, 0.0, 0.0, 0.0]])
     GR = torch.tensor([[0.0, 0.0, 0.0, 0.1]])
@@ -671,7 +671,7 @@ def test_deep_tail_keeps_gradient():
 
 
 def test_floor_never_binds_above_eps_and_fractions_are_recorded():
-    m = _model(1e-30)
+    m = _model(1e-38)
     H = torch.randn(1, 4, 4) * 0.1
     H = 0.5 * (H + H.transpose(-1, -2))
     GL = torch.tensor([[0.1, 0.0, 0.0, 0.0]])
@@ -683,7 +683,7 @@ def test_floor_never_binds_above_eps_and_fractions_are_recorded():
 
 
 def test_smooth_floor_matches_plain_log10_when_far_from_floor():
-    m = _model(1e-30)
+    m = _model(1e-38)
     x = torch.tensor([1e-3, 1.0, 10.0])
     out = m._log10_floored(x)
     assert torch.allclose(out, torch.log10(x), atol=1e-6)
@@ -705,7 +705,7 @@ Add to the model (near the solver methods):
         gradient at every point above zero -- the old clamp at 1e-16 sat INSIDE
         the transmission target range (targets reach 6.7e-19) and zeroed the
         gradient exactly in the deep tail the length-extrapolation claim lives
-        in. eps (self.log_floor, default 1e-30) is a pure log10(0) guard: below
+        in. eps (self.log_floor, default 1e-38) is a pure log10(0) guard: below
         every physical value in the data, above float32 underflow."""
         return torch.log10(torch.clamp_min(x, 0.0) + self.log_floor)
 ```
@@ -726,7 +726,7 @@ Complex path: replace `maybe_log10` + the two `torch.clamp` lines:
 Frobenius path: same substitution at `:578-579` and `:606-607` (keep behavior parity
 even though the path is prohibited for campaign runs -- Task 6).
 
-`scripts/train.py:92`: default `1e-30`, help text: "Smoothing eps for log10 of
+`scripts/train.py:92`: default `1e-38`, help text: "Smoothing eps for log10 of
 DOS/T: log10(max(x,0)+eps). Pure log10(0) guard -- never binds on physical values
 (dataset T minimum is 6.7e-19). Recorded in args; must match at train and eval."
 
@@ -748,7 +748,7 @@ assertion encodes the old clamp value, and say so in the commit).
 
 ```bash
 git add g3nat/models/hamiltonian.py scripts/train.py g3nat/training/trainer.py tests/test_models/test_log_floor.py
-git commit -m "fix(negf): smooth log floor at 1e-30 -- the 1e-16 clamp sat inside the data
+git commit -m "fix(negf): smooth log floor at 1e-38 -- the 1e-16 clamp sat inside the data
 
 Transmission targets reach 6.7e-19, so the old clamp hard-capped predictions
 1.5 decades above the deepest targets with zero gradient, exactly in the tail
@@ -872,7 +872,7 @@ def _geom_model(tmp_path):
                 'args': {'model_type': 'hamiltonian', 'hidden_dim': 16,
                          'num_layers': 1, 'num_heads': 2, 'n_orb': 1,
                          'use_geometry': True, 'solver_type': 'complex',
-                         'log_floor': 1e-30, 'complex_eta': 1e-12,
+                         'log_floor': 1e-38, 'complex_eta': 1e-12,
                          'use_log_outputs': True, 'enforce_hermiticity': True,
                          'conv_type': 'gat'},
                 'energy_grid': grid}, path)
