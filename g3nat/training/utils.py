@@ -41,39 +41,49 @@ def set_init_seed(seed: Optional[int]) -> bool:
 
 
 class LengthBucketBatchSampler(Sampler[List[int]]):
-    """BatchSampler that groups indices by number of DNA nodes to create uniform-size batches."""
-    def __init__(self, dataset, batch_size: int, shuffle: bool = True):
+    """BatchSampler grouping indices by DNA-node count into uniform-size batches.
+
+    seed=None reproduces the historical unseeded behavior (fresh OS entropy every
+    epoch -- NOT reproducible; see determinism finding, 2026-08-13). With a seed,
+    epoch N's batch composition is a pure function of (seed, N) via set_epoch, so a
+    requeued run that calls set_epoch(N) regenerates the original epoch N exactly.
+    """
+    def __init__(self, dataset, batch_size: int, shuffle: bool = True, seed: Optional[int] = None):
         self.dataset = dataset
         self.batch_size = max(1, int(batch_size))
         self.shuffle = shuffle
-        # Build buckets: num_dna_nodes -> list of indices
+        self.seed = seed
+        self._epoch = 0
         buckets = {}
         for idx in range(len(dataset)):
             data = dataset[idx]
-            # For Subset, dataset[idx] yields underlying Data object
             num_dna = int(getattr(data, 'num_dna_nodes', data.x.size(0) - 2))
             buckets.setdefault(num_dna, []).append(idx)
         self.buckets = buckets
-        # Precompute batches
         self._batches = self._build_batches()
 
+    def set_epoch(self, epoch: int) -> None:
+        self._epoch = int(epoch)
+
+    def _rng(self):
+        if self.seed is None:
+            return np.random.default_rng()
+        return np.random.default_rng((self.seed, self._epoch))
+
     def _build_batches(self):
+        rng = self._rng() if self.shuffle else None
         batches = []
-        for _, indices in self.buckets.items():
-            if self.shuffle:
-                rng = np.random.default_rng()
+        for _, indices in sorted(self.buckets.items()):
+            indices = list(indices)
+            if rng is not None:
                 rng.shuffle(indices)
-            # chunk into batches
             for i in range(0, len(indices), self.batch_size):
-                batch = indices[i:i + self.batch_size]
-                batches.append(batch)
-        if self.shuffle:
-            rng = np.random.default_rng()
+                batches.append(indices[i:i + self.batch_size])
+        if rng is not None:
             rng.shuffle(batches)
         return batches
 
     def __iter__(self):
-        # Rebuild each epoch if shuffling
         if self.shuffle:
             self._batches = self._build_batches()
         for b in self._batches:
