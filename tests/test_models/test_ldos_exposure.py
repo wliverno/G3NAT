@@ -81,7 +81,7 @@ def test_ldos_sum_matches_linear_dos(solver_type):
     of whatever clamping/log10 is later applied to the *scalar* trace value.
 
     We reach the "linear DOS" side of the comparison via 10**DOS_returned
-    (DOS_returned = log10(clamp(dos_raw, min=log_floor))) rather than via
+    (DOS_returned = log10(max(dos_raw, 0) + log_floor)) rather than via
     self.ldos itself, so this is not circular: it cross-checks the new
     diagonal-extraction code against the model's separately-computed,
     unchanged trace/log10 pipeline.
@@ -138,9 +138,14 @@ def test_ldos_byte_identical_complex_solver():
     expected_dos = torch.tensor([[-1.49410748481750488, -0.89103454351425171,
                                   3.16388392448425293, -0.90706795454025269,
                                   -1.50217974185943604]])
-    expected_t = torch.tensor([[-16.00000000000000000, -14.83916378021240234,
-                                 -0.08798480778932571, -14.89209556579589844,
-                                 -16.00000000000000000]])
+    # T constants REVISED 2026-08-15 with the smooth log floor
+    # (log10(max(x,0)+eps), was log10(clamp(x, min=eps))). The two -16.0 entries
+    # were the old clamp reading back its own floor value; the neighbours were
+    # shifted by the clamp's discontinuity. Only the floor semantics changed --
+    # DOS constants are untouched and the linear T values are the same numbers.
+    expected_t = torch.tensor([[-15.97656822204589844, -14.81016349792480469,
+                                 -0.08798569440841675, -14.85947513580322266,
+                                 -15.97792339324951172]])
     # Tolerance, NOT torch.equal. These constants were captured on one node; float32
     # last-bit results differ across GPUs/BLAS, so a bit-exact comparison tests the
     # hardware rather than the code (observed: 1.43e-06 on one element, i.e. the 7th
@@ -173,9 +178,11 @@ def test_ldos_byte_identical_frobenius_solver():
     expected_dos = torch.tensor([[-1.49410748481750488, -0.89103448390960693,
                                   3.16388392448425293, -0.90706801414489746,
                                   -1.50217974185943604]])
-    expected_t = torch.tensor([[-16.00000000000000000, -14.83916378021240234,
-                                 -0.08798500150442123, -14.89209556579589844,
-                                 -16.00000000000000000]])
+    # T constants REVISED 2026-08-15 with the smooth log floor -- see the note in
+    # test_ldos_byte_identical_complex_solver.
+    expected_t = torch.tensor([[-15.97656822204589844, -14.81016349792480469,
+                                 -0.08798563480377197, -14.85947513580322266,
+                                 -15.97792339324951172]])
     # Tolerance, NOT torch.equal. These constants were captured on one node; float32
     # last-bit results differ across GPUs/BLAS, so a bit-exact comparison tests the
     # hardware rather than the code (observed: 1.43e-06 on one element, i.e. the 7th
