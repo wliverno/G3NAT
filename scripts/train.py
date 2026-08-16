@@ -241,23 +241,25 @@ def main():
     train_dataset = Subset(dataset, train_indices)
     val_dataset = Subset(dataset, val_indices)
 
+    # Seed initialization AFTER the split (which uses its own seed) and BEFORE
+    # constructing the loaders/model, so --init_seed controls weights (and, via
+    # the sampler's explicit seed= below, batch composition) and nothing else.
+    if set_init_seed(args.init_seed):
+        print(f"Initialization seeded with {args.init_seed}")
+    else:
+        print("Initialization NOT seeded (pass --init_seed for reproducible weights)")
+
     # Create loaders
     is_hamiltonian = (args.model_type == 'hamiltonian')
     if is_hamiltonian:
-        train_sampler = LengthBucketBatchSampler(train_dataset, args.batch_size, shuffle=True)
+        train_sampler = LengthBucketBatchSampler(train_dataset, args.batch_size,
+                                                 shuffle=True, seed=args.init_seed)
         val_sampler = LengthBucketBatchSampler(val_dataset, args.batch_size, shuffle=False)
         train_loader = DataLoader(train_dataset, batch_sampler=train_sampler)
         val_loader = DataLoader(val_dataset, batch_sampler=val_sampler)
     else:
         train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
-
-    # Seed initialization AFTER the split (which uses its own seed) and BEFORE
-    # constructing the model, so --init_seed controls weights and nothing else.
-    if set_init_seed(args.init_seed):
-        print(f"Initialization seeded with {args.init_seed}")
-    else:
-        print("Initialization NOT seeded (pass --init_seed for reproducible weights)")
 
     # Create model
     if args.model_type == 'standard':

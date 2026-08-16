@@ -120,6 +120,10 @@ class Trainer:
                         state[k] = v.to(model_device)
 
         for epoch in range(start_epoch, self.config.num_epochs):
+            sampler = getattr(train_loader, 'batch_sampler', None)
+            if sampler is not None and hasattr(sampler, 'set_epoch'):
+                sampler.set_epoch(epoch)
+
             # Learning rate warmup: ramp from lr/100 to lr over warmup_epochs epochs
             if self.config.warmup_epochs > 0 and epoch < self.config.warmup_epochs:
                 warmup_scale = (epoch + 1) / self.config.warmup_epochs
