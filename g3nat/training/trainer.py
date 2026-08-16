@@ -71,6 +71,7 @@ class Trainer:
         self.train_losses = []
         self.val_losses = []
         self.metric_history: List[Dict[str, float]] = []
+        self.nan_skipped_total = 0
 
     def fit(
         self,
@@ -347,6 +348,7 @@ class Trainer:
         """Train for one epoch."""
         self.model.train()
         train_loss = 0.0
+        n_used = 0
 
         for batch in train_loader:
             batch = batch.to(self.device)
@@ -357,16 +359,25 @@ class Trainer:
             losses = self._compute_losses(batch, dos_pred, transmission_pred)
             total_loss = losses['total']
 
+            if not torch.isfinite(total_loss):
+                self.nan_skipped_total += 1
+                continue
+
             total_loss.backward()
 
             # Gradient clipping to prevent gradient explosion in physics-informed models
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.config.max_grad_norm)
-
+            grad_norm = torch.nn.utils.clip_grad_norm_(
+                self.model.parameters(), max_norm=self.config.max_grad_norm)
+            if not torch.isfinite(grad_norm):
+                self.nan_skipped_total += 1
+                self.optimizer.zero_grad()
+                continue
             self.optimizer.step()
 
             train_loss += total_loss.item()
+            n_used += 1
 
-        train_loss /= len(train_loader)
+        train_loss /= max(1, n_used)
         return train_loss
 
     def _validate_epoch(self, val_loader: DataLoader, epoch: int) -> float:
@@ -458,6 +469,7 @@ class Trainer:
             # to see whether an arm is living at the log floor.
             'floored_frac_dos': float(getattr(self.model, 'last_floored_frac_dos', float('nan'))),
             'floored_frac_t': float(getattr(self.model, 'last_floored_frac_t', float('nan'))),
+            'nan_skipped_total': float(self.nan_skipped_total),
         }
         self.metric_history.append(entry)
         return val_loss
