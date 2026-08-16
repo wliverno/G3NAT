@@ -450,6 +450,10 @@ class Trainer:
             # log-localized than DFT; negative: model spreads weight more
             # than DFT; nan when the batch carries no LDOS target.
             'val_ldos_localization_gap': agg_localization_gap / n_batches,
+            # Last batch's value -- a per-epoch spot reading, cheap and sufficient
+            # to see whether an arm is living at the log floor.
+            'floored_frac_dos': float(getattr(self.model, 'last_floored_frac_dos', float('nan'))),
+            'floored_frac_t': float(getattr(self.model, 'last_floored_frac_t', float('nan'))),
         }
         self.metric_history.append(entry)
         return val_loss

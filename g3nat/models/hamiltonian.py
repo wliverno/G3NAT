@@ -77,6 +77,10 @@ class DNATransportHamiltonianGNN(nn.Module):
         self.solver_type = solver_type
         self.use_log_outputs = use_log_outputs
         self.log_floor = float(log_floor)
+        # Fraction of the energy grid below the smoothing eps on the LAST forward.
+        # nan until a forward has run.
+        self.last_floored_frac_dos = float('nan')
+        self.last_floored_frac_t = float('nan')
         self.complex_eta = float(complex_eta)
         self.conv_type = conv_type.lower()
 
@@ -490,6 +494,15 @@ class DNATransportHamiltonianGNN(nn.Module):
 
         return H_matrix, H_size
 
+    def _log10_floored(self, x: torch.Tensor) -> torch.Tensor:
+        """Smooth floor: log10(max(x,0) + eps). Unlike a hard clamp this keeps
+        gradient at every point above zero -- the old clamp at 1e-16 sat INSIDE
+        the transmission target range (targets reach 6.7e-19) and zeroed the
+        gradient exactly in the deep tail the length-extrapolation claim lives
+        in. eps (self.log_floor, default 1e-38) is a pure log10(0) guard: below
+        every physical value in the data, above float32 underflow."""
+        return torch.log10(torch.clamp_min(x, 0.0) + self.log_floor)
+
     def NEGFProjection(self,
         H_matrix: torch.Tensor,
         GammaL: torch.Tensor,
@@ -574,9 +587,10 @@ class DNATransportHamiltonianGNN(nn.Module):
 
         # DOS = -Im(Tr(Gr)) / pi, matching calculate_NEGF and the DFT reference
         dos_raw = -1*torch.einsum('benn->be', Gr_imag)/np.pi
-        # DOS should be positive by construction in NEGF, but add safety check
-        dos_safe = torch.clamp(dos_raw, min=self.log_floor)
-        DOS = torch.log10(dos_safe) if self.use_log_outputs else dos_safe
+        # DOS is positive by construction in NEGF; the floor is a log10(0) guard
+        # only (see _log10_floored). Record how much of the grid sits below it.
+        self.last_floored_frac_dos = float((dos_raw < self.log_floor).float().mean())
+        DOS = self._log10_floored(dos_raw) if self.use_log_outputs else torch.clamp_min(dos_raw, 0.0)
 
         # Per-site local DOS (LDOS): diagonal of the same spectral quantity whose
         # trace gives dos_raw above. Linear units, unclamped -- side channel only,
@@ -602,9 +616,9 @@ class DNATransportHamiltonianGNN(nn.Module):
         # Imaginary parts cancel out, only real part is left
         Tcoh = torch.matmul(gamma1Gr_real, gamma2Ga_real) - torch.matmul(gamma1Gr_imag, gamma2Ga_imag)
         T_raw = torch.einsum('benn->be', Tcoh)
-        # Transmission should be positive by construction, add safety check
-        T_safe = torch.clamp(T_raw, min=self.log_floor)
-        T = torch.log10(T_safe) if self.use_log_outputs else T_safe
+        # Transmission is positive by construction; smooth floor, not a clamp.
+        self.last_floored_frac_t = float((T_raw < self.log_floor).float().mean())
+        T = self._log10_floored(T_raw) if self.use_log_outputs else torch.clamp_min(T_raw, 0.0)
 
         if squeeze_output:
             self.ldos = ldos_lin.squeeze(0)
@@ -637,11 +651,6 @@ class DNATransportHamiltonianGNN(nn.Module):
         H_size = H_matrix.size(1)
         device = H_matrix.device
 
-        def maybe_log10(x: torch.Tensor) -> torch.Tensor:
-            if self.use_log_outputs:
-                return torch.log10(torch.clamp(x, min=self.log_floor))
-            return x
-
         dtype_real = H_matrix.dtype
         H_expanded = H_matrix.unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)
         energy = torch.tensor(self.energy_grid, dtype=dtype_real, device=device)
@@ -667,7 +676,6 @@ class DNATransportHamiltonianGNN(nn.Module):
 
         # DOS = -1/pi * Im Tr(Gr)
         DOS_lin = (-1/np.pi) * torch.imag(torch.einsum('benn->be', Gr))
-        DOS_lin = torch.clamp(DOS_lin, min=self.log_floor)
 
         # Per-site local DOS (LDOS): diagonal of the same Gr whose trace gives
         # DOS_lin above. Linear units, unclamped -- side channel only, does not
@@ -679,10 +687,13 @@ class DNATransportHamiltonianGNN(nn.Module):
         GammaR_mat = torch.diag_embed(GammaR).to(Gr.dtype).unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)
         M = torch.matmul(torch.matmul(GammaL_mat, Gr), torch.matmul(GammaR_mat, Ga))
         T_lin = torch.real(torch.einsum('benn->be', M))
-        T_lin = torch.clamp(T_lin, min=self.log_floor)
 
-        DOS = maybe_log10(DOS_lin)
-        T = maybe_log10(T_lin)
+        # Fraction of the energy grid whose linear value sits below the smoothing
+        # eps -- a per-forward diagnostic, not a clamp (see _log10_floored).
+        self.last_floored_frac_dos = float((DOS_lin < self.log_floor).float().mean())
+        self.last_floored_frac_t = float((T_lin < self.log_floor).float().mean())
+        DOS = self._log10_floored(DOS_lin) if self.use_log_outputs else torch.clamp_min(DOS_lin, 0.0)
+        T = self._log10_floored(T_lin) if self.use_log_outputs else torch.clamp_min(T_lin, 0.0)
 
         if squeeze_output:
             self.ldos = ldos_lin.squeeze(0)

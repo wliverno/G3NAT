@@ -87,11 +87,16 @@ def parse_args():
     # was not trained with, and log_floor became a dead knob at eval time. Defaults here
     # match DNATransportHamiltonianGNN.__init__ exactly, so behaviour is unchanged; the
     # point is that vars(args) now records them and the checkpoint carries them forward.
+    # EXCEPTION (deliberate): --log_floor defaults to 1e-38 here, not the model's legacy
+    # 1e-16. The floor is now a smoothing eps rather than a clamp; old checkpoints keep
+    # whatever value they recorded.
     parser.add_argument('--solver_type', choices=['complex', 'frobenius'], default='complex',
                         help='NEGF solver. Must match at train and eval time.')
-    parser.add_argument('--log_floor', type=float, default=1e-16,
-                        help='Clamp on linear DOS/T before log10. Guards log10(0) only -- '
-                             'both quantities are positive semidefinite by construction.')
+    parser.add_argument('--log_floor', type=float, default=1e-38,
+                        help='Smoothing eps for log10 of DOS/T: log10(max(x,0)+eps). Pure '
+                             'log10(0) guard -- never binds on physical values (dataset T '
+                             'minimum is 6.7e-19). Recorded in args; must match at train '
+                             'and eval.')
     parser.add_argument('--complex_eta', type=float, default=1e-12)
     parser.add_argument('--use_log_outputs', type=lambda s: s.lower() != 'false', default=True)
     parser.add_argument('--enforce_hermiticity', type=lambda s: s.lower() != 'false', default=True)
