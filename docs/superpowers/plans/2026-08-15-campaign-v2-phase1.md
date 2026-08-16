@@ -625,6 +625,15 @@ preempted run never loses its own best weights."
 
 ### Task 5: Smooth log floor + floored-fraction metric (spec B6; INTENTIONAL DEFAULT CHANGE)
 
+**STATUS: DONE (commit c1dabc8, executed ahead of order 2026-08-15).** Deviations from
+the text below, recorded so no executor repeats them: (1) the deep-tail gradient test
+as written used H=0, a stationary point of transmission (dT/dH=0 structurally, under
+ANY floor) -- the landed test uses a weakly coupled 4-site chain with T in 1e-27..1e-20
+instead; (2) two baselines encoding the old clamp's -16 plateau were regenerated
+(test_ldos_exposure.py expected_t; baseline model_hamiltonian.pkl, transmission only);
+(3) the MODEL constructor default is still 1e-16 (plan only changed the CLI) -- Task 16
+step 3.5 below aligns it.
+
 **Files:**
 - Modify: `g3nat/models/hamiltonian.py:576-607` (Frobenius) and `:640-685` (complex)
 - Modify: `scripts/train.py:92-94` (--log_floor default + help)
@@ -1653,6 +1662,9 @@ illegibility (runner override vs argparse default) cannot recur silently."
 - [ ] **Step 2:** Grep audit -- each must return nothing:
   - `grep -rn "alpha_value\|alpha_mode\|alpha_granularity\|structured_onsite" g3nat/ scripts/train.py` (Task 12 completeness; analysis scripts reading OLD checkpoints may keep references -- only g3nat/ and train.py must be clean)
   - `grep -rn "default_rng()" g3nat/training/` (Task 1 completeness)
+- [ ] **Step 3.5:** Align the MODEL constructor's log_floor default (hamiltonian.py
+  __init__ signature) from 1e-16 to 1e-38 to match the CLI (defaults that disagree are
+  the n_orb lesson); run the log-floor and baseline tests after.
 - [ ] **Step 3:** Behavior audit against the spec's intentional-change list: run
   `SRUN 'python scripts/train.py --data_source tb --num_samples 24 --seq_length 4 --num_epochs 3 --num_energy_points 8 --init_seed 42 --output_dir /tmp/p1_smoke --checkpoint_dir /tmp/p1_smoke_ckpt'`
   twice and diff the two runs' `val_losses` (they must be IDENTICAL on CPU -- the
