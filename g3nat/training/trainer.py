@@ -73,6 +73,19 @@ class Trainer:
         self.metric_history: List[Dict[str, float]] = []
         self.nan_skipped_total = 0
 
+        # Best weights by the UNWEIGHTED metric (val_dos_t_unweighted), held in
+        # memory and refreshed EVERY epoch. Two separate problems this fixes:
+        #   1. Selection used the loss_b-weighted 'total', which is scaled
+        #      differently in every supervision cell, so "best" was not
+        #      comparable across arms.
+        #   2. Selection only ever saw the epochs on which the checkpoint
+        #      callback happened to fire (every checkpoint_frequency epochs),
+        #      so the stored weights lagged the metric optimum by up to that
+        #      many epochs. The snapshot below is a detached CPU clone taken at
+        #      the exact epoch of the optimum, and it -- not the live model --
+        #      is what gets serialized as checkpoint_best.
+        self.best_unweighted = {'value': float('inf'), 'epoch': -1, 'state_dict': None}
+
     def fit(
         self,
         train_loader: DataLoader,
@@ -91,7 +104,10 @@ class Trainer:
                 checkpoint_callback(model, optimizer, epoch, train_losses, val_losses,
                 metric_history=self.metric_history) -- the metric_history keyword lets
                 a callback that forwards it to save_checkpoint() survive a preemption
-                without losing per-epoch LDOS/DOS/transmission history.
+                without losing per-epoch LDOS/DOS/transmission history. Also passed
+                best_state=self.best_unweighted, the in-memory CPU snapshot of the
+                weights at the best val_dos_t_unweighted epoch, so a callback can
+                serialize THOSE weights rather than the live model's current ones.
             progress_callback: Optional callback for tracking progress
             start_epoch: Starting epoch for resumption (default: 0)
 
@@ -120,7 +136,9 @@ class Trainer:
                     if isinstance(v, torch.Tensor):
                         state[k] = v.to(model_device)
 
+        last_epoch = start_epoch - 1
         for epoch in range(start_epoch, self.config.num_epochs):
+            last_epoch = epoch
             sampler = getattr(train_loader, 'batch_sampler', None)
             if sampler is not None and hasattr(sampler, 'set_epoch'):
                 sampler.set_epoch(epoch)
@@ -140,6 +158,19 @@ class Trainer:
             val_loss = self._validate_epoch(val_loader, epoch)
             self.val_losses.append(val_loss)
 
+            # Track the best UNWEIGHTED-metric weights every epoch, before any
+            # user callback can mutate the model. `metric == metric` is the NaN
+            # check: a nan metric never wins, so a poisoned epoch cannot
+            # overwrite a good snapshot.
+            metric = self.metric_history[-1].get('val_dos_t_unweighted', float('nan'))
+            if metric == metric and metric < self.best_unweighted['value'] - 1e-12:
+                self.best_unweighted = {
+                    'value': float(metric),
+                    'epoch': epoch,
+                    'state_dict': {k: v.detach().cpu().clone()
+                                   for k, v in self.model.state_dict().items()},
+                }
+
             # Call progress callback if provided
             if progress_callback is not None:
                 progress_callback(epoch, train_loss, val_loss)
@@ -148,16 +179,22 @@ class Trainer:
             if checkpoint_callback is not None:
                 if (epoch + 1) % self.config.checkpoint_frequency == 0:
                     checkpoint_callback(self.model, self.optimizer, epoch, self.train_losses, self.val_losses,
-                                       metric_history=self.metric_history)
+                                       metric_history=self.metric_history,
+                                       best_state=self.best_unweighted)
 
             # Print progress
             if (epoch + 1) % 10 == 0:
                 print(f'Epoch [{epoch+1}/{self.config.num_epochs}], Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}')
 
-        # Save final checkpoint
+        # Save final checkpoint. Report the epoch the loop ACTUALLY reached --
+        # num_epochs - 1 is a guess that is wrong whenever start_epoch is
+        # already >= num_epochs (a resume with nothing left to do), which would
+        # otherwise rewind the recorded epoch and make the next resume redo
+        # work it already finished.
         if checkpoint_callback is not None:
-            checkpoint_callback(self.model, self.optimizer, self.config.num_epochs - 1, self.train_losses, self.val_losses,
-                               metric_history=self.metric_history)
+            checkpoint_callback(self.model, self.optimizer, last_epoch, self.train_losses, self.val_losses,
+                               metric_history=self.metric_history,
+                               best_state=self.best_unweighted)
 
         return self.train_losses, self.val_losses
 

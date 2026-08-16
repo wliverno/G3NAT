@@ -4,6 +4,7 @@
 import argparse
 import os
 import sys
+import time
 
 # Ensure g3nat package is importable
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -314,46 +315,70 @@ def main():
     # 3.4x tighter -- and it is capacity-dependent, so it penalises deeper models more and
     # can invert an ordering (it inverted the num_layers trend). See docs/metrics.md.
     #
-    # Granularity: this fires with the checkpoint callback (every checkpoint_frequency
-    # epochs), so the saved weights are within that many epochs of the true optimum, not
-    # exactly at it.
+    # Granularity: NO LONGER a rounding to the checkpoint cadence. As of 2026-08-16 the
+    # Trainer keeps the best weights in memory, refreshed every epoch on the UNWEIGHTED
+    # metric val_dos_t_unweighted, and hands them here as `best_state`. So the serialized
+    # "best" weights are exactly the ones from the optimum epoch, and the selection
+    # criterion no longer depends on loss_b (the weighted 'total' is scaled differently
+    # in every supervision cell, which made "best" incomparable across arms).
     # NOTE: seeded from resume_val_losses AFTER the resume block below, which is where
     # that variable is defined. Do not move this initialisation down into the callback.
     best_val = {'value': float('inf')}
 
-    def checkpoint_cb(model, opt, epoch, train_losses, val_losses, metric_history=None):
+    def checkpoint_cb(model, opt, epoch, train_losses, val_losses, metric_history=None,
+                      best_state=None):
         save_checkpoint(model, opt, epoch, train_losses, val_losses,
                        vars(args), energy_grid,
                        os.path.join(args.checkpoint_dir, 'checkpoint_latest.pth'),
                        metric_history=metric_history)
-        # Save whenever THIS checkpointed epoch beats the best CHECKPOINTED epoch so far.
-        # best_val['value'] already tracks exactly that running minimum, so this single
-        # test is the whole condition.
+        # Save the in-memory BEST-EPOCH weights the trainer handed us, whenever they beat
+        # what has already been written to disk. best_state['value'] is the unweighted
+        # metric val_dos_t_unweighted at best_state['epoch']; best_val['value'] tracks the
+        # last value actually serialized here, so this single test is the whole condition.
         #
-        # BUG FIXED 2026-08-11 (see docs/model-results.md sec. 16). This used to also
-        # require `val_losses[-1] <= min(val_losses)`, i.e. that the checkpointed epoch be
-        # the minimum over ALL epochs -- including the nine between checkpoints that this
-        # callback never sees, because the trainer appends a val loss every epoch while
-        # this fires every checkpoint_frequency epochs. Early in training the curve falls
-        # steeply and that held; once epoch-to-epoch noise exceeded the improvement over
-        # ten epochs it stopped firing essentially permanently. Measured over the 84
-        # published runs: stored weights came from median epoch 874 against a true optimum
-        # at median epoch 1730, a median 0.0124 and worst 0.2031 above the true best val,
-        # and in 14 of 84 runs the stored "best" weights were worse than the final epoch.
-        # Two of three transmission-only runs produced no best checkpoint at all.
-        #
-        # Consequence of the correct version: this is the best among CHECKPOINTED epochs,
-        # not the global best epoch. With checkpoint_frequency=10 we sample every 10th
-        # epoch, so the stored weights are within 10 epochs of the sampled optimum. The
-        # reported 'best_val' below is the true global minimum of the curve and may be
-        # slightly lower than the val loss of these weights; both are stored, along with
-        # saved_at_epoch, so the residual gap stays visible.
-        if val_losses and float(val_losses[-1]) < best_val['value'] - 1e-12:
-            best_val['value'] = float(val_losses[-1])
-            save_checkpoint(model, opt, epoch, train_losses, val_losses,
-                           vars(args), energy_grid,
-                           os.path.join(args.checkpoint_dir, 'checkpoint_best.pth'),
-                           metric_history=metric_history)
+        # HISTORY (see docs/model-results.md sec. 16). Two successive defects lived here:
+        # (a) until 2026-08-11 this also required `val_losses[-1] <= min(val_losses)`, so
+        # once epoch-to-epoch noise exceeded the improvement across a checkpoint interval
+        # it stopped firing essentially permanently -- over the 84 published runs, stored
+        # weights came from median epoch 874 against a true optimum at median epoch 1730,
+        # and in 14 of 84 the stored "best" was worse than the final epoch; (b) even after
+        # that fix, the weights written were the LIVE model's, i.e. the checkpointed
+        # epoch's, not the optimum's, and the criterion was the loss_b-weighted total.
+        # Both are gone: the trainer snapshots a detached CPU copy of the weights at the
+        # exact epoch that minimises the unweighted metric, and that snapshot is what is
+        # serialized below. 'saved_at_epoch' is therefore the true optimum epoch.
+        if best_state and best_state.get('state_dict') is not None \
+                and best_state['value'] < best_val['value'] - 1e-12:
+            best_val['value'] = float(best_state['value'])
+            best_ckpt_path = os.path.join(args.checkpoint_dir, 'checkpoint_best.pth')
+            payload = {
+                'epoch': best_state['epoch'],
+                'model_state_dict': best_state['state_dict'],
+                'optimizer_state_dict': opt.state_dict(),
+                'train_losses': train_losses,
+                'val_losses': val_losses,
+                'args': vars(args),
+                'energy_grid': energy_grid,
+                'metric_history': metric_history,
+                'selection_metric': 'val_dos_t_unweighted',
+                'selection_value': float(best_state['value']),
+                'timestamp': time.time(),
+            }
+            # Direct torch.save rather than save_checkpoint, because the weights are the
+            # in-memory best snapshot, not the live model's. Same atomic write-then-rename
+            # as callbacks.save_checkpoint -- these runs are preemptible and a truncated
+            # zip here costs the whole best-weights record.
+            tmp_path = f"{best_ckpt_path}.tmp"
+            try:
+                torch.save(payload, tmp_path)
+                os.replace(tmp_path, best_ckpt_path)
+            except BaseException:
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+                raise
+            print(f"Checkpoint saved: {best_ckpt_path}")
 
     def progress_cb(epoch, train_loss, val_loss):
         save_progress_file(epoch, train_loss, val_loss, args.checkpoint_dir, vars(args))
@@ -385,10 +410,18 @@ def main():
         resume_optimizer.load_state_dict(ckpt['optimizer_state_dict'])
         print(f"Resuming from epoch {start_epoch}")
         # Carry the running best across a requeue, or the first post-resume checkpoint
-        # would overwrite a genuinely better earlier one.
-        if resume_val_losses:
-            best_val['value'] = float(min(resume_val_losses))
-            print(f"Resuming best val: {best_val['value']:.4f}")
+        # would overwrite a genuinely better earlier one. Seed it from the SAME quantity
+        # the callback now compares against -- the unweighted metric, not the weighted
+        # val loss, which is a different scale entirely and would make the comparison
+        # meaningless. A checkpoint written before metric_history existed carries no such
+        # values, in which case the running best restarts at inf: the first post-resume
+        # improvement overwrites the old best. That is the safe direction (the trainer's
+        # in-memory best is empty after a restart anyway, so nothing better is lost).
+        _resume_metrics = [m.get('val_dos_t_unweighted') for m in (resume_metric_history or [])]
+        _resume_metrics = [float(m) for m in _resume_metrics if m is not None and m == m]
+        if _resume_metrics:
+            best_val['value'] = min(_resume_metrics)
+            print(f"Resuming best val_dos_t_unweighted: {best_val['value']:.4f}")
 
     print("Training...")
     metric_history = []
@@ -443,16 +476,24 @@ def main():
             'val_losses': val_losses,
             'energy_grid': energy_grid,
             'metric_history': metric_history,
-            'best_val': float(min(val_losses)),
-            'best_val_epoch': int(np.argmin(val_losses)),
+            # NaN-safe: a single poisoned epoch in val_losses would otherwise make
+            # argmin/min return that nan's index and value, publishing a nonsense
+            # best-epoch. nanargmin raises only if EVERY epoch is nan, which is a
+            # failure worth surfacing.
+            'best_val': float(np.nanmin(val_losses)),
+            'best_val_epoch': int(np.nanargmin(val_losses)),
             'saved_at_epoch': bc.get('epoch'),
+            # What the published weights were actually selected on -- the unweighted
+            # metric, not the loss_b-weighted 'best_val' above.
+            'selection_metric': bc.get('selection_metric'),
+            'selection_value': bc.get('selection_value'),
         }, best_path)
 
     print(f"Training complete!")
     print(f"Model saved: {model_path}")
     print(f"Final train loss: {train_losses[-1]:.4f}")
     print(f"Final val loss: {val_losses[-1]:.4f}")
-    print(f"BEST val loss:  {min(val_losses):.4f} at epoch {int(np.argmin(val_losses))}")
+    print(f"BEST val loss:  {float(np.nanmin(val_losses)):.4f} at epoch {int(np.nanargmin(val_losses))}")
     if os.path.exists(best_path):
         print(f"Best model saved: {best_path}")
     if os.path.exists(checkpoint_path):
