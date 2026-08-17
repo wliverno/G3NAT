@@ -56,6 +56,9 @@ def main():
     ap.add_argument("--seq", default=DEFAULT_SEQ)
     ap.add_argument("--model", default=DEFAULT_MODEL)
     ap.add_argument("--tag", default="", help="suffix on output filename to distinguish runs")
+    ap.add_argument("--geom_cache", default="geom_cache/geometry_v2.pkl",
+                    help="geometry cache path, used only when the checkpoint's "
+                         "args say use_geometry=True")
     args = ap.parse_args()
     SEQ, MODEL, TAG = args.seq, args.model, args.tag
     RUNDIR = f"{DATASET_ROOT}/{SEQ}/run1"
@@ -96,7 +99,19 @@ def main():
     from torch_geometric.data import Batch
     import torch
     model, _, _ = load_trained_model(MODEL, device='cpu')
-    g = sequence_to_graph(SEQ.upper(), complement(SEQ))
+    geometry = None
+    if bool(getattr(model, 'use_geometry', False)):
+        import pickle as _pk
+        with open(args.geom_cache, 'rb') as _f:
+            geom_cache = _pk.load(_f)
+        key = SEQ.lower()
+        if key not in geom_cache:
+            raise ValueError(
+                f"geometry cache {args.geom_cache!r} has no entry for sequence "
+                f"{SEQ!r} -- this checkpoint was trained with use_geometry=True; "
+                "a silent miss would score it with geometry deleted (mask 0).")
+        geometry = geom_cache[key]
+    g = sequence_to_graph(SEQ.upper(), complement(SEQ), geometry=geometry)
     with torch.no_grad():
         model(Batch.from_data_list([g]))
     H = model.H[0].detach().cpu().numpy()

@@ -157,7 +157,8 @@ def predict_sequence(
     left_contact_positions: Union[int, List[int]] = None,
     right_contact_positions: Union[int, List[int]] = None,
     left_contact_coupling: float = 0.1,
-    right_contact_coupling: float = 0.1
+    right_contact_coupling: float = 0.1,
+    geometry_cache: dict = None
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Predict DOS and transmission for a DNA sequence.
@@ -170,6 +171,11 @@ def predict_sequence(
         right_contact_positions: Position(s) for right contact (default: last position)
         left_contact_coupling: Coupling strength for left contact
         right_contact_coupling: Coupling strength for right contact
+        geometry_cache: dict mapping lowercase sequence -> geometry entry (as loaded
+            from geom_cache/geometry_v2.pkl). Required (and must contain `sequence`)
+            when `model.use_geometry` is True -- a geometry-trained checkpoint run
+            without its geometry previously ran silently with an all-zero geometry
+            mask (spec B8). Ignored for models with use_geometry=False.
 
     Returns:
         Tuple of (dos_pred, transmission_pred) arrays
@@ -182,6 +188,21 @@ def predict_sequence(
     print(f"Left contact at position {left_contact_positions}, coupling: {left_contact_coupling}")
     print(f"Right contact at position {right_contact_positions}, coupling: {right_contact_coupling}")
 
+    geometry = None
+    if bool(getattr(model, 'use_geometry', False)):
+        if geometry_cache is None:
+            raise ValueError(
+                "this checkpoint was trained with use_geometry=True but no "
+                "geometry_cache was supplied -- scoring it with the geometry "
+                "channel silently deleted (all-zero mask) biases geometry effects "
+                "toward null. Pass the cache (geom_cache/geometry_v2.pkl).")
+        key = sequence.lower()
+        if key not in geometry_cache:
+            raise ValueError(
+                f"geometry cache has no entry for sequence {sequence!r} -- a silent "
+                "miss would score this sequence with geometry deleted (mask 0).")
+        geometry = geometry_cache[key]
+
     # Convert sequence to graph
     graph = sequence_to_graph(
         primary_sequence=sequence,
@@ -189,7 +210,8 @@ def predict_sequence(
         left_contact_positions=left_contact_positions,
         right_contact_positions=right_contact_positions,
         left_contact_coupling=left_contact_coupling,
-        right_contact_coupling=right_contact_coupling
+        right_contact_coupling=right_contact_coupling,
+        geometry=geometry
     )
 
     if graph is None:
