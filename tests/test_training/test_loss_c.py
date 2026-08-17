@@ -78,12 +78,16 @@ def test_c_zero_needs_no_ldos_target_even_at_b_positive():
 
 
 def test_c_zero_never_enters_the_ldos_path(monkeypatch):
-    import g3nat.training.trainer as trainer_mod
+    # Patch target moved 2026-08-16 (see test_ldos_loss.py): the trainer calls
+    # the model method site_ldos_log10_recorded.
+    from g3nat.models.hamiltonian import DNATransportHamiltonianGNN
 
     def _boom(*args, **kwargs):
-        raise AssertionError("site_ldos_log10 must not be called when loss_c == 0")
+        raise AssertionError(
+            "the LDOS path must not be entered when loss_c == 0")
 
-    monkeypatch.setattr(trainer_mod, "site_ldos_log10", _boom)
+    monkeypatch.setattr(DNATransportHamiltonianGNN, "site_ldos_log10_recorded",
+                        _boom)
     losses = _losses(_trainer(loss_b=0.5, loss_c=0.0))
     assert losses['ldos'] is None
     assert torch.isfinite(losses['total'])

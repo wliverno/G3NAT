@@ -6,7 +6,6 @@ from typing import Dict, List, Optional, Callable
 from torch_geometric.loader import DataLoader
 
 from .config import TrainingConfig
-from g3nat.models.hamiltonian import site_ldos_log10
 
 
 def _center(x, dims):
@@ -334,7 +333,9 @@ class Trainer:
         target = batch.ldos.view(batch_size, n_sites, num_energy_points)
 
         # Prediction [batch, n_energy, n_sites*n_orb] -> [batch, n_energy, n_sites]
-        pred = site_ldos_log10(self.model.ldos, n_sites, self.model.log_floor)
+        # Goes through the model so the LDOS floor semantics (floor_mode) and the
+        # LDOS floor diagnostics come from the same place as DOS/T.
+        pred = self.model.site_ldos_log10_recorded(n_sites)
         # ... then transpose to match the target's [batch, n_sites, n_energy].
         pred = pred.transpose(1, 2)
 
@@ -525,8 +526,18 @@ class Trainer:
             'val_ldos_localization_gap': agg_localization_gap / n_batches,
             # Last batch's value -- a per-epoch spot reading, cheap and sufficient
             # to see whether an arm is living at the log floor.
+            # These are 0-dim tensors on the model (deliberately: converting
+            # them inside the forward costs a CUDA sync per batch). float()
+            # here is the ONE sync per epoch. `floored_*` is genuine underflow
+            # (0 <= x < eps); `neg_*` is the count of NEGATIVE values, which are
+            # unphysical and indicate a non-Hermitian H rather than smallness --
+            # the old single fraction conflated the two.
             'floored_frac_dos': float(getattr(self.model, 'last_floored_frac_dos', float('nan'))),
             'floored_frac_t': float(getattr(self.model, 'last_floored_frac_t', float('nan'))),
+            'floored_frac_ldos': float(getattr(self.model, 'last_floored_frac_ldos', float('nan'))),
+            'neg_frac_dos': float(getattr(self.model, 'last_neg_frac_dos', float('nan'))),
+            'neg_frac_t': float(getattr(self.model, 'last_neg_frac_t', float('nan'))),
+            'neg_frac_ldos': float(getattr(self.model, 'last_neg_frac_ldos', float('nan'))),
             'nan_skipped_total': float(self.nan_skipped_total),
             # Cumulative count of epochs whose selection metric was non-finite.
             # Equal to the epoch count => no best checkpoint was ever written.

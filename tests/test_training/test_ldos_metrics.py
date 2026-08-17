@@ -111,3 +111,22 @@ def test_metric_history_epoch_is_absolute_not_list_index():
     assert len(trainer.metric_history) == 2
     assert trainer.metric_history[0]['epoch'] == 5
     assert trainer.metric_history[1]['epoch'] == 6
+
+
+def test_floor_diagnostics_recorded_including_ldos_and_negatives():
+    # R1/R5: the LDOS floor fraction is recorded alongside DOS/T, and the
+    # negative fraction is tracked SEPARATELY from underflow (negative DOS is
+    # the non-Hermiticity pathology, not smallness). These live on the model as
+    # tensors to avoid a CUDA sync per forward; the trainer converts once here.
+    trainer = _trainer(loss_b=0.0)
+    loader = _loader(with_ldos=True)
+
+    trainer.fit(loader, loader)
+
+    entry = trainer.metric_history[-1]
+    for key in ('floored_frac_dos', 'floored_frac_t', 'floored_frac_ldos',
+                'neg_frac_dos', 'neg_frac_t', 'neg_frac_ldos'):
+        assert key in entry, f"missing diagnostic {key}"
+        assert isinstance(entry[key], float)
+        assert math.isfinite(entry[key]), f"{key} was never populated"
+        assert 0.0 <= entry[key] <= 1.0

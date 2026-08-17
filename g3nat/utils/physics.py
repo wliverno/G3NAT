@@ -121,7 +121,8 @@ def create_hamiltonian(seq: str,
 def calculate_NEGF(H: np.ndarray,
                   GammaL: np.ndarray,
                   GammaR: np.ndarray,
-                  energy_grid: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+                  energy_grid: np.ndarray,
+                  eps: float = 1e-38) -> Tuple[np.ndarray, np.ndarray]:
     """
     Calculate transmission and DOS using NEGF method.
     This implementation matches the NEGF layer in g3nat/models/hamiltonian.py
@@ -132,6 +133,8 @@ def calculate_NEGF(H: np.ndarray,
         GammaL: Left coupling vector [H_size]
         GammaR: Right coupling vector [H_size]
         energy_grid: Energy grid [num_energy_points]
+        eps: log10(0)-guard added after clamping at zero (smooth floor, matching
+            the model's floor_mode='smooth'). Not a modelling floor.
 
     Returns:
         Tuple of transmission and DOS data (raw values, not log10)
@@ -178,8 +181,14 @@ def calculate_NEGF(H: np.ndarray,
 
         transmission_data[n] = np.real(np.trace(Tcoh))
 
-    # Ensure positive values (should be by construction)
-    transmission_data = np.clip(transmission_data, 1e-16, None)
-    dos_data = np.clip(dos_data, 1e-16, None)
+    # Ensure positive values (should be by construction). Smooth floor, matching
+    # the model's floor_mode='smooth' (g3nat/models/hamiltonian.py::log10_floored):
+    # clamp at ZERO and add a log10(0)-guard eps, rather than the old hard clip at
+    # 1e-16. The hard clip plateaued this REFERENCE at -16 while the model's tail
+    # runs down to the data's true 6.7e-19 and below, so any model-vs-reference
+    # tail figure showed a real tail against a flat line. eps=1e-38 sits below every
+    # physical value here and is not a modelling floor.
+    transmission_data = np.clip(transmission_data, 0.0, None) + eps
+    dos_data = np.clip(dos_data, 0.0, None) + eps
 
     return transmission_data, dos_data

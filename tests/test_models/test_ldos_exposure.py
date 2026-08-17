@@ -129,6 +129,13 @@ def test_ldos_byte_identical_complex_solver():
         hidden_dim=8, num_layers=1, num_heads=1,
         energy_grid=energy_grid, n_orb=1, conv_type='gat',
         solver_type='complex',
+        # floor_mode passed EXPLICITLY (2026-08-16): the constructor default
+        # reverted to 'clamp' so that checkpoints predating the floor_mode arg
+        # reproduce their recorded numbers. The expected constants below were
+        # regenerated on 2026-08-15 under the SMOOTH floor, so this test must
+        # ask for it by name. (The difference is exactly the R2 finding:
+        # -14.81016 smooth vs -14.83916 clamped at the same point.)
+        floor_mode='smooth',
     )
     model.eval()
     g = Batch.from_data_list([sequence_to_graph("ACGT", "ACGT", 0, 3, 0.1, 0.1)])
@@ -169,6 +176,13 @@ def test_ldos_byte_identical_frobenius_solver():
         hidden_dim=8, num_layers=1, num_heads=1,
         energy_grid=energy_grid, n_orb=1, conv_type='gat',
         solver_type='frobenius',
+        # floor_mode passed EXPLICITLY (2026-08-16): the constructor default
+        # reverted to 'clamp' so that checkpoints predating the floor_mode arg
+        # reproduce their recorded numbers. The expected constants below were
+        # regenerated on 2026-08-15 under the SMOOTH floor, so this test must
+        # ask for it by name. (The difference is exactly the R2 finding:
+        # -14.81016 smooth vs -14.83916 clamped at the same point.)
+        floor_mode='smooth',
     )
     model.eval()
     g = Batch.from_data_list([sequence_to_graph("ACGT", "ACGT", 0, 3, 0.1, 0.1)])

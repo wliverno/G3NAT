@@ -101,6 +101,12 @@ def parse_args():
                              'log10(0) guard -- never binds on physical values (dataset T '
                              'minimum is 6.7e-19). Recorded in args; must match at train '
                              'and eval.')
+    parser.add_argument('--floor_mode', choices=['clamp', 'smooth'], default='smooth',
+                        help="Floor SEMANTICS, recorded in args. 'smooth' is "
+                             'log10(max(x,0)+eps) -- gradient survives in the deep tail. '
+                             "'clamp' is the pre-2026-08-15 hard clamp log10(max(x,eps)); "
+                             'the model constructor defaults to it so that checkpoints '
+                             'whose args predate this flag reproduce their old numbers.')
     parser.add_argument('--complex_eta', type=float, default=1e-12)
     parser.add_argument('--use_log_outputs', type=lambda s: s.lower() != 'false', default=True)
     parser.add_argument('--enforce_hermiticity', type=lambda s: s.lower() != 'false', default=True)
@@ -462,6 +468,7 @@ def main():
             n_orb=args.n_orb,
             solver_type=args.solver_type,
             log_floor=args.log_floor,
+            floor_mode=args.floor_mode,
             complex_eta=args.complex_eta,
             use_log_outputs=args.use_log_outputs,
             enforce_hermiticity=args.enforce_hermiticity,

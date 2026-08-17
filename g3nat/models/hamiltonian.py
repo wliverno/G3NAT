@@ -6,19 +6,76 @@ import numpy as np
 from typing import List, Tuple, Dict, Optional, Union
 
 
-def site_ldos_log10(ldos_raw: torch.Tensor, n_sites: int, log_floor: float) -> torch.Tensor:
+def log10_floored(x: torch.Tensor, eps: float, floor_mode: str = 'clamp') -> torch.Tensor:
+    """log10 of a non-negative quantity, with the floor SEMANTICS made explicit.
+
+    Two modes, and the difference is not cosmetic:
+
+    - 'clamp' (legacy, and the default so that a checkpoint whose args predate
+      `floor_mode` reproduces its recorded numbers bit-for-bit):
+      ``log10(clamp(x, min=eps))``. Hard floor: every point below eps reads
+      exactly log10(eps) and carries ZERO gradient.
+    - 'smooth' (written by scripts/train.py since 2026-08-15):
+      ``log10(clamp_min(x, 0) + eps)``. eps is a log10(0) guard, not a clamp,
+      so gradient survives at every x > 0. Note that it BIASES rather than
+      clamps: with eps=1e-16 a value the old clamp never touched shifts by up
+      to 1e-16 in linear units, which is measurable in the deep tail.
+
+    Args:
+        x: linear-units, non-negative-by-construction tensor.
+        eps: the floor / smoothing constant (`log_floor`).
+        floor_mode: 'clamp' or 'smooth'.
+    """
+    if floor_mode == 'smooth':
+        return torch.log10(torch.clamp_min(x, 0.0) + eps)
+    if floor_mode == 'clamp':
+        return torch.log10(torch.clamp(x, min=eps))
+    raise ValueError(
+        f"floor_mode must be 'clamp' or 'smooth', got {floor_mode!r}")
+
+
+def _floor_diagnostics(x: torch.Tensor, eps: float) -> Tuple[torch.Tensor, torch.Tensor]:
+    """(underflow fraction, negative fraction) of x, as 0-dim DETACHED tensors.
+
+    Kept as tensors on purpose: calling .item() here forces a CUDA sync on
+    every forward, including inside the training loop. The consumer
+    (Trainer._validate_epoch) converts to float once per epoch.
+
+    The two fractions are DISJOINT. `underflow` counts 0 <= x < eps -- genuine
+    smallness. `negative` counts x < 0, which is not smallness at all: DOS and
+    transmission are positive by construction in NEGF, so a non-zero negative
+    fraction means the Hamiltonian is not Hermitian (or the solver failed).
+    The old single fraction summed the two and hid exactly that pathology.
+    """
+    with torch.no_grad():
+        negative = x < 0
+        neg_frac = negative.to(torch.float32).mean().detach()
+        underflow = torch.logical_and(~negative, x < eps)
+        under_frac = underflow.to(torch.float32).mean().detach()
+    return under_frac, neg_frac
+
+
+def site_ldos_log10(ldos_raw: torch.Tensor, n_sites: int, log_floor: float,
+                    floor_mode: str = 'clamp', return_diagnostics: bool = False):
     """Reduce raw per-orbital LDOS to per-site log10 LDOS.
 
     Args:
         ldos_raw: [batch, n_energy, n_sites * n_orb], LINEAR units, as set on
             self.ldos by NEGFProjection and NEGFProjectionComplex.
         n_sites: number of tight-binding sites (2L for an L-mer duplex).
-        log_floor: NaN guard against log10 of a non-positive prediction. This
-            is NOT a modelling floor -- the measured target minimum is 1.76e-10,
-            nine decades above the 1e-16 default, so it never binds on real data.
+        log_floor: floor / smoothing constant applied to the SITE SUM. It is a
+            log10(0) guard, not a modelling floor -- the measured target
+            minimum is 1.76e-10, far above any value used here. Under
+            floor_mode='clamp' a floored point is a hard log10(log_floor) with
+            no gradient, which at log_floor=1e-38 puts a ~37-magnitude constant
+            into a Huber term; under 'smooth' it keeps gradient.
+        floor_mode: 'clamp' (legacy) or 'smooth' -- see log10_floored.
+        return_diagnostics: if True, also return (underflow_frac, neg_frac) of
+            the per-site sums as 0-dim tensors.
 
     Returns:
-        [batch, n_energy, n_sites], log10 units.
+        [batch, n_energy, n_sites], log10 units; plus the two diagnostic
+        tensors when return_diagnostics is set.
     """
     batch, n_energy, width = ldos_raw.shape
     if width % n_sites != 0:
@@ -36,7 +93,11 @@ def site_ldos_log10(ldos_raw: torch.Tensor, n_sites: int, log_floor: float) -> t
     # diagonal-derived input this receives in production. reshape is used
     # anyway because it does not depend on that remaining true.)
     per_site = ldos_raw.reshape(batch, n_energy, n_sites, n_orb).sum(dim=-1)
-    return torch.log10(torch.clamp(per_site, min=log_floor))
+    out = log10_floored(per_site, log_floor, floor_mode)
+    if return_diagnostics:
+        under, neg = _floor_diagnostics(per_site, log_floor)
+        return out, under, neg
+    return out
 
 
 class DNATransportHamiltonianGNN(nn.Module):
@@ -52,6 +113,7 @@ class DNATransportHamiltonianGNN(nn.Module):
                  solver_type: str = "complex",  # "frobenius" | "complex"
                  use_log_outputs: bool = True,
                  log_floor: float = 1e-16,
+                 floor_mode: str = 'clamp',
                  complex_eta: float = 1e-12,
                  conv_type: str = 'gat',
                  use_geometry: bool = False,
@@ -75,8 +137,17 @@ class DNATransportHamiltonianGNN(nn.Module):
         # stay mutually loadable. Rebuilt from self.energy_grid (still the numpy
         # array, kept for every existing consumer) at construction only, instead
         # of via torch.tensor(self.energy_grid, ...) on every forward.
+        # Registered with the SOURCE dtype (np.linspace gives float64), not a
+        # forced float32: a float64 consumer -- e.g. the model-vs-reference NEGF
+        # consistency check, which builds H in float64 -- otherwise sees a grid
+        # rounded to float32 (~2.9e-8 eV error) and the error is silent. The
+        # per-forward `.to(dtype=H.dtype)` still downcasts for float32 work, so
+        # the float32 path is unchanged.
+        _grid_np = np.asarray(energy_grid)
+        if not np.issubdtype(_grid_np.dtype, np.floating):
+            _grid_np = _grid_np.astype(np.float64)
         self.register_buffer('energy_grid_t',
-                              torch.tensor(np.asarray(energy_grid), dtype=torch.float32),
+                              torch.tensor(_grid_np),
                               persistent=False)
         self.output_dim = len(energy_grid)
         self.n_orb = n_orb  # Number of orbitals per site (n_onsite = n_coupling = n_orb)
@@ -90,10 +161,25 @@ class DNATransportHamiltonianGNN(nn.Module):
         self.solver_type = solver_type
         self.use_log_outputs = use_log_outputs
         self.log_floor = float(log_floor)
-        # Fraction of the energy grid below the smoothing eps on the LAST forward.
-        # nan until a forward has run.
+        if floor_mode not in ('clamp', 'smooth'):
+            raise ValueError(
+                f"floor_mode must be 'clamp' or 'smooth', got {floor_mode!r}")
+        # Defaults to 'clamp' -- the historical semantics -- ON PURPOSE: a
+        # checkpoint whose args predate this argument must reproduce its
+        # recorded numbers, and with the additive form eps=1e-16 no longer
+        # clamps, it biases. scripts/train.py writes 'smooth' for new runs.
+        self.floor_mode = floor_mode
+        # LAST-forward floor diagnostics, kept as 0-dim tensors (no CUDA sync in
+        # the forward; Trainer converts once per epoch). nan until a forward has
+        # run. `floored` counts genuine underflow (0 <= x < eps); `neg` counts
+        # NEGATIVE values, which are unphysical here and are the signature of a
+        # non-Hermitian H rather than of smallness.
         self.last_floored_frac_dos = float('nan')
         self.last_floored_frac_t = float('nan')
+        self.last_floored_frac_ldos = float('nan')
+        self.last_neg_frac_dos = float('nan')
+        self.last_neg_frac_t = float('nan')
+        self.last_neg_frac_ldos = float('nan')
         self.complex_eta = float(complex_eta)
         self.conv_type = conv_type.lower()
 
@@ -514,13 +600,37 @@ class DNATransportHamiltonianGNN(nn.Module):
         return H_matrix, H_size
 
     def _log10_floored(self, x: torch.Tensor) -> torch.Tensor:
-        """Smooth floor: log10(max(x,0) + eps). Unlike a hard clamp this keeps
-        gradient at every point above zero -- the old clamp at 1e-16 sat INSIDE
-        the transmission target range (targets reach 6.7e-19) and zeroed the
-        gradient exactly in the deep tail the length-extrapolation claim lives
-        in. eps (self.log_floor, default 1e-38) is a pure log10(0) guard: below
-        every physical value in the data, above float32 underflow."""
-        return torch.log10(torch.clamp_min(x, 0.0) + self.log_floor)
+        """Apply this model's recorded floor semantics (self.floor_mode).
+
+        With floor_mode='smooth' (what scripts/train.py writes): log10(max(x,0)
+        + eps). Unlike a hard clamp this keeps gradient at every point above
+        zero -- the old clamp at 1e-16 sat INSIDE the transmission target range
+        (targets reach 6.7e-19) and zeroed the gradient exactly in the deep tail
+        the length-extrapolation claim lives in. eps (self.log_floor, 1e-38 for
+        new runs) is a pure log10(0) guard: below every physical value in the
+        data, above float32 underflow.
+
+        With floor_mode='clamp' (the constructor default, for legacy
+        checkpoints): the historical hard clamp, so old numbers reproduce."""
+        return log10_floored(x, self.log_floor, self.floor_mode)
+
+    def _record_floor_diagnostics(self, x: torch.Tensor, suffix: str) -> None:
+        """Store (underflow, negative) fractions of x under last_*_frac_<suffix>.
+
+        Tensors, not floats -- see _floor_diagnostics for why."""
+        under, neg = _floor_diagnostics(x, self.log_floor)
+        setattr(self, f'last_floored_frac_{suffix}', under)
+        setattr(self, f'last_neg_frac_{suffix}', neg)
+
+    def site_ldos_log10_recorded(self, n_sites: int) -> torch.Tensor:
+        """site_ldos_log10 on self.ldos with this model's floor semantics, and
+        with the LDOS floor diagnostics recorded alongside the DOS/T ones."""
+        out, under, neg = site_ldos_log10(
+            self.ldos, n_sites, self.log_floor, self.floor_mode,
+            return_diagnostics=True)
+        self.last_floored_frac_ldos = under
+        self.last_neg_frac_ldos = neg
+        return out
 
     def NEGFProjection(self,
         H_matrix: torch.Tensor,
@@ -607,8 +717,9 @@ class DNATransportHamiltonianGNN(nn.Module):
         # DOS = -Im(Tr(Gr)) / pi, matching calculate_NEGF and the DFT reference
         dos_raw = -1*torch.einsum('benn->be', Gr_imag)/np.pi
         # DOS is positive by construction in NEGF; the floor is a log10(0) guard
-        # only (see _log10_floored). Record how much of the grid sits below it.
-        self.last_floored_frac_dos = float((dos_raw < self.log_floor).float().mean())
+        # only (see _log10_floored). Record how much of the grid underflows it,
+        # and separately how much is NEGATIVE (unphysical).
+        self._record_floor_diagnostics(dos_raw, 'dos')
         DOS = self._log10_floored(dos_raw) if self.use_log_outputs else torch.clamp_min(dos_raw, 0.0)
 
         # Per-site local DOS (LDOS): diagonal of the same spectral quantity whose
@@ -635,8 +746,8 @@ class DNATransportHamiltonianGNN(nn.Module):
         # Imaginary parts cancel out, only real part is left
         Tcoh = torch.matmul(gamma1Gr_real, gamma2Ga_real) - torch.matmul(gamma1Gr_imag, gamma2Ga_imag)
         T_raw = torch.einsum('benn->be', Tcoh)
-        # Transmission is positive by construction; smooth floor, not a clamp.
-        self.last_floored_frac_t = float((T_raw < self.log_floor).float().mean())
+        # Transmission is positive by construction; the floor is a log10(0) guard.
+        self._record_floor_diagnostics(T_raw, 't')
         T = self._log10_floored(T_raw) if self.use_log_outputs else torch.clamp_min(T_raw, 0.0)
 
         if squeeze_output:
@@ -708,10 +819,11 @@ class DNATransportHamiltonianGNN(nn.Module):
         M = torch.matmul(torch.matmul(GammaL_mat, Gr), torch.matmul(GammaR_mat, Ga))
         T_lin = torch.real(torch.einsum('benn->be', M))
 
-        # Fraction of the energy grid whose linear value sits below the smoothing
-        # eps -- a per-forward diagnostic, not a clamp (see _log10_floored).
-        self.last_floored_frac_dos = float((DOS_lin < self.log_floor).float().mean())
-        self.last_floored_frac_t = float((T_lin < self.log_floor).float().mean())
+        # Fraction of the energy grid whose linear value underflows the floor,
+        # and separately the negative (unphysical) fraction -- per-forward
+        # diagnostics, kept as tensors so no CUDA sync happens here.
+        self._record_floor_diagnostics(DOS_lin, 'dos')
+        self._record_floor_diagnostics(T_lin, 't')
         DOS = self._log10_floored(DOS_lin) if self.use_log_outputs else torch.clamp_min(DOS_lin, 0.0)
         T = self._log10_floored(T_lin) if self.use_log_outputs else torch.clamp_min(T_lin, 0.0)
 

@@ -87,12 +87,17 @@ def test_b_zero_never_enters_the_ldos_path(monkeypatch):
     # path so that entering it at all is a test failure, then confirm b=0
     # still composes a loss. The dataset HAS a target here, so only loss_b
     # can be what gates the path.
-    import g3nat.training.trainer as trainer_mod
+    # Patch target moved 2026-08-16: the trainer now calls the model method
+    # site_ldos_log10_recorded (so LDOS floor semantics and floor diagnostics
+    # come from the model), not the module-level site_ldos_log10.
+    from g3nat.models.hamiltonian import DNATransportHamiltonianGNN
 
     def _boom(*args, **kwargs):
-        raise AssertionError("site_ldos_log10 must not be called when loss_b == 0")
+        raise AssertionError(
+            "the LDOS path must not be entered when loss_b == 0")
 
-    monkeypatch.setattr(trainer_mod, "site_ldos_log10", _boom)
+    monkeypatch.setattr(DNATransportHamiltonianGNN, "site_ldos_log10_recorded",
+                        _boom)
 
     dataset = _dataset(with_ldos=True)
     batch = Batch.from_data_list([dataset[0], dataset[1]])
