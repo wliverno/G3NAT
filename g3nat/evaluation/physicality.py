@@ -37,10 +37,38 @@ def eig_metrics(H, window=(-1.0, 1.0)):
     return {'frac_eig_in_window': float(np.mean((w >= lo) & (w <= hi)))}
 
 
-def coupling_bandwidth(H):
+def onsite_block_eigs(H, n_orb=1):
+    """Per-site onsite levels: eigenvalues of each n_orb x n_orb diagonal block.
+    At n_orb=1 this is diag(H). At n_orb>1 naive diag(H) reads intra-block diagonal
+    entries and misclassifies the block off-diagonal as a coupling; the block
+    eigenvalues are the basis-invariant onsite levels."""
     H = np.asarray(H)
-    off = H - np.diag(np.diag(H))
-    return float(np.abs(off).max())
+    n_sites = H.shape[0] // n_orb
+    out = np.empty((n_sites, n_orb))
+    for s in range(n_sites):
+        block = H[s*n_orb:(s+1)*n_orb, s*n_orb:(s+1)*n_orb]
+        out[s] = np.linalg.eigvalsh(0.5 * (block + block.T))
+    return out
+
+
+def coupling_block_bandwidth(H, n_orb=1):
+    """Max Frobenius norm over INTER-site blocks (intra-site blocks are onsite)."""
+    H = np.asarray(H)
+    n_sites = H.shape[0] // n_orb
+    best = 0.0
+    for i in range(n_sites):
+        for j in range(n_sites):
+            if i == j:
+                continue
+            blk = H[i*n_orb:(i+1)*n_orb, j*n_orb:(j+1)*n_orb]
+            best = max(best, float(np.linalg.norm(blk)))
+    return best
+
+
+def coupling_bandwidth(H):
+    """n_orb=1-only: max |off-diagonal entry|. Use coupling_block_bandwidth(H, n_orb)
+    at n_orb>1, where a single scalar entry is not the right coupling measure."""
+    return coupling_block_bandwidth(H, 1)
 
 
 def baseline_distinctness(baseline):
