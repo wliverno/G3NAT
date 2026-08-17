@@ -59,7 +59,10 @@ Batch C and the doc item are NOT.
   subnormal; verified alive on CPU and the campaign GPU, but any fast-math/FTZ path turns
   `log10(0+1e-38)` into -inf and silently converts every deep-tail point into a skipped
   optimizer step. Re-check if mixed precision is ever enabled.
-- [ ] **R9 (ops) the C2 warning prints but does not change the exit code** -- deliberate
+- [ ] **R9 DEFERRED TO PHASE 2 (no runner exists yet).** The campaign runner is Phase 2
+  work; this item is a REQUIREMENT ON IT, carried forward with the subnormal assertion
+  from the characterization design. It does not block Phase 1 closing.
+  Original: **the C2 warning prints but does not change the exit code** -- deliberate
   (non-zero exit interacts with --requeue policy). The campaign runner's monitors MUST
   key on that warning string, or a no-best-checkpoint run still looks successful.
 
@@ -1741,7 +1744,16 @@ illegibility (runner override vs argparse default) cannot recur silently."
   buffer keeps checkpoints mutually loadable across the change. Also load one REAL
   pre-2026-08 checkpoint from trained_models/ into a current model and assert it loads
   (that is the case the campaign will actually depend on).
-- [ ] **Step 3.5:** Align the MODEL constructor's log_floor default (hamiltonian.py
+- [x] **Step 3.5 CANCELLED 2026-08-17 -- DO NOT DO THIS, it would break R2.** The step
+  below was written before R2 made `floor_mode='clamp'` the constructor default so that
+  an args-less legacy checkpoint reproduces its recorded numbers exactly. Legacy
+  reproduction requires `clamp` AND `log_floor=1e-16` together; changing the constructor
+  value to 1e-38 while the mode stays `clamp` would clamp legacy checkpoints at a
+  different point and silently void the guarantee R2 exists to provide. The CLI still
+  defaults to 1e-38 + `smooth`, which is what the campaign runs, and `resolved_config.json`
+  records both -- so the defaults no longer "disagree" in the n_orb sense; they encode two
+  different intents (legacy reproduction vs campaign physics) and both are written down.
+  ORIGINAL TEXT, superseded: Align the MODEL constructor's log_floor default (hamiltonian.py
   __init__ signature) from 1e-16 to 1e-38 to match the CLI (defaults that disagree are
   the n_orb lesson); run the log-floor and baseline tests after.
 - [ ] **Step 3:** Behavior audit against the spec's intentional-change list: run
