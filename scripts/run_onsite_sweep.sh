@@ -12,6 +12,12 @@
 ##
 # Structured-onsite alpha sweep (plan Task 7, Steps 2-3).
 #
+# HISTORICAL -- THIS SCRIPT NO LONGER RUNS AS WRITTEN. The continuous alpha mix was
+# removed from the model and from train.py; only the endpoints survive, as the boolean
+# --per_base_onsite (alpha=1) and its absence (alpha=0). The fractional cells below
+# require a checkout from before the alpha-booleanization commit. Kept for provenance
+# of the sweep that produced the alpha results in docs/model-results.md.
+#
 # Fixed GLOBAL alpha sweep on DFT (pickle) data:
 #     onsite = alpha*baseline[base] + (1-alpha)*context_head.
 # One array task per (alpha, seed) cell. alpha=0 is the current free-onsite model under the

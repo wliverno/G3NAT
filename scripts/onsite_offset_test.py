@@ -26,6 +26,8 @@ from torch_geometric.data import Batch
 import g3nat
 from g3nat.graph import sequence_to_graph
 from g3nat.data.pickle import load_single_pickle
+from g3nat.evaluation.inference import (per_base_onsite_from_args,
+                                        drop_legacy_alpha_state)
 
 MODELS = {
     'free (alpha=0)':     'outputs_onsite_sweep_a0_s42/hamiltonian_pickle_model.pth',
@@ -44,10 +46,10 @@ def load_model(path):
         hidden_dim=a['hidden_dim'], num_layers=a['num_layers'], num_heads=a['num_heads'],
         energy_grid=np.asarray(ck['energy_grid'], dtype=float), n_orb=a['n_orb'],
         conv_type=a.get('conv_type', 'gat'),
-        structured_onsite=a.get('structured_onsite', False),
-        alpha_granularity=a.get('alpha_granularity', 'global'),
-        alpha_mode=a.get('alpha_mode', 'fixed'),
-        alpha_value=a.get('alpha_value', 0.0), alpha_init=a.get('alpha_init', 0.9))
+        per_base_onsite=per_base_onsite_from_args(a, path))
+    # Pre-boolean checkpoints carry the removed alpha-mix state.
+    ck['model_state_dict'] = drop_legacy_alpha_state(
+        ck['model_state_dict'], m.per_base_onsite)
     m.load_state_dict(ck['model_state_dict'])
     m.eval()
     return m

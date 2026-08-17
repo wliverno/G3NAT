@@ -63,12 +63,13 @@ class TestConstructHamiltonianNOrb1:
         assert torch.allclose(H_vec, H_ref, atol=1e-6), \
             f"Max diff: {(H_vec - H_ref).abs().max()}"
 
-    def test_single_graph_matches_reference_with_structured_onsite_mixing(self):
-        """Vectorized H matches reference implementation with structured_onsite mixing
-        turned on (interior alpha=0.6, so both baseline and context contribute).
+    def test_single_graph_matches_reference_with_per_base_onsite(self):
+        """Vectorized H matches reference implementation with the per-base onsite
+        table on (onsite read from onsite_baseline, not the context head).
         Real ref-vs-vec equality check -- not just a Hermiticity sanity gate."""
-        _, model = _make_model(n_orb=1, structured_onsite=True,
-                                alpha_mode='fixed', alpha_value=0.6)
+        _, model = _make_model(n_orb=1, per_base_onsite=True)
+        with torch.no_grad():   # distinct entries: a per-base bug cannot hide
+            model.onsite_baseline.copy_(torch.tensor([[-0.5], [-1.4], [0.2], [-1.1]]))
         model.eval()
         graph = sequence_to_graph("ACGT", "ACGT", 0, 3, 0.1, 0.1)
         data = Batch.from_data_list([graph])
