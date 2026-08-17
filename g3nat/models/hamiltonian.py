@@ -71,6 +71,13 @@ class DNATransportHamiltonianGNN(nn.Module):
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
         self.energy_grid = energy_grid
+        # Non-persistent: never enters state_dict, so old and new checkpoints
+        # stay mutually loadable. Rebuilt from self.energy_grid (still the numpy
+        # array, kept for every existing consumer) at construction only, instead
+        # of via torch.tensor(self.energy_grid, ...) on every forward.
+        self.register_buffer('energy_grid_t',
+                              torch.tensor(np.asarray(energy_grid), dtype=torch.float32),
+                              persistent=False)
         self.output_dim = len(energy_grid)
         self.n_orb = n_orb  # Number of orbitals per site (n_onsite = n_coupling = n_orb)
         self.enforce_hermiticity = enforce_hermiticity
@@ -556,7 +563,7 @@ class DNATransportHamiltonianGNN(nn.Module):
         sigTotImag = sigTotImag_diag.unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)  # [batch, energy, H_size, H_size]
 
         # Expand energy grid to match batch size and H_size
-        energy_grid_tensor = torch.tensor(self.energy_grid, dtype=H_matrix.dtype, device=device)  # [num_energy]
+        energy_grid_tensor = self.energy_grid_t.to(dtype=H_matrix.dtype)  # [num_energy]
         energy_grid_expanded = energy_grid_tensor.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)  # [1, num_energy, 1, 1]
 
         # Calculate A matrix components for Frobenius formula
@@ -659,7 +666,7 @@ class DNATransportHamiltonianGNN(nn.Module):
 
         dtype_real = H_matrix.dtype
         H_expanded = H_matrix.unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)
-        energy = torch.tensor(self.energy_grid, dtype=dtype_real, device=device)
+        energy = self.energy_grid_t.to(dtype=dtype_real)
         energy = energy.view(1, -1, 1, 1).expand(batch_size, -1, H_size, H_size)
         I = torch.eye(H_size, dtype=dtype_real, device=device).view(1, 1, H_size, H_size).expand_as(H_expanded)
 
@@ -667,9 +674,10 @@ class DNATransportHamiltonianGNN(nn.Module):
         Sigma_im = -0.5 * torch.diag_embed(gamma_total)  # [batch, H_size, H_size]
         Sigma = 1j * Sigma_im.unsqueeze(1).expand(-1, len(self.energy_grid), -1, -1)
 
-        # Small positive imaginary part for causality
-        eta = self.complex_eta
-        A = (energy + 1j * eta) * I - H_expanded - Sigma
+        # Small positive imaginary part for causality: a numerical regulator that
+        # keeps the poles off the real axis, NOT a physical broadening. Physical
+        # broadening enters through the contact coupling Gamma above.
+        A = (energy + 1j * self.complex_eta) * I - H_expanded - Sigma
 
         # Solve A @ Gr = I
         I_c = torch.eye(H_size, dtype=torch.complex64 if dtype_real==torch.float32 else torch.complex128, device=device)
