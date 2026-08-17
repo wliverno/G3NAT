@@ -2534,6 +2534,64 @@ the recorded `best_val`. Determinism must be tested -- re-run one configuration 
 hundred epochs and compare against the stored `metric_history` -- before the recovery
 campaign is trusted.
 
+### 16e. The selection CRITERION changed too (commit 6a9c51b, 2026-08-16) -- v1/v2 checkpoints are not comparable
+
+Section 16 above fixed *when* the checkpoint callback fires relative to the true minimum
+(granularity). It did not touch *what curve* "best" is measured on. An independent code
+review (2026-08-16, R7 of that batch) flagged that the criterion itself is a second,
+separate divergence between the 84 published runs and the forthcoming 72-run v2 campaign,
+and that nothing in the docs said so. Recorded here as the second layer of this
+correction -- the account in 16a-16d above is left intact as the history of the first bug.
+
+**What changed, precisely** (`g3nat/training/trainer.py`, `scripts/train.py`, commit
+`6a9c51b`):
+
+- **Granularity.** Before: best was selected only among the epochs the checkpoint callback
+  actually saw, i.e. every `checkpoint_frequency` (default 10) epochs -- this is exactly
+  the "best among checkpointed epochs" behavior 16a-16d document and fix the save-condition
+  bug for. After: the `Trainer` holds the best weights in memory as `self.best_unweighted`,
+  refreshed **every** epoch (`trainer.py:171-178`), and hands that exact-epoch snapshot to
+  `checkpoint_cb` via a new `best_state` kwarg. The serialized weights are therefore no
+  longer within `checkpoint_frequency` epochs of the optimum -- they are the optimum epoch.
+- **Criterion.** Before: the loss_b-**weighted** total validation loss, `min(val_losses)`
+  (`a*T_loss + b*LDOS_loss + (1-b)*DOS_loss`, `docs/metrics.md` sec. 1). After: the
+  **unweighted** metric `val_dos_t_unweighted` = `dos_loss + transmission_loss` with no
+  `loss_a`/`loss_b`/`loss_c` scaling (`trainer.py:313-314`, `:484`, `:514`). The weighted
+  total is scaled differently in every supervision cell (loss_b differs by config), so
+  "best" under the old criterion was not a comparable quantity across arms; the unweighted
+  metric is.
+
+**Consequence.** The 84 published v1 `hamiltonian_pickle_model_best.pth` files were
+selected on the weighted total at 10-epoch cadence. The 72 v2 campaign runs (this plan,
+`docs/superpowers/plans/2026-08-15-campaign-v2-phase1.md`) will be selected on the
+unweighted metric at exact-epoch granularity. **Any table that pools v1 and v2 checkpoints
+is comparing weights chosen two different ways**, independent of and in addition to
+anything about the underlying config (log floor, geometry cache, etc.) that also changed
+between the two cohorts. This blocks any pooled table until the reader can tell which
+criterion produced which file.
+
+**The discriminator.** v2 checkpoints carry `selection_metric` (`'val_dos_t_unweighted'`)
+and `selection_value` keys (`scripts/train.py:542-543`, republished into the final
+`_best.pth` at `:684-685`). v1 checkpoints have neither -- `bc.get('selection_metric')`
+returns `None` on a v1 file. This is the check to run before trusting any cross-cohort
+number.
+
+**Do not conflate `best_val`/`best_val_epoch` with the selection criterion.** Both v1 and
+v2 `_best.pth` files also store `'best_val'` and `'best_val_epoch'` (`scripts/train.py:
+679-680`), now NaN-safe via `np.nanmin`/`np.nanargmin` (also landed in 6a9c51b, so a single
+poisoned epoch in `val_losses` can no longer make `argmin` publish a nonsense best-epoch).
+These two fields are the global minimum of the **weighted** validation curve -- the
+quantity v1 selected on -- and they are recorded on every file regardless of what the
+stored weights were actually chosen by. On a v1 file this happens to be the same quantity
+the weights were selected on (modulo the granularity gap already quantified in 16b). On a
+v2 file it is a **different quantity than the selection criterion**: the weights were
+chosen on `val_dos_t_unweighted`, not on the weighted total that `best_val`/`best_val_epoch`
+report. Quoting `best_val_epoch` as "the epoch the v2 weights came from" is wrong; that
+epoch is `saved_at_epoch`, which matches `selection_value`'s epoch. Both quantities are
+stored precisely so neither has to be inferred -- read `selection_metric`/`selection_value`
+for what the weights were chosen on, and `best_val`/`best_val_epoch` for the weighted
+curve's own minimum, and do not swap them.
+
 ## 17. Transmission-only training: DOS supervision is free (2026-08-11)
 
 The knob that had never been run. Every configuration on record trained on a DOS-family

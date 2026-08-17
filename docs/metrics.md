@@ -50,10 +50,50 @@ recomputes any table at best-val from stored curves at no compute cost.
 final-epoch weights, so anything measured *from the model* -- per-base baselines, eta2,
 window fractions, LDOS -- was computed on overfit weights. `scripts/train.py` now also writes
 `checkpoint_best.pth` and `<model>_best.pth`; prefer those for any model-derived quantity.
-The best checkpoint is the best among **checkpointed** epochs (every `checkpoint_frequency`),
-and it is saved only when the current epoch is itself the running minimum, so its stored
-weights always match its stored value. `best_val` / `best_val_epoch` in that file are the
-true global minimum of the curve, which may be marginally lower.
+
+### 1a. Selection criterion changed again since the paragraph above was written -- READ BEFORE POOLING CHECKPOINTS
+
+The paragraph above ("best among checkpointed epochs... saved only when the current epoch
+is itself the running minimum") describes the state of the code **after the 2026-08-11 fix
+and before commit 6a9c51b (2026-08-16)**. It is no longer how `checkpoint_best.pth` is
+produced. Both the granularity and the metric changed:
+
+| | before 6a9c51b (v1, 84 published runs) | after 6a9c51b (v2, the 72-run campaign) |
+|---|---|---|
+| granularity | best among **checkpointed** epochs only (the callback fires every `checkpoint_frequency`, default 10) | best held in memory and refreshed **every** epoch; the exact-epoch snapshot is what gets serialized |
+| criterion | the loss_b-**weighted** total validation loss (`min(val_losses)`, i.e. `a*T_loss + b*LDOS_loss + (1-b)*DOS_loss`) | the **unweighted** metric `val_dos_t_unweighted` (`dos_loss + transmission_loss`, no `loss_a`/`loss_b`/`loss_c` scaling) -- see `g3nat/training/trainer.py:314` and `:509-514` |
+
+Both changes were correct fixes on their own terms (see model-results.md sec. 16 for the
+granularity bug, and sec. 16e for why the criterion also had to move off the weighted
+total: it is scaled differently in every supervision cell, so "best" was not comparable
+across arms). But the consequence is that **the 84 published v1 `_best.pth` files and the
+v2 checkpoints were/will be selected by two different criteria at two different
+granularities.** A table that pools v1 and v2 checkpoints is comparing weights chosen two
+different ways, not just weights from different runs.
+
+**The discriminator.** A v2 checkpoint's `_best.pth` (and `checkpoint_best.pth`) carries
+`selection_metric` (`'val_dos_t_unweighted'`) and `selection_value` keys, populated at
+`scripts/train.py:542-543` and republished into the final `_best.pth` at `:684-685`. A v1
+checkpoint has neither key -- `bc.get('selection_metric')` on a v1 file returns `None`.
+Check for these keys before trusting a cross-cohort comparison; their absence is exactly
+the signal that a file predates 6a9c51b.
+
+**Do not confuse `best_val`/`best_val_epoch` with the selection criterion.** Every
+published `_best.pth`, v1 or v2, also stores `'best_val'` and `'best_val_epoch'`
+(`scripts/train.py:679-680`, NaN-safe via `np.nanmin`/`np.nanargmin` since the same
+commit). These are the global minimum of the **loss_b-weighted** validation curve --
+i.e. the same quantity v1 selected on -- and they are stored on every file regardless of
+what the weights were actually chosen by. On a v2 file, `best_val_epoch` is therefore
+**not** the epoch the stored weights came from; that epoch is `saved_at_epoch` /
+`selection_value`'s epoch. Quoting `best_val` as "what the weights were selected on" is
+correct for v1 and wrong for v2. Always read `selection_metric`/`selection_value` when
+present, and fall back to `best_val` (with a note that it is the weighted quantity) only
+when they are absent.
+
+The best checkpoint (v1 semantics) is the best among **checkpointed** epochs (every
+`checkpoint_frequency`), and it is saved only when the current epoch is itself the running
+minimum, so its stored weights always match its stored value. `best_val` / `best_val_epoch`
+in that file are the true global minimum of the curve, which may be marginally lower.
 
 ## 2. Convergence and stability
 
