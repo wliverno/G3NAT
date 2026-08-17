@@ -149,6 +149,28 @@ class DNATransportHamiltonianGNN(nn.Module):
         # Global pooling
         self.global_pool = global_mean_pool
 
+        # OPTIONAL modules are constructed LAST, after every always-present
+        # parameter, so toggling them cannot shift the init RNG stream of the
+        # shared core. Order among optional modules is fixed (structured onsite,
+        # then geometry, then any future addition appended AFTER these) and is
+        # part of reproducibility -- do not reorder.
+
+        # Optional structured onsite head. Default off = no new params (RNG stream and
+        # existing checkpoints unchanged). onsite = alpha*baseline[base] + (1-alpha)*context.
+        self.structured_onsite = structured_onsite
+        self.alpha_granularity = alpha_granularity
+        self.alpha_mode = alpha_mode
+        if structured_onsite:
+            n_alpha = 4 if alpha_granularity == 'per_base' else 1
+            # 4 per-base onsite blocks; near-zero init keeps early (E*I - H) well-conditioned.
+            self.onsite_baseline = nn.Parameter(torch.empty(4, n_orb * n_orb))
+            nn.init.normal_(self.onsite_baseline, std=0.01)
+            if alpha_mode == 'learned':
+                theta0 = float(np.log(alpha_init / (1.0 - alpha_init)))  # logit(alpha_init)
+                self.onsite_alpha_theta = nn.Parameter(torch.full((n_alpha,), theta0))
+            else:  # fixed: store alpha DIRECTLY (exact 0.0/1.0, no logit/sigmoid round-trip)
+                self.register_buffer('onsite_alpha_fixed', torch.full((n_alpha,), float(alpha_value)))
+
         # Optional SE(3)-invariant geometry channel. Default off = byte-for-byte
         # identical model (no extra params/buffers, existing checkpoints load).
         self.use_geometry = use_geometry
@@ -171,22 +193,6 @@ class DNATransportHamiltonianGNN(nn.Module):
                 std[1] = torch.tensor(geom_norm_stats["hbond"]["std"], dtype=torch.float)
             self.register_buffer("geom_mean", mean)
             self.register_buffer("geom_std", std)
-
-        # Optional structured onsite head. Default off = no new params (RNG stream and
-        # existing checkpoints unchanged). onsite = alpha*baseline[base] + (1-alpha)*context.
-        self.structured_onsite = structured_onsite
-        self.alpha_granularity = alpha_granularity
-        self.alpha_mode = alpha_mode
-        if structured_onsite:
-            n_alpha = 4 if alpha_granularity == 'per_base' else 1
-            # 4 per-base onsite blocks; near-zero init keeps early (E*I - H) well-conditioned.
-            self.onsite_baseline = nn.Parameter(torch.empty(4, n_orb * n_orb))
-            nn.init.normal_(self.onsite_baseline, std=0.01)
-            if alpha_mode == 'learned':
-                theta0 = float(np.log(alpha_init / (1.0 - alpha_init)))  # logit(alpha_init)
-                self.onsite_alpha_theta = nn.Parameter(torch.full((n_alpha,), theta0))
-            else:  # fixed: store alpha DIRECTLY (exact 0.0/1.0, no logit/sigmoid round-trip)
-                self.register_buffer('onsite_alpha_fixed', torch.full((n_alpha,), float(alpha_value)))
 
     def _onsite_alpha(self) -> torch.Tensor:
         """Mixing factor in [0,1], shape [1] (global) or [4] (per_base)."""
