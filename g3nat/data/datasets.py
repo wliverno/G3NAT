@@ -253,7 +253,13 @@ def create_dna_dataset(sequences: List[str], dos_data: np.ndarray,
 
         # Per-sequence SE(3)-invariant edge geometry (keyed by lowercase sequence)
         if geometry_cache is not None:
-            seq_kwargs['geometry'] = geometry_cache.get(sequence.lower())
+            key = sequence.lower()
+            if key not in geometry_cache:
+                raise KeyError(
+                    f"geometry cache has no entry for sequence {key!r} -- a silent "
+                    "miss trains that graph with geometry deleted (mask 0), diluting "
+                    "the geometry channel. Rebuild the cache or use geometry_v2.pkl.")
+            seq_kwargs['geometry'] = geometry_cache[key]
 
         if complementary_sequences is not None and i < len(complementary_sequences):
             # Use both primary and complementary sequences
