@@ -188,6 +188,10 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     os.makedirs(args.checkpoint_dir, exist_ok=True)
 
+    from g3nat.utils.runmeta import write_run_metadata
+    meta_path = write_run_metadata(args.output_dir, vars(args))
+    print(f"Run metadata: {meta_path}")
+
     print(f"G3NAT Training (v{g3nat.__version__})")
     print(f"Data source: {args.data_source}")
     print(f"Model type: {args.model_type}")
