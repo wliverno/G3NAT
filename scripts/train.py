@@ -113,8 +113,10 @@ def parse_args():
     parser.add_argument('--use_geometry', action='store_true',
                        help='Fuse SE(3)-invariant X3DNA edge geometry (hamiltonian model). '
                             'Requires a geometry cache built via GeomCacheJob.')
-    parser.add_argument('--geom_cache', type=str, default='geom_cache/geometry.pkl',
-                       help='Path to the per-sequence geometry cache (used with --use_geometry).')
+    parser.add_argument('--geom_cache', type=str, default='geom_cache/geometry_v2.pkl',
+                       help='Path to the per-sequence geometry cache (used with --use_geometry). '
+                            'Defaults to the v2 cache (520 sequences, matches pickle_files_v2); '
+                            'the older geometry.pkl covers only 515 v1 sequences.')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'adamw'],
                        help="Optimizer. 'adam' (default) reproduces historical runs exactly. "
                             "'adamw' decouples weight decay -- Loshchilov & Hutter ICLR 2019 "
@@ -233,12 +235,10 @@ def main():
     geom_norm_stats = None
     if args.use_geometry:
         import pickle as _pk
-        from g3nat.graph.geometry import compute_norm_stats
         print(f"Loading geometry cache from {args.geom_cache}...")
         with open(args.geom_cache, 'rb') as _f:
             geom_cache = _pk.load(_f)
-        geom_norm_stats = compute_norm_stats(geom_cache)
-        print(f"Geometry cache loaded: {len(geom_cache)} sequences; per-type norm stats computed")
+        print(f"Geometry cache loaded: {len(geom_cache)} sequences")
 
     # Create dataset
     if args.data_source == 'pickle':
@@ -271,6 +271,14 @@ def main():
     train_indices, val_indices = grouped_split(seqs, test_size=0.2, seed=args.split_seed)
     train_dataset = Subset(dataset, train_indices)
     val_dataset = Subset(dataset, val_indices)
+
+    # Geometry norm stats computed from the TRAIN split only, so val/test sequences
+    # do not leak into the z-score normalization.
+    if args.use_geometry:
+        from g3nat.graph.geometry import compute_norm_stats
+        train_seqs = {seqs[i].lower() for i in train_indices}
+        geom_norm_stats = compute_norm_stats(geom_cache, sequences=train_seqs)
+        print(f"Geometry norm stats computed from {len(train_seqs)} training sequences")
 
     # Seed initialization AFTER the split (which uses its own seed) and BEFORE
     # constructing the loaders/model, so --init_seed controls weights (and, via

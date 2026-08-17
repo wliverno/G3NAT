@@ -193,8 +193,16 @@ def assemble_graph_geometry(primary_seq, comp_seq, entry):
     return out
 
 
-def compute_norm_stats(cache):
-    """Per-edge-type z-score stats over the assembled 7-tuples (std floored at 1e-6)."""
+def compute_norm_stats(cache, sequences=None):
+    """Per-edge-type z-score stats over the assembled 7-tuples (std floored at 1e-6).
+
+    If `sequences` is given, stats are computed only over those keys (lowercased),
+    restricted to entries present in `cache` -- e.g. the training split only, so
+    val/test sequences do not leak into the normalization stats.
+    """
+    if sequences is not None:
+        keys = {s.lower() for s in sequences}
+        cache = {k: v for k, v in cache.items() if k in keys}
     back, hb = _edge_rows(cache)
 
     def st(a):
