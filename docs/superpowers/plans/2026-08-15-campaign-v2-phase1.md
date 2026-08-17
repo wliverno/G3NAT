@@ -14,6 +14,21 @@ behavior-preserving unless the spec says otherwise; byte-identity tests enforce 
 
 **Spec:** `docs/superpowers/specs/2026-08-13-campaign-v2-design.md`
 
+## Review step (added 2026-08-16 at willll's instruction -- applies to EVERY task)
+
+Each task gets an independent code review before the next task starts. The executor
+does NOT review its own work. After a task commits, the coordinator dispatches a
+reviewer subagent per superpowers:requesting-code-review with the task's plan section
+as the requirements and the commit range as the diff. Critical findings are fixed
+before proceeding; Important findings before the phase ends; Minor findings are
+recorded. Reviewers are asked explicitly to name any test they believe is vacuous --
+this plan has already shipped one test that could not fail (Task 5's original
+stationary-point gradient test) and one ordering test that needed a mutation check to
+prove it discriminates (Task 8).
+
+Tasks 1-11 and 15 were reviewed retroactively in three subsystem batches on 2026-08-16
+(training loop, model/solver, data/eval); findings recorded in the private notes tree.
+
 ## Global Constraints
 
 - ASCII only in all files.
