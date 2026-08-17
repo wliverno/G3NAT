@@ -1,0 +1,162 @@
+# Phase 1 characterization: what did our fixes actually change?
+
+Status: DESIGN rev 2, revised 2026-08-16 after adversarial review. Replaces the toy
+two-run determinism check that was Task 16 step 3 as the real Phase 1 exit gate.
+
+## Why
+
+Phase 1 changed the training loop, the solver's log floor, checkpoint selection, resume
+semantics, geometry handling and several defaults. 275 unit tests pass and NOT ONE
+TRAINING RUN has executed against any of it. That is the posture the project was in
+before a previous fix left training on the complex solver while inference used Frobenius,
+which made log_floor a dead knob at eval and invalidated the section-12a length curves
+(recorded at `g3nat/evaluation/inference.py:81-88`). This session reproduced that class
+twice: the log_floor default silently shifted the LDOS floor 22 decades (R1), and floor
+semantics were unrecorded so legacy checkpoints re-evaluated differently (R2). Both are
+now fixed (7950f99); the point stands.
+
+The question is not "does it run". It is: **every difference between old and new must be
+explainable by a change we made deliberately. Anything unexplained is a bug we introduced
+and have not found.**
+
+## Preconditions (BLOCKING -- rev 2, review finding F3/I3)
+
+1. **Clean, committed tree.** No uncommitted tracked changes. `runmeta` stamps
+   `git_sha`/`git_dirty` into every artifact; running dirty produces a provenance hole
+   and a non-reproducible result. Record the exact sha in the deliverable.
+2. **Code freeze on `g3nat/` for the duration.** The plan's OPEN WORK list must be empty
+   (R7, R8, R9 outstanding at rev 2). Any later commit under `g3nat/` RE-TRIGGERS Part 1.
+3. **Node pinning is mandatory** for Parts 1 and 3 (`--constraint` or explicit gres type);
+   record `nvidia-smi -L` and the node name. Not "ideally" -- TF32/reduction order differs
+   across architectures at the magnitude being compared, and the eps=1e-38 subnormal
+   question (R8) is per-device.
+4. **`--geom_cache`, `--log_floor` and `--floor_mode` are passed EXPLICITLY on both sides,
+   never defaulted** (I1, plus the R1-R6 agent's note that a model built without
+   `floor_mode` now silently gets the legacy clamp).
+
+## The design problem
+
+The naive experiment -- train the same config on old and new code and diff the curves --
+fails because old code's sampler is unseeded, so two old-code runs already differ by 0.053
+best-val with an 89-epoch shift in the optimum.
+
+BUT (review finding F1, the key insight): old code's sampler is unseeded **only when
+`shuffle=True`**. At `shuffle=False` it draws no RNG at all. So a paired, deterministic,
+epoch-by-epoch training comparison IS constructible. That becomes Part 1c and it carries
+most of the weight, because a fixed-weights forward pass (Part 1a/1b) exercises only the
+NEGF block and is blind to Tasks 1, 2, 3, 4, 12, 14, 15 -- the entire training loop, which
+is the part that has never run.
+
+Caveat for 1c: Task 1 also added `sorted(self.buckets.items())`, so bucket ORDER differs
+between versions even at `shuffle=False`. Run 1c on a **single-length subset** (one
+bucket), where bucket ordering is irrelevant and the pairing is exact.
+
+## Part 0 (DONE): baseline artifact check
+
+Cheapest deterministic check available, and already executed 2026-08-16: the golden
+fixture `tests/baseline/outputs/model_hamiltonian.pkl` at 7950f99 versus its pre-floor-
+change ancestor at c1dabc8^. Result: `dos` and `transmission` both **bitwise identical,
+max_abs_diff 0.0**, verified by direct array comparison on a compute node (not by file
+hash -- pickle metadata differs). This is what `floor_mode='clamp'` as the constructor
+default predicts, and it is a narrow instance of Part 1a passing.
+
+## Part 1a/1b (deterministic, forward pass only): fixed weights, fixed inputs
+
+No training, no RNG, `torch.no_grad()`, eval mode, both sides.
+
+- Old code: `git worktree add` at `1a992af` (last pre-Phase-1 code commit). NEVER move HEAD
+  on the main checkout. Data is gitignored, so the worktree starts empty -- symlink
+  `pickle_files_v2/`, `geom_cache/`, and the checkpoint dirs in explicitly (I1).
+- Checkpoints (MANDATORY arms, review finding I4 -- `trained_models/` is all n_orb=1
+  pre-campaign and would validate the wrong configuration):
+  - one n_orb=1 checkpoint from `trained_models/`
+  - one n_orb=2 checkpoint, e.g. `ckpt_ldos_B_b0.5_s42_n2/checkpoint_best.pth`
+  - one n_orb=2 + geometry checkpoint, e.g. `ckpt_ldos_B_b0.5_s42_n2_geom/checkpoint_best.pth`
+  Verify each loads on BOTH sides before comparing (energy_grid_t is persistent=False, so
+  strict loading works in both directions -- confirmed by review).
+- Inputs: 8 fixed sequences from `pickle_files_v2` spanning lengths and both contact
+  variants. PRE-VERIFY every one is present in both geometry caches (I2) -- new code
+  hard-fails on a cache miss where old code silently inserted None, which is a crash on
+  one side rather than a comparison.
+- Compare elementwise, reporting max and median absolute difference per channel: log10
+  DOS, log10 transmission, per-site LDOS, H, GammaL/GammaR, and every loss term.
+
+**1a "semantics held constant":** new code forced to old settings -- `log_floor=1e-16`,
+`floor_mode='clamp'`, v1 geometry cache, complex solver, AND geometry norm stats computed
+over the full cache rather than the train split (I2: Task 9's train-split filter changes
+normalized edge features, hence H, at fixed weights -- it is deliberate, so it belongs in
+the forced-settings list, not in the bug column).
+EXPECTATION: bitwise equality for H and Gamma on CPU float64; <= 1e-12 relative on the
+log10 outputs (M2). Any structural difference is an unintended change, i.e. a bug.
+
+**1b "campaign defaults":** `log_floor=1e-38`, `floor_mode='smooth'`, v2 cache, train-split
+norm stats. EXPECTATION: differences ONLY below the old 1e-16 clamp and in LDOS scale
+where the floor binds. **Every nonzero difference must be attributed to a named commit.
+An unattributed difference BLOCKS the campaign.**
+
+## Part 1c (PRIMARY, deterministic): paired training on a fixed batch order
+
+This is the arm that actually covers the training loop.
+
+- Single-length subset (one bucket) of the dataset; `shuffle=False` on the train loader
+  on both sides; `--init_seed` fixed and identical; 5-10 epochs; CPU.
+- Old-code worktree vs new code, same config, `floor_mode='clamp'` and `log_floor=1e-16`
+  forced so 1c isolates training-loop changes rather than floor semantics.
+- Compare per-epoch train loss and every metric_history channel elementwise.
+- EXPECTATION: identical to float noise. Differences must be attributable to a deliberate
+  change (e.g. the epoch-mean denominator now excludes skipped batches -- with no NaN
+  batches present, that is a no-op and the curves should match exactly).
+- Then repeat with campaign settings to see the intended deltas.
+
+## Part 2 (SMOKE TEST ONLY -- no comparative verdict): short new-code runs
+
+Review finding F2: with 3 seeds a side against old code's ~0.037 sd, the minimum
+detectable effect is **0.081, about 5x the project's own 0.017 meaningful bar**, and the
+min/max envelope test flags a false displacement 80% of the time under a true null while
+being biased toward passing because new code is tighter by construction. The old-code arm
+is therefore DROPPED. **No comparative verdict may be drawn from Part 2 in either
+direction, and a null here must never be reported as agreement.**
+
+What it is for: 1-2 new-code runs, ~400 epochs (noting this is pre-convergence, so
+converged scatter figures do not apply -- M3), asserting operationally:
+`resolved_config.json` written; `checkpoint_best.pth` produced; metric_history carries
+every frozen key including the new counters; the C2 no-best warning does NOT appear;
+`nan_skipped_total == 0`; floored and negative fractions ~0 on all three channels.
+
+## Part 3: determinism confirmation (split criteria, review finding I5)
+
+- **CPU, BLOCKING:** two new-code runs, identical command incl. `--init_seed`, 20-30
+  epochs. Criterion: bitwise identical val curves. Cheap and exact.
+- **GPU, CHARACTERIZATION ONLY, no blocking threshold:** same comparison on the pinned
+  GPU node. There is no `torch.use_deterministic_algorithms`, no cudnn determinism flag,
+  and PyG message passing is scatter/atomic-based, so a residual is expected and can
+  compound chaotically over epochs. Report the measured residual as the documented
+  irreducible floor; do NOT block on it. Separately decide and record whether the campaign
+  sets `use_deterministic_algorithms(warn_only=True)`.
+
+## Carried into the campaign runner (review finding I6, not part of this experiment)
+
+**Per-run subnormal assertion.** At startup, on the ALLOCATED device, assert
+`torch.log10(torch.zeros(1, device=dev) + 1e-38)` is finite and equals -38. On `ckpt-all`
+a run lands on whatever is free; one validation node proves nothing about the other 71
+runs. Any FTZ/fast-math path would flush the subnormal to zero, make log10 return -inf,
+and the NaN guard would then silently skip every deep-tail optimizer step.
+
+## What blocks the campaign
+
+- Any structural difference in Part 1a (beyond the stated per-channel tolerances).
+- Any unattributed difference in Part 1b or 1c.
+- Any operational assertion failing in Part 2.
+- Part 3's CPU criterion failing.
+- (Not blocking: Part 3's GPU residual, and anything in Part 2 that looks like a
+  comparative difference -- it cannot resolve one.)
+
+## Executor notes
+
+- Part 0 is done. Do Part 1a, then 1c, and REPORT before starting 1b/2/3 -- if 1a or 1c
+  is not clean, everything downstream is a waste of GPU time.
+- Remove the worktree when finished.
+- Old and new code must run in the SAME conda env, same partition, same pinned node.
+- Audit before launch (from the R1-R6 report): every evaluation script that constructs a
+  model directly now gets `floor_mode='clamp'` by default. Production training passes
+  `'smooth'`, but ad-hoc analysis does not.
