@@ -39,3 +39,24 @@ def write_run_metadata(output_dir: str, args_dict: dict) -> str:
     with open(path, 'w') as f:
         json.dump(meta, f, indent=2, default=str)
     return path
+
+
+def update_run_metadata(output_dir: str, **fields) -> str:
+    """Merge extra fields into an existing resolved_config.json (creating it if
+    absent). Used for facts only known after the run starts -- e.g. which resume
+    argument changes were deliberately exempted via --allow_arg_change."""
+    path = os.path.join(output_dir, 'resolved_config.json')
+    meta = {}
+    if os.path.exists(path):
+        try:
+            with open(path) as f:
+                meta = json.load(f)
+        except Exception:
+            meta = {}
+    if not isinstance(meta, dict):
+        meta = {}
+    meta.update(fields)
+    os.makedirs(output_dir, exist_ok=True)
+    with open(path, 'w') as f:
+        json.dump(meta, f, indent=2, default=str)
+    return path
