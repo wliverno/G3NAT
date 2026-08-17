@@ -16,7 +16,7 @@ def _args(**overrides):
     base = {
         'data_source': 'pickle', 'data_dir': 'pickle_files_v2', 'model_type': 'hamiltonian',
         'hidden_dim': 128, 'num_layers': 4, 'n_orb': 1, 'solver_type': 'complex',
-        'dropout': 0.0, 'alpha_mode': 'fixed', 'alpha_value': 0.0, 'num_epochs': 5000,
+        'dropout': 0.0, 'per_base_onsite': False, 'num_epochs': 5000,
         'device': 'auto', 'output_dir': './outputs', 'checkpoint_dir': './ckpt',
         'allow_arg_change': '',
     }
@@ -54,13 +54,14 @@ def test_non_defining_args_may_differ():
 
 @pytest.mark.parametrize('key,stored_value,current_value', [
     ('dropout', 0.0, 0.3),
-    ('alpha_mode', 'fixed', 'learned'),
-    ('alpha_value', 0.0, 0.9),
+    ('per_base_onsite', False, True),
 ])
 def test_args_omitted_by_the_old_allowlist_are_now_guarded(key, stored_value, current_value):
     """I8: CONFIG_DEFINING_ARGS was an allowlist that already omitted 15 args --
-    dropout and every alpha flag among them -- so a resume could silently switch
-    them. The guard is now a denylist, so these are caught."""
+    dropout and every onsite-head flag among them -- so a resume could silently
+    switch them. The guard is now a denylist, so these are caught, and flags added
+    later (per_base_onsite, which replaced the alpha flags) are guarded on day one
+    with no list to remember to update."""
     cur = _args(**{key: current_value})
     stored = _args(**{key: stored_value})
     with pytest.raises(ValueError, match=key):

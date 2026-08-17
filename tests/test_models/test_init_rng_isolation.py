@@ -1,6 +1,6 @@
 """Optional modules must not perturb the shared core's init RNG stream.
 
-Toggling an optional feature flag (geometry, structured onsite) must not change a
+Toggling an optional feature flag (geometry, per-base onsite) must not change a
 single always-present parameter at a fixed seed, and must not change the draws of
 optional modules constructed before it. This is what makes a factorial
 across those flags comparable: differences between arms are the feature, not a
@@ -14,8 +14,7 @@ import torch
 
 from g3nat.models.hamiltonian import DNATransportHamiltonianGNN
 
-OPTIONAL_PREFIXES = ('geom_encoder', 'geom_mean', 'geom_std',
-                     'onsite_baseline', 'onsite_alpha')
+OPTIONAL_PREFIXES = ('geom_encoder', 'geom_mean', 'geom_std', 'onsite_baseline')
 
 
 def _core_weights(model):
@@ -43,11 +42,11 @@ def test_geometry_flag_does_not_shift_core_init():
         assert torch.equal(off[k], on[k]), f"core param {k} differs when geometry toggles"
 
 
-def test_geometry_flag_does_not_shift_core_init_with_structured_onsite():
-    """Discriminating case: the structured-onsite head is an RNG consumer that is
+def test_geometry_flag_does_not_shift_core_init_with_per_base_onsite():
+    """Discriminating case: the per-base onsite head is an RNG consumer that is
     NOT the geometry encoder, so a bad ordering can move it."""
-    m_off = _build(use_geometry=False, structured_onsite=True)
-    m_on = _build(use_geometry=True, structured_onsite=True)
+    m_off = _build(use_geometry=False, per_base_onsite=True)
+    m_on = _build(use_geometry=True, per_base_onsite=True)
 
     # The optional modules really exist in both models (otherwise this test is vacuous).
     assert hasattr(m_off, 'onsite_baseline') and hasattr(m_on, 'onsite_baseline')

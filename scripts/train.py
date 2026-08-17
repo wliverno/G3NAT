@@ -141,14 +141,12 @@ def parse_args():
                             'Default None leaves the RNGs untouched, reproducing historical '
                             'runs exactly. Set it to vary initialization at a FIXED split, '
                             'which is what a reproducibility sweep over H actually requires.')
-    parser.add_argument('--structured_onsite', action='store_true',
-                       help='Mix a per-base onsite baseline with the context head.')
-    parser.add_argument('--alpha_granularity', choices=['global', 'per_base'], default='global')
-    parser.add_argument('--alpha_mode', choices=['fixed', 'learned'], default='fixed')
-    parser.add_argument('--alpha_value', type=float, default=0.0,
-                       help='Fixed mixing factor in [0,1] (alpha_mode=fixed).')
-    parser.add_argument('--alpha_init', type=float, default=0.9,
-                       help='Initial mixing factor (alpha_mode=learned).')
+    parser.add_argument('--per_base_onsite', action='store_true',
+                       help='Onsite = a learned per-base table (4 values shared across '
+                            'all A/T/G/C sites) instead of the context head. Off in the '
+                            'campaign; one post-factorial epilogue run turns it on. '
+                            'Replaces the removed continuous alpha mix: this flag is the '
+                            'old alpha=1, and its absence the old alpha=0.')
 
     # Training parameters
     parser.add_argument('--num_epochs', type=int, default=100)
@@ -316,8 +314,6 @@ def best_publication_warning(best_ckpt_path: str, metric_history):
 
 def main():
     args = parse_args()
-    assert not (args.alpha_granularity == 'per_base' and args.alpha_mode == 'fixed'), \
-        "per_base+fixed needs 4 alphas; use learned or global"
     assert not (args.raw_scale_loss and args.shape_loss), \
         "--raw_scale_loss and --shape_loss are mutually exclusive (absolute is now " \
         "the default; --raw_scale_loss is a no-op kept for older invocations)"
@@ -475,11 +471,7 @@ def main():
             conv_type=args.conv_type,
             use_geometry=args.use_geometry,
             geom_norm_stats=geom_norm_stats,
-            structured_onsite=args.structured_onsite,
-            alpha_granularity=args.alpha_granularity,
-            alpha_mode=args.alpha_mode,
-            alpha_value=args.alpha_value,
-            alpha_init=args.alpha_init,
+            per_base_onsite=args.per_base_onsite,
         )
 
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")

@@ -8,6 +8,56 @@ from g3nat.models import DNATransportGNN, DNATransportHamiltonianGNN
 from g3nat.graph import sequence_to_graph
 
 
+_LEGACY_ALPHA_STATE_KEYS = ('onsite_alpha_fixed', 'onsite_alpha_theta')
+
+
+def per_base_onsite_from_args(args: dict, source: str = '<checkpoint>') -> bool:
+    """Resolve the boolean `per_base_onsite` model flag from a checkpoint's args.
+
+    Checkpoints written on or after the alpha-booleanization commit record
+    `per_base_onsite` directly. Older ones record the REMOVED continuous mix
+    (`structured_onsite` + `alpha_mode`/`alpha_value`), whose two endpoints are the
+    only ones the current model can express:
+      alpha=0 (or structured_onsite off) -> per_base_onsite=False (context head)
+      alpha=1                            -> per_base_onsite=True  (per-base table)
+    A fractional or learned alpha is a genuinely different model. Rather than load
+    it as one of the endpoints and report the numbers as if nothing changed, this
+    raises: those checkpoints are historical alpha-sweep artifacts and must be read
+    with pre-boolean code.
+    """
+    if 'per_base_onsite' in args:
+        return bool(args['per_base_onsite'])
+    if not bool(args.get('structured_onsite', False)):
+        return False
+    mode = str(args.get('alpha_mode', 'fixed'))
+    alpha = float(args.get('alpha_value', 0.0))
+    if mode == 'learned' or alpha not in (0.0, 1.0):
+        raise ValueError(
+            f"{source}: this checkpoint was trained with the REMOVED continuous "
+            f"onsite alpha mix (alpha_mode={mode!r}, alpha_value={alpha!r}, "
+            f"alpha_granularity={args.get('alpha_granularity', 'global')!r}) and "
+            "cannot be represented by the current model, which offers only the two "
+            "endpoints (per_base_onsite=False == alpha 0, True == alpha 1). Check "
+            "out a commit from before the alpha-booleanization change to evaluate "
+            "it; loading it here would silently score a different model.")
+    return alpha == 1.0
+
+
+def drop_legacy_alpha_state(state_dict: dict, per_base_onsite: bool) -> dict:
+    """Strip alpha-mix state that the current model has no home for.
+
+    The alpha buffers/parameters are gone entirely. `onsite_baseline` survives only
+    when per_base_onsite is True; at alpha=0 the table was multiplied by zero and
+    never entered H, so dropping it is exact, not an approximation.
+    """
+    drop = set(_LEGACY_ALPHA_STATE_KEYS)
+    if not per_base_onsite:
+        drop.add('onsite_baseline')
+    if not any(k in state_dict for k in drop):
+        return state_dict
+    return {k: v for k, v in state_dict.items() if k not in drop}
+
+
 def load_trained_model(model_path: str, device: str = 'auto') -> Tuple[Union[DNATransportGNN, DNATransportHamiltonianGNN], np.ndarray, torch.device]:
     """
     Load a trained DNA Transport GNN model.
@@ -57,6 +107,9 @@ def load_trained_model(model_path: str, device: str = 'auto') -> Tuple[Union[DNA
 
     # Initialize model with same architecture
     if model_type == 'hamiltonian':
+        # Resolve the onsite head first: an unrepresentable legacy alpha must abort
+        # before anything is built or loaded.
+        per_base_onsite = per_base_onsite_from_args(args, model_path)
         if 'solver_type' not in args:
             print("WARNING: this checkpoint predates solver_type being recorded in args "
                   "(scripts/train.py). Falling back to the constructor default 'complex', "
@@ -107,12 +160,11 @@ def load_trained_model(model_path: str, device: str = 'auto') -> Tuple[Union[DNA
             complex_eta=args.get('complex_eta', 1e-12),
             conv_type=args.get('conv_type', 'gat'),
             use_geometry=args.get('use_geometry', False),
-            structured_onsite=args.get('structured_onsite', False),
-            alpha_granularity=args.get('alpha_granularity', 'global'),
-            alpha_mode=args.get('alpha_mode', 'fixed'),
-            alpha_value=args.get('alpha_value', 0.0),
-            alpha_init=args.get('alpha_init', 0.9),
+            per_base_onsite=per_base_onsite,
         )
+        # Old alpha-mix checkpoints carry state this model no longer has.
+        state_dict = drop_legacy_alpha_state(state_dict, per_base_onsite)
+        checkpoint['model_state_dict'] = state_dict
         print("DNATransportHamiltonianGNN initialized successfully")
     else:  # standard
         model = DNATransportGNN(

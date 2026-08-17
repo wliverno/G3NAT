@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Collect the structured-onsite alpha sweep into the discriminator table.
 
+HISTORICAL. The continuous alpha mix was removed (the model now has only the boolean
+`per_base_onsite`, the old alpha=0/alpha=1 endpoints), so this script can still read
+the alpha=0 and alpha=1 cells but raises on any cell with 0 < alpha < 1 or
+alpha_mode='learned'. To re-read the full sweep, check out a commit from before the
+alpha-booleanization change.
+
 For each cell checkpoint (outputs_<prefix>_a<alpha>_s<seed>/hamiltonian_pickle_model.pth):
   - final-epoch val loss (val_losses[-1]) + a convergence flag (tail slope), so we compare
     CONVERGED fits, not lucky dips. final-epoch is the honest object here (willll's call):
@@ -44,6 +50,8 @@ from torch_geometric.data import Batch
 import g3nat
 from g3nat.graph import sequence_to_graph
 from g3nat.data.pickle import load_single_pickle
+from g3nat.evaluation.inference import (per_base_onsite_from_args,
+                                        drop_legacy_alpha_state)
 from g3nat.evaluation.physicality import (onsite_metrics, eig_metrics,
                                           coupling_bandwidth, baseline_distinctness)
 
@@ -62,10 +70,10 @@ def load_model(path):
     m = g3nat.DNATransportHamiltonianGNN(
         hidden_dim=a['hidden_dim'], num_layers=a['num_layers'], num_heads=a['num_heads'],
         energy_grid=eg, n_orb=a['n_orb'], conv_type=a.get('conv_type', 'gat'),
-        structured_onsite=a.get('structured_onsite', False),
-        alpha_granularity=a.get('alpha_granularity', 'global'),
-        alpha_mode=a.get('alpha_mode', 'fixed'),
-        alpha_value=a.get('alpha_value', 0.0), alpha_init=a.get('alpha_init', 0.9))
+        per_base_onsite=per_base_onsite_from_args(a, path))
+    # Pre-boolean checkpoints carry the removed alpha-mix state.
+    ck['model_state_dict'] = drop_legacy_alpha_state(
+        ck['model_state_dict'], m.per_base_onsite)
     m.load_state_dict(ck['model_state_dict'])
     m.eval()
     return m, a, ck
@@ -152,7 +160,7 @@ def main():
         fin, tmean, slope = convergence(ck['val_losses'])
         phys, per_base = physicality_over(m, margs['n_orb'], graphs)
         e2 = eta2(per_base)
-        bl = m.onsite_baseline.detach().numpy() if getattr(m, 'structured_onsite', False) else np.zeros((4, 1))
+        bl = m.onsite_baseline.detach().numpy() if getattr(m, 'per_base_onsite', False) else np.zeros((4, 1))
         dist = baseline_distinctness(bl)['min_pairwise']
         print(f"{a:>6} {fin:>9.4f} {tmean:>9.4f} {slope:>+10.2e} {phys['ons_in_win']:>10.3f} "
               f"{phys['eig_in_win']:>10.3f} {phys['coup_bw']:>8.2f} {e2:>6.3f} {dist:>8.3f}")

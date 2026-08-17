@@ -246,7 +246,10 @@ case "${PHASE}" in
     SEED="${SEEDS[$(( i % ${#SEEDS[@]} ))]}"
     TARGET=residue
     TAG="O_a1.0_b${B_VAL}_s${SEED}${NORB_TAG}${GEOM_TAG}"
-    EXTRA=(--structured_onsite --alpha_granularity global --alpha_mode fixed --alpha_value 1.0)
+    # The continuous mix is GONE: alpha=1 is now the boolean --per_base_onsite, which
+    # is exactly this arm. The fractional/learned-alpha work discussed above is no
+    # longer reachable from this script (see the alpha-booleanization commit).
+    EXTRA=(--per_base_onsite)
     ;;
   T)
     # TRANSMISSION-ONLY (loss_c = 0), willll 2026-08-10. The previously

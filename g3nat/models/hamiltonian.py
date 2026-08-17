@@ -119,11 +119,7 @@ class DNATransportHamiltonianGNN(nn.Module):
                  use_geometry: bool = False,
                  geom_dim: int = 7,
                  geom_norm_stats: Optional[Dict] = None,
-                 structured_onsite: bool = False,
-                 alpha_granularity: str = 'global',   # 'global' | 'per_base'
-                 alpha_mode: str = 'fixed',           # 'fixed' | 'learned'
-                 alpha_value: float = 0.0,
-                 alpha_init: float = 0.9):
+                 per_base_onsite: bool = False):
         super().__init__()
         # Use features specified in dataset.py
         node_features = 4  # 4 one-hot features (A, T, G, C)
@@ -237,25 +233,23 @@ class DNATransportHamiltonianGNN(nn.Module):
 
         # OPTIONAL modules are constructed LAST, after every always-present
         # parameter, so toggling them cannot shift the init RNG stream of the
-        # shared core. Order among optional modules is fixed (structured onsite,
+        # shared core. Order among optional modules is fixed (per-base onsite,
         # then geometry, then any future addition appended AFTER these) and is
         # part of reproducibility -- do not reorder.
 
-        # Optional structured onsite head. Default off = no new params (RNG stream and
-        # existing checkpoints unchanged). onsite = alpha*baseline[base] + (1-alpha)*context.
-        self.structured_onsite = structured_onsite
-        self.alpha_granularity = alpha_granularity
-        self.alpha_mode = alpha_mode
-        if structured_onsite:
-            n_alpha = 4 if alpha_granularity == 'per_base' else 1
+        # Optional BOOLEAN per-base onsite head (formerly a continuous alpha mix
+        # between a per-base table and the context head; the mix was removed once
+        # the factorial showed alpha=0 won wherever alpha mattered and the
+        # intermediate values produced nothing the endpoints did not).
+        #   True  -- onsite is a learned 4-entry-per-base table (the old alpha=1).
+        #   False -- fully context-dependent onsite (the old alpha=0), which is the
+        #            default and is byte-identical to the historical default: no
+        #            extra parameters, so the init RNG stream is untouched.
+        self.per_base_onsite = per_base_onsite
+        if per_base_onsite:
             # 4 per-base onsite blocks; near-zero init keeps early (E*I - H) well-conditioned.
             self.onsite_baseline = nn.Parameter(torch.empty(4, n_orb * n_orb))
             nn.init.normal_(self.onsite_baseline, std=0.01)
-            if alpha_mode == 'learned':
-                theta0 = float(np.log(alpha_init / (1.0 - alpha_init)))  # logit(alpha_init)
-                self.onsite_alpha_theta = nn.Parameter(torch.full((n_alpha,), theta0))
-            else:  # fixed: store alpha DIRECTLY (exact 0.0/1.0, no logit/sigmoid round-trip)
-                self.register_buffer('onsite_alpha_fixed', torch.full((n_alpha,), float(alpha_value)))
 
         # Optional SE(3)-invariant geometry channel. Default off = byte-for-byte
         # identical model (no extra params/buffers, existing checkpoints load).
@@ -280,30 +274,17 @@ class DNATransportHamiltonianGNN(nn.Module):
             self.register_buffer("geom_mean", mean)
             self.register_buffer("geom_std", std)
 
-    def _onsite_alpha(self) -> torch.Tensor:
-        """Mixing factor in [0,1], shape [1] (global) or [4] (per_base)."""
-        if self.alpha_mode == 'learned':
-            return torch.sigmoid(self.onsite_alpha_theta)
-        return self.onsite_alpha_fixed
-
     def _mix_onsite(self, dna_features: torch.Tensor, original_dna_onehot: torch.Tensor) -> torch.Tensor:
         """onsite_raw before reshape. dna_features: post-conv [D, hidden];
         original_dna_onehot: [D, 4] base one-hot in the SAME order.
 
-        onsite = alpha*baseline[base] + (1-alpha)*context, via a differentiable
-        soft-matmul (one-hot @ baseline table) so gradients flow to onsite_baseline.
-        When structured_onsite is off, returns onsite_proj(dna_features) unchanged.
+        per_base_onsite on: onsite = baseline[base], read out of the learned table by
+        a differentiable soft-matmul (one-hot @ table) so gradients flow to
+        onsite_baseline. Off (default): onsite = onsite_proj(context features).
         """
-        context = self.onsite_proj(dna_features)                 # [D, n_orb^2]
-        if not self.structured_onsite:
-            return context
-        baseline = original_dna_onehot @ self.onsite_baseline    # [D, n_orb^2] soft-matmul
-        alpha = self._onsite_alpha()                             # [1] or [4]
-        if self.alpha_granularity == 'per_base':
-            a = original_dna_onehot @ alpha.view(4, 1)           # [D, 1] per-node
-        else:
-            a = alpha.view(1, 1)                                 # broadcast scalar
-        return a * baseline + (1.0 - a) * context
+        if self.per_base_onsite:
+            return original_dna_onehot @ self.onsite_baseline    # [D, n_orb^2]
+        return self.onsite_proj(dna_features)                    # [D, n_orb^2]
 
     def _fuse_geometry(self, edge_attr_proj, edge_attr_initial, data):
         """Add per-edge-type-normalized geometry to the projected edge embedding.
