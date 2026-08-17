@@ -71,6 +71,19 @@ def load_trained_model(model_path: str, device: str = 'auto') -> Tuple[Union[DNA
                   "numbers from pre-2026-08-09 evaluations of this checkpoint are "
                   "typically fine but not guaranteed. Pass solver_type explicitly if "
                   "you need to reproduce an older result.")
+        if 'log_floor' not in args or 'floor_mode' not in args:
+            print("WARNING: this checkpoint's args carry no explicit "
+                  f"{'log_floor' if 'log_floor' not in args else 'floor_mode'} "
+                  "(and possibly neither). Falling back to the LEGACY semantics: "
+                  "log_floor=1e-16 with floor_mode='clamp', i.e. "
+                  "log10(max(x, 1e-16)). That reproduces what this checkpoint was "
+                  "trained and evaluated with. BUT: the deep-tail transmission it "
+                  "produces is NOT comparable to numbers recorded on or after "
+                  "2026-08-15, which use floor_mode='smooth' (log10(max(x,0)+eps)) "
+                  "with eps=1e-38. Under 'smooth' the floor never binds and the tail "
+                  "extends below -16; under 'clamp' every point below 1e-16 reads "
+                  "exactly -16. Do not pool tail metrics across the two without "
+                  "re-evaluating both under the same floor_mode.")
         model = DNATransportHamiltonianGNN(
             hidden_dim=args.get('hidden_dim', 128),
             num_layers=args.get('num_layers', 4),
@@ -88,6 +101,9 @@ def load_trained_model(model_path: str, device: str = 'auto') -> Tuple[Union[DNA
             solver_type=args.get('solver_type', 'complex'),
             use_log_outputs=args.get('use_log_outputs', True),
             log_floor=args.get('log_floor', 1e-16),
+            # 'clamp' is the legacy semantics and the constructor default; see
+            # the warning above for what its absence from args implies.
+            floor_mode=args.get('floor_mode', 'clamp'),
             complex_eta=args.get('complex_eta', 1e-12),
             conv_type=args.get('conv_type', 'gat'),
             use_geometry=args.get('use_geometry', False),
