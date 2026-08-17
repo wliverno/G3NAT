@@ -151,6 +151,32 @@ def parse_args():
 
     return parser.parse_args()
 
+CONFIG_DEFINING_ARGS = [
+    'data_source', 'data_dir', 'model_type', 'hidden_dim', 'num_layers', 'num_heads',
+    'n_orb', 'solver_type', 'log_floor', 'complex_eta', 'use_log_outputs',
+    'enforce_hermiticity', 'conv_type', 'use_geometry', 'geom_cache', 'optimizer',
+    'weight_decay', 'split_seed', 'init_seed', 'loss_a', 'loss_b', 'loss_c',
+    'ldos_target', 'shape_loss', 'batch_size', 'learning_rate', 'num_epochs',
+]
+
+
+def check_resume_args(stored: dict, current: dict) -> None:
+    """A checkpoint may only resume the run that wrote it. Raises on any mismatch
+    of a config-defining arg, naming the offending key -- resuming under different
+    args silently republishes one config's weights under another's label."""
+    problems = []
+    for key in CONFIG_DEFINING_ARGS:
+        if key not in stored:
+            problems.append(f"{key}: missing from checkpoint args")
+        elif stored[key] != current.get(key):
+            problems.append(f"{key}: checkpoint={stored[key]!r} vs current={current.get(key)!r}")
+    if problems:
+        raise ValueError(
+            "checkpoint_latest.pth was written by a DIFFERENT configuration; refusing "
+            "to resume. Use a fresh --checkpoint_dir per run. Mismatches: "
+            + "; ".join(problems))
+
+
 def main():
     args = parse_args()
     assert not (args.alpha_granularity == 'per_base' and args.alpha_mode == 'fixed'), \
@@ -390,9 +416,19 @@ def main():
     resume_optimizer = None
     resume_metric_history = None
     checkpoint_path = os.path.join(args.checkpoint_dir, 'checkpoint_latest.pth')
+
+    best_path_stale = os.path.join(args.checkpoint_dir, 'checkpoint_best.pth')
+    if not os.path.exists(checkpoint_path) and os.path.exists(best_path_stale):
+        # No latest checkpoint means this is a FRESH run in a reused dir: a leftover
+        # best would be republished under the new args. With a latest checkpoint
+        # present we are resuming, and the best is this run's own -- keep it.
+        os.remove(best_path_stale)
+        print(f"Removed stale checkpoint_best.pth from a previous run in {args.checkpoint_dir}")
+
     if os.path.exists(checkpoint_path):
         print(f"Resuming from checkpoint: {checkpoint_path}")
         ckpt = torch.load(checkpoint_path, map_location=str(device), weights_only=False)
+        check_resume_args(ckpt.get('args', {}), vars(args))
         model.load_state_dict(ckpt['model_state_dict'])
         start_epoch = ckpt['epoch'] + 1
         resume_train_losses = ckpt['train_losses']
