@@ -231,6 +231,66 @@ share_i     = mean over E of [ ldos_i(E) / sum_j ldos_j(E) ]
   energy-resolved comparison. (A conclusion was drawn from an energy-averaged share earlier
   and withdrawn.)
 
+## 8a. Transport-restricted transmission
+
+```
+val_transmission              = Huber(log10 T_pred, log10 T_target)   over ALL energy points
+val_transmission_appreciable  = Huber(log10 T_pred, log10 T_target)   over points where
+                                log10 T_target > APPRECIABLE_T_LOG10  (= -16.0)
+```
+
+- `g3nat/training/trainer.py` (`APPRECIABLE_T_LOG10`, accumulated in `_validate_epoch`).
+- Half of every spectrum is deep tunnelling at ~1e-8 (docs/dataset.md, measured over
+  417,477 energy points), so **roughly half the error budget of the whole-window number is
+  spent where no transport measurement would resolve anything**. A model that wins on the
+  tail and loses at the resonances looks better on `val_transmission` while being worse for
+  transport. Report both; neither replaces the other.
+- The threshold is on the **target**, not the prediction, so the point set is a property of
+  the data and identical across models. Strict inequality: a target exactly at -16.0 does
+  not qualify.
+- Averaged over the batches that contained at least one qualifying point, not over all
+  batches. `nan` when no point in the entire epoch qualified -- which is the honest value,
+  not zero.
+- This is a diagnostic only. The trained loss still weights all 201 energy points equally;
+  a uniform log-space fit remains a defensible choice, and nothing here changes it.
+
+## 8b. The frozen per-epoch metric schema
+
+`Trainer._validate_epoch` appends one dict per epoch to `metric_history`, which is written
+into every checkpoint. `EXPECTED_METRIC_KEYS` (module level in `trainer.py`) lists exactly
+the keys that dict carries, and `_validate_epoch` raises if its entry differs -- naming
+missing and extra keys separately. **Anything not recorded per epoch is unavailable at every
+epoch but one, and re-deriving it means re-running the campaign**, so a metric quietly
+appearing or disappearing mid-run has to fail loudly. Editing the set is allowed; doing it
+by accident is not, and a run whose schema differs is not schema-comparable with the rest.
+
+| key | meaning |
+|---|---|
+| `epoch` | absolute epoch number, already accounting for `start_epoch` on a resumed run -- align on this, not on list position |
+| `val_dos` | Huber on log10 DOS, absolute magnitude (sec. 1) |
+| `val_dos_shape` | same, after the shared median-residual offset (sec. 1) |
+| `val_transmission` | Huber on log10 T over the whole window (sec. 8a) |
+| `val_transmission_appreciable` | the same, restricted to appreciable targets (sec. 8a) |
+| `val_dos_t_unweighted` | `val_dos + val_transmission`, no `loss_a/b/c` scaling -- **the checkpoint selection criterion** (sec. 1a) |
+| `val_dos_t_shape_unweighted` | shape-variant counterpart of the above |
+| `val_ldos_residue` | held-out LDOS Huber against the residue aggregation; `nan` unless `ldos_target='residue'` |
+| `val_ldos_base_only` | same against the base-only aggregation; `nan` unless `ldos_target='base_only'` |
+| `val_ldos_shape_residue` | shape variant, independently centered over (site, energy) -- see `_ldos_agreement` |
+| `val_ldos_shape_base_only` | shape variant of the base-only aggregation |
+| `val_ldos_localization_gap` | `J_pred - J_target`, the log-space localization measure (sec. 8). Positive: model more localized than DFT |
+| `floored_frac_dos` | fraction of DOS points at genuine underflow (`0 <= x < eps`) in the last validation batch |
+| `floored_frac_t` | same for transmission |
+| `floored_frac_ldos` | same for per-site LDOS |
+| `neg_frac_dos` | fraction of DOS values that are NEGATIVE -- unphysical, and a non-Hermitian-H signal rather than smallness. Kept separate from the floored fraction, which used to conflate the two |
+| `neg_frac_t` | same for transmission |
+| `neg_frac_ldos` | same for per-site LDOS |
+| `nan_skipped_total` | cumulative count of training batches skipped for a non-finite loss or gradient |
+| `nan_selection_metric_total` | cumulative count of epochs whose selection metric was non-finite. Equal to the epoch count means **no best checkpoint was ever written** |
+
+The floor/negative fractions are last-batch spot readings, not epoch averages: they are read
+off 0-dim tensors carried on the model, which costs one CUDA sync per epoch instead of one
+per batch. They answer "is an arm living at the log floor", not "how often".
+
 ## 9. Composition shift (the HOMO reference test)
 
 ```
