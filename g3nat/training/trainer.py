@@ -72,6 +72,13 @@ class Trainer:
         self.val_losses = []
         self.metric_history: List[Dict[str, float]] = []
         self.nan_skipped_total = 0
+        # Cumulative count of epochs whose SELECTION metric (val_dos_t_unweighted)
+        # came back non-finite. A run in which this equals the epoch count never
+        # updates best_unweighted, so no checkpoint_best.pth is ever written --
+        # the silent failure documented in docs/model-results.md sec. 16. Counting
+        # it per epoch in metric_history makes that visible from the artifacts
+        # alone, instead of only from an absent file.
+        self.nan_selection_metric_total = 0
 
         # Best weights by the UNWEIGHTED metric (val_dos_t_unweighted), held in
         # memory and refreshed EVERY epoch. Two separate problems this fixes:
@@ -414,8 +421,15 @@ class Trainer:
             train_loss += total_loss.item()
             n_used += 1
 
-        train_loss /= max(1, n_used)
-        return train_loss
+        if n_used == 0:
+            # Every batch was skipped (non-finite loss or gradient). The old
+            # `train_loss /= max(1, n_used)` returned 0.0 here, i.e. a PERFECT
+            # fit reported at the exact epoch the model was most broken -- and
+            # that 0.0 propagated into train_losses, into the checkpoints, and
+            # into every downstream curve statistic. nan is the honest value:
+            # no batch contributed, so the epoch mean is undefined.
+            return float('nan')
+        return train_loss / n_used
 
     def _validate_epoch(self, val_loader: DataLoader, epoch: int) -> float:
         """Validate for one epoch.
@@ -463,6 +477,13 @@ class Trainer:
 
         val_loss /= len(val_loader)
 
+        # The SELECTION metric for best-weight tracking. Count it here, before the
+        # entry is built, so metric_history carries the running total of epochs on
+        # which selection could not happen at all.
+        selection_metric = agg_unweighted / n_batches
+        if not (selection_metric == selection_metric and abs(selection_metric) != float('inf')):
+            self.nan_selection_metric_total += 1
+
         # Key the measured LDOS agreement under whichever aggregation this run
         # is actually configured against (self.config.ldos_target); the other
         # key is always nan. Both keys are always present so the schema is
@@ -507,6 +528,9 @@ class Trainer:
             'floored_frac_dos': float(getattr(self.model, 'last_floored_frac_dos', float('nan'))),
             'floored_frac_t': float(getattr(self.model, 'last_floored_frac_t', float('nan'))),
             'nan_skipped_total': float(self.nan_skipped_total),
+            # Cumulative count of epochs whose selection metric was non-finite.
+            # Equal to the epoch count => no best checkpoint was ever written.
+            'nan_selection_metric_total': float(self.nan_selection_metric_total),
         }
         self.metric_history.append(entry)
         return val_loss
@@ -614,6 +638,17 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         # resume_metric_history, read from a checkpoint) should not be mutated
         # by this trainer's subsequent appends.
         trainer.metric_history = list(metric_history)
+        # These runs are PREEMPTIBLE, so this path executes constantly. The
+        # cumulative NaN counters must be seeded too: seeding only the history
+        # left them at 0 after every requeue, so the "cumulative" series in
+        # metric_history reset to 0 at each preemption and a run that skipped
+        # thousands of batches looked clean in its final checkpoint.
+        if trainer.metric_history:
+            last = trainer.metric_history[-1]
+            for _name in ('nan_skipped_total', 'nan_selection_metric_total'):
+                _v = last.get(_name)
+                if _v is not None and _v == _v:  # not None, not NaN
+                    setattr(trainer, _name, int(_v))
 
     # Train
     train_losses, val_losses = trainer.fit(

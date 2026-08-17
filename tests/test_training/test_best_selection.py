@@ -46,6 +46,15 @@ def test_best_unweighted_tracks_the_true_minimum_epoch():
 
 
 def test_final_checkpoint_reports_actual_last_epoch():
+    """The final save must report the epoch the loop ACTUALLY reached.
+
+    Written with start_epoch=5 > num_epochs=3 -- an already-finished range, which
+    is what a requeue of a completed cell looks like. The loop body never executes,
+    so the honest answer is start_epoch - 1 == 4. `num_epochs - 1` would report 2,
+    rewinding the recorded epoch by two and making the next resume redo finished
+    work. (The original version of this test used num_epochs=3/start_epoch=0, where
+    num_epochs - 1 and the true last epoch are both 2 -- it could not discriminate.)
+    """
     model = _Scripted()
     cfg = TrainingConfig(num_epochs=3, learning_rate=0.0, warmup_epochs=0,
                          checkpoint_frequency=100)  # periodic save never fires
@@ -56,6 +65,7 @@ def test_final_checkpoint_reports_actual_last_epoch():
         seen['epoch'] = epoch
         seen['best_state'] = best_state
 
-    trainer.fit([_Batch()], [_Batch()], checkpoint_callback=cb)
-    assert seen['epoch'] == 2  # the loop's actual last epoch, not num_epochs - 1 by luck
+    trainer.fit([_Batch()], [_Batch()], checkpoint_callback=cb, start_epoch=5)
+    assert seen['epoch'] == 4, (
+        f"final save reported epoch {seen['epoch']}; expected start_epoch - 1 == 4")
     assert seen['best_state'] is not None and 'epoch' in seen['best_state']

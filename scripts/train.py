@@ -153,33 +153,159 @@ def parse_args():
     # Output parameters
     parser.add_argument('--output_dir', type=str, default='./outputs')
     parser.add_argument('--checkpoint_dir', type=str, default='./checkpoints')
+    parser.add_argument('--allow_arg_change', type=str, default='',
+                       help='Comma-separated list of argument names that MAY differ '
+                            'between this invocation and the checkpoint being resumed '
+                            '(e.g. "num_epochs" when raising the epoch cap on a '
+                            'requeued cell). Every exemption actually exercised is '
+                            'recorded in the run\'s resolved_config.json under '
+                            '"arg_exemptions", so the change stays legible in the '
+                            'run artifacts rather than only in a shell history.')
 
     return parser.parse_args()
 
-CONFIG_DEFINING_ARGS = [
-    'data_source', 'data_dir', 'model_type', 'hidden_dim', 'num_layers', 'num_heads',
-    'n_orb', 'solver_type', 'log_floor', 'complex_eta', 'use_log_outputs',
-    'enforce_hermiticity', 'conv_type', 'use_geometry', 'geom_cache', 'optimizer',
-    'weight_decay', 'split_seed', 'init_seed', 'loss_a', 'loss_b', 'loss_c',
-    'ldos_target', 'shape_loss', 'batch_size', 'learning_rate', 'num_epochs',
-]
+# INVERTED GUARD (2026-08-16, independent review finding I8). This used to be an
+# ALLOWLIST, CONFIG_DEFINING_ARGS, which already omitted 15 real arguments --
+# --dropout and every alpha flag among them -- so a resume could silently switch
+# them, and every future flag was unguarded by default. The list is now a DENYLIST
+# of the three arguments that genuinely describe the execution environment rather
+# than the configuration; everything else must match. New flags are guarded the day
+# they are added, with no list to remember to update.
+#
+# 'allow_arg_change' is always self-exempt: it is the mechanism for declaring an
+# exemption, so requiring it to match would make it impossible to introduce on the
+# requeue that needs it. Its value is recorded in resolved_config.json regardless.
+NON_DEFINING_ARGS = {'device', 'output_dir', 'checkpoint_dir'}
+_SELF_EXEMPT_ARGS = {'allow_arg_change'}
 
 
-def check_resume_args(stored: dict, current: dict) -> None:
-    """A checkpoint may only resume the run that wrote it. Raises on any mismatch
-    of a config-defining arg, naming the offending key -- resuming under different
-    args silently republishes one config's weights under another's label."""
+def parse_allow_arg_change(spec) -> list:
+    """Parse the --allow_arg_change comma-separated spec into a list of keys."""
+    if not spec:
+        return []
+    if isinstance(spec, (list, tuple, set)):
+        return sorted(str(k).strip() for k in spec if str(k).strip())
+    return [k.strip() for k in str(spec).split(',') if k.strip()]
+
+
+def check_resume_args(stored: dict, current: dict, allow_changed=()) -> list:
+    """A checkpoint may only resume the run that wrote it.
+
+    Raises ValueError on any mismatch of a config-defining arg, naming every
+    offending key -- resuming under different args silently republishes one
+    config's weights under another's label.
+
+    `allow_changed` names keys that may differ deliberately (from
+    --allow_arg_change). Returns the list of exemptions that were actually
+    exercised, so the caller can record them in the run metadata.
+    """
+    allowed = set(allow_changed)
+    keys = (set(stored) | set(current)) - NON_DEFINING_ARGS - _SELF_EXEMPT_ARGS
     problems = []
-    for key in CONFIG_DEFINING_ARGS:
+    exemptions = []
+    for key in sorted(keys):
         if key not in stored:
-            problems.append(f"{key}: missing from checkpoint args")
-        elif stored[key] != current.get(key):
-            problems.append(f"{key}: checkpoint={stored[key]!r} vs current={current.get(key)!r}")
+            desc = f"{key}: missing from checkpoint args"
+        elif key not in current:
+            desc = f"{key}: missing from current args"
+        elif stored[key] != current[key]:
+            desc = f"{key}: checkpoint={stored[key]!r} vs current={current[key]!r}"
+        else:
+            continue
+        (exemptions if key in allowed else problems).append(desc)
     if problems:
         raise ValueError(
             "checkpoint_latest.pth was written by a DIFFERENT configuration; refusing "
-            "to resume. Use a fresh --checkpoint_dir per run. Mismatches: "
-            + "; ".join(problems))
+            "to resume. Use a fresh --checkpoint_dir per run, or pass "
+            "--allow_arg_change with the comma-separated keys you intend to change. "
+            "Mismatches: " + "; ".join(problems))
+    return exemptions
+
+
+def maybe_clear_stale_best(checkpoint_dir: str) -> bool:
+    """Delete a leftover checkpoint_best.pth ONLY when there is no checkpoint_latest.
+
+    No latest checkpoint means this is a FRESH run in a reused dir: a leftover best
+    would be republished under the new args. With a latest checkpoint present we are
+    RESUMING, and the best is this run's own -- deleting it would throw away the best
+    weights of a preempted run. These runs are preemptible with --requeue, so that
+    second branch is exercised constantly; it is the whole reason the gate exists.
+
+    Returns True if a stale best was removed.
+    """
+    latest = os.path.join(checkpoint_dir, 'checkpoint_latest.pth')
+    best = os.path.join(checkpoint_dir, 'checkpoint_best.pth')
+    if not os.path.exists(latest) and os.path.exists(best):
+        os.remove(best)
+        return True
+    return False
+
+
+def seed_best_value(checkpoint_dir: str, metric_history) -> float:
+    """The running best selection value to carry across a requeue.
+
+    Prefer the on-disk checkpoint_best.pth's OWN 'selection_value'. The history
+    minimum is not equivalent: checkpoint_latest.pth is written BEFORE
+    checkpoint_best.pth in checkpoint_cb, so a kill between the two leaves
+    metric_history (stored in latest) ahead of the weights actually on disk. Seeding
+    from the history then sets a bar BETTER than the stored weights, and a later
+    epoch that genuinely improves on the stored weights never gets republished --
+    the run finishes carrying weights it already beat.
+
+    Falls back to the history minimum only when the best checkpoint is absent or
+    predates the 'selection_value' key.
+    """
+    best_path = os.path.join(checkpoint_dir, 'checkpoint_best.pth')
+    if os.path.exists(best_path):
+        try:
+            bc = torch.load(best_path, map_location='cpu', weights_only=False)
+        except Exception as exc:  # unreadable/truncated best: fall through to history
+            print(f"WARNING: could not read {best_path} ({exc}); "
+                  "seeding the running best from metric_history instead")
+            bc = None
+        if isinstance(bc, dict):
+            sv = bc.get('selection_value')
+            if sv is not None and float(sv) == float(sv):
+                return float(sv)
+    values = [m.get('val_dos_t_unweighted') for m in (metric_history or [])]
+    values = [float(v) for v in values if v is not None and v == v]
+    return min(values) if values else float('inf')
+
+
+def best_publication_warning(best_ckpt_path: str, metric_history):
+    """Return a WARNING string when no best checkpoint exists, else None.
+
+    Without this the script prints "Training complete!" and exits 0 after a run in
+    which the selection metric was non-finite every single epoch: best_unweighted
+    ['state_dict'] stays None, checkpoint_best.pth is never written, no _best.pth is
+    published, and every downstream analysis silently falls back to final-epoch
+    weights or skips the run. Same silent-failure class as docs/model-results.md
+    sec. 16.
+    """
+    if os.path.exists(best_ckpt_path):
+        return None
+    history = list(metric_history or [])
+    n_epochs = len(history)
+    n_bad = sum(1 for m in history
+                if not (m.get('val_dos_t_unweighted') is not None
+                        and m.get('val_dos_t_unweighted') == m.get('val_dos_t_unweighted')))
+    if n_epochs == 0:
+        cause = ("no validation epoch ran, so the selection metric "
+                 "val_dos_t_unweighted was never computed")
+    elif n_bad == n_epochs:
+        cause = (f"the selection metric val_dos_t_unweighted was NON-FINITE in all "
+                 f"{n_epochs} epochs, so no epoch could ever become the best")
+    elif n_bad:
+        cause = (f"the selection metric val_dos_t_unweighted was non-finite in "
+                 f"{n_bad} of {n_epochs} epochs and no finite epoch improved on the "
+                 "running best")
+    else:
+        cause = (f"the selection metric was finite in all {n_epochs} epochs but no "
+                 "best checkpoint was written -- the checkpoint callback may never "
+                 "have fired, or the file was removed")
+    return ("WARNING: NO BEST CHECKPOINT WAS PUBLISHED for this run. "
+            + cause + ". The published final weights are the LAST epoch's, not the "
+            "best; treat this run as FAILED rather than as a completed cell.")
 
 
 def main():
@@ -437,18 +563,23 @@ def main():
     resume_metric_history = None
     checkpoint_path = os.path.join(args.checkpoint_dir, 'checkpoint_latest.pth')
 
-    best_path_stale = os.path.join(args.checkpoint_dir, 'checkpoint_best.pth')
-    if not os.path.exists(checkpoint_path) and os.path.exists(best_path_stale):
-        # No latest checkpoint means this is a FRESH run in a reused dir: a leftover
-        # best would be republished under the new args. With a latest checkpoint
-        # present we are resuming, and the best is this run's own -- keep it.
-        os.remove(best_path_stale)
+    if maybe_clear_stale_best(args.checkpoint_dir):
         print(f"Removed stale checkpoint_best.pth from a previous run in {args.checkpoint_dir}")
 
     if os.path.exists(checkpoint_path):
         print(f"Resuming from checkpoint: {checkpoint_path}")
         ckpt = torch.load(checkpoint_path, map_location=str(device), weights_only=False)
-        check_resume_args(ckpt.get('args', {}), vars(args))
+        _allow_changed = parse_allow_arg_change(args.allow_arg_change)
+        _exemptions = check_resume_args(ckpt.get('args', {}), vars(args),
+                                        allow_changed=_allow_changed)
+        if _exemptions:
+            # Record every exemption actually exercised in the run's own metadata,
+            # so a deliberate change (raising --num_epochs on a requeued cell) is
+            # readable from the artifacts rather than only from the submit command.
+            from g3nat.utils.runmeta import update_run_metadata
+            update_run_metadata(args.output_dir, arg_exemptions=_exemptions)
+            for _e in _exemptions:
+                print(f"NOTE: resuming with an EXEMPTED argument change -- {_e}")
         model.load_state_dict(ckpt['model_state_dict'])
         start_epoch = ckpt['epoch'] + 1
         resume_train_losses = ckpt['train_losses']
@@ -473,10 +604,12 @@ def main():
         # values, in which case the running best restarts at inf: the first post-resume
         # improvement overwrites the old best. That is the safe direction (the trainer's
         # in-memory best is empty after a restart anyway, so nothing better is lost).
-        _resume_metrics = [m.get('val_dos_t_unweighted') for m in (resume_metric_history or [])]
-        _resume_metrics = [float(m) for m in _resume_metrics if m is not None and m == m]
-        if _resume_metrics:
-            best_val['value'] = min(_resume_metrics)
+        #
+        # The value comes from the on-disk best checkpoint's own 'selection_value' when
+        # present, NOT from the history minimum -- see seed_best_value's docstring for
+        # why those differ after a kill between the two writes.
+        best_val['value'] = seed_best_value(args.checkpoint_dir, resume_metric_history)
+        if best_val['value'] != float('inf'):
             print(f"Resuming best val_dos_t_unweighted: {best_val['value']:.4f}")
 
     print("Training...")
@@ -544,6 +677,12 @@ def main():
             'selection_metric': bc.get('selection_metric'),
             'selection_value': bc.get('selection_value'),
         }, best_path)
+
+    # A run with no best checkpoint is a FAILED run, not a completed one. Say so
+    # loudly instead of printing "Training complete!" and exiting 0.
+    _no_best_warning = best_publication_warning(best_ckpt, metric_history)
+    if _no_best_warning is not None:
+        print(_no_best_warning)
 
     print(f"Training complete!")
     print(f"Model saved: {model_path}")
