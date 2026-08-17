@@ -93,6 +93,9 @@ def parse_args():
     # whatever value they recorded.
     parser.add_argument('--solver_type', choices=['complex', 'frobenius'], default='complex',
                         help='NEGF solver. Must match at train and eval time.')
+    parser.add_argument('--allow_frobenius', action='store_true',
+                        help='Escape hatch for legacy comparisons only; the Frobenius path '
+                             'is silently wrong at resonances and ignores complex_eta.')
     parser.add_argument('--log_floor', type=float, default=1e-38,
                         help='Smoothing eps for log10 of DOS/T: log10(max(x,0)+eps). Pure '
                              'log10(0) guard -- never binds on physical values (dataset T '
@@ -186,6 +189,11 @@ def main():
     assert not (args.raw_scale_loss and args.shape_loss), \
         "--raw_scale_loss and --shape_loss are mutually exclusive (absolute is now " \
         "the default; --raw_scale_loss is a no-op kept for older invocations)"
+    if args.solver_type == 'frobenius' and not args.allow_frobenius:
+        raise SystemExit(
+            "--solver_type frobenius is disabled for training runs: its singular-matrix "
+            "fallback is silently ~98% wrong at resonances and it ignores --complex_eta. "
+            "Pass --allow_frobenius only for legacy comparisons.")
 
     os.makedirs(args.output_dir, exist_ok=True)
     os.makedirs(args.checkpoint_dir, exist_ok=True)

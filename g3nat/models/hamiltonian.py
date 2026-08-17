@@ -74,6 +74,12 @@ class DNATransportHamiltonianGNN(nn.Module):
         self.output_dim = len(energy_grid)
         self.n_orb = n_orb  # Number of orbitals per site (n_onsite = n_coupling = n_orb)
         self.enforce_hermiticity = enforce_hermiticity
+        if n_orb > 1 and not enforce_hermiticity:
+            raise ValueError(
+                "enforce_hermiticity=False with n_orb>1 produces a non-Hermitian H "
+                "(measured: max|H-H^T| ~ 0.8, negative DOS hidden by the log floor). "
+                "At n_orb=1 the flag is a no-op, which made this arm look valid. "
+                "There is no physically admissible use; refusing.")
         self.solver_type = solver_type
         self.use_log_outputs = use_log_outputs
         self.log_floor = float(log_floor)
