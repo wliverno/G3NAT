@@ -14,6 +14,64 @@ behavior-preserving unless the spec says otherwise; byte-identity tests enforce 
 
 **Spec:** `docs/superpowers/specs/2026-08-13-campaign-v2-design.md`
 
+## OPEN WORK -- NOTHING LAUNCHES UNTIL THIS LIST IS EMPTY (2026-08-16)
+
+Findings from the three independent reviews (private notes tree,
+reviews/2026-08-16-phase1-code-reviews.md). Batch A and B are DONE (5d74d8c, a0e56ea).
+Batch C and the doc item are NOT.
+
+- [ ] **R1 (CAMPAIGN-AFFECTING) LDOS floor never converted.** `site_ldos_log10`
+  (hamiltonian.py ~line 39) still hard-clamps at `self.log_floor`, which the default
+  change moved from 1e-16 to 1e-38. A floored per-site point now reads -38 instead of
+  -16 and, in Huber's linear regime, contributes ~37 instead of ~15 to `ldos_loss` with
+  ZERO gradient -- feeding `total` and therefore checkpoint selection in every DOS+LDOS
+  cell. Convert to the same `log10(clamp_min(x,0)+eps)` form, fix the stale docstring
+  ("nine decades above the 1e-16 default"), and record `last_floored_frac_ldos`.
+- [ ] **R2 (blocks any legacy re-evaluation) floor semantics are unrecorded.** With the
+  additive form, `eps=1e-16` no longer clamps, it BIASES -- proven from the regenerated
+  constants: 10^-14.81016 - 10^-14.83916 = 1.001e-16 exactly, at a point the old clamp
+  never touched. Re-running a pre-2026-08-15 checkpoint returns different tail
+  transmission than the recorded numbers, silently. Add `floor_mode` ('clamp' default
+  for legacy, 'smooth' written by train.py) and select on it; at minimum make
+  inference.py warn loudly when a checkpoint's args carry no `log_floor`.
+- [ ] **R3 energy_grid_t buffer is float32 while a float64 consumer exists**
+  (tests/test_all.py negf consistency): 2.9e-8 eV grid error, currently silent. Register
+  with the source dtype and let `.to(dtype=...)` downcast per forward.
+- [ ] **R4 reference `calculate_NEGF` still clips at 1e-16** (physics.py ~182), so any
+  model-vs-reference tail figure shows a real tail against a plateaued reference.
+- [ ] **R5 floored-fraction diagnostic**: two CUDA syncs per forward INCLUDING in
+  training (the hot loop Task 11 was optimizing) -- guard with `if not self.training` or
+  keep as a tensor and sync once in `_validate_epoch`; and it conflates underflow with
+  NEGATIVE values -- record a separate negative fraction, which is the diagnostic that
+  would have caught the non-Hermitian arm without a code audit.
+- [ ] **R6 two more vacuous tests**: `test_energy_grid_buffer` asserts only a shape (it
+  passes with a grid of zeros); `test_log_floor`'s "never binds" assertion says a boolean
+  mean lies in [0,1], true by construction. Both need real assertions + mutation checks.
+- [ ] **R7 (DOCS, blocks any pooled table) selection criterion changed and the docs still
+  describe the old one.** `docs/metrics.md` sec 1 and `docs/model-results.md` sec 16 say
+  best = best among CHECKPOINTED epochs on val loss. Since 6a9c51b that is false:
+  selection is per-epoch on `val_dos_t_unweighted`. The 84 v1 `_best.pth` were selected
+  on the loss-weighted total at 10-epoch cadence; the 72 v2 runs are selected on an
+  unweighted metric at the exact epoch. ANY TABLE POOLING THEM COMPARES WEIGHTS CHOSEN
+  TWO DIFFERENT WAYS. v2 files carry `selection_metric`, v1 files do not -- that is the
+  discriminator and it must be written down.
+- [ ] **R8 (ops) AMP/TF32 flush-to-zero would break the floor.** eps=1e-38 is a float32
+  subnormal; verified alive on CPU and the campaign GPU, but any fast-math/FTZ path turns
+  `log10(0+1e-38)` into -inf and silently converts every deep-tail point into a skipped
+  optimizer step. Re-check if mixed precision is ever enabled.
+- [ ] **R9 (ops) the C2 warning prints but does not change the exit code** -- deliberate
+  (non-zero exit interacts with --requeue policy). The campaign runner's monitors MUST
+  key on that warning string, or a no-best-checkpoint run still looks successful.
+
+REJECTED, with reasoning (do not "fix" these):
+- Reviewer recommended dropping eps to 1e-30 to tame the log-derivative near zero. Its
+  own justification is arithmetically wrong ("~7 decades below the L=16 true
+  transmission ~1e-32" -- 1e-30 is two decades ABOVE 1e-32), so it would bind on exactly
+  the extrapolation physics 1e-38 exists to protect; willll's stated floor was "at least
+  1e-35". Mitigations for the derivative are already in place (Huber's bounded outer
+  derivative, grad clipping, the non-finite skip) and the reviewer's own measured
+  |dL/dH| maxed at 1e19, far from float32 overflow. STAYING AT 1e-38.
+
 ## Review step (added 2026-08-16 at willll's instruction -- applies to EVERY task)
 
 Each task gets an independent code review before the next task starts. The executor
