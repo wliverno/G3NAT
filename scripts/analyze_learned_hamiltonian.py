@@ -28,6 +28,10 @@ BASES = 'ATGC'
 def load_model(path):
     ck = torch.load(path, map_location='cpu', weights_only=False)
     a = ck['args']; eg = np.asarray(ck['energy_grid'], dtype=float)
+    n_orb = int(a.get('n_orb', 1))
+    assert n_orb == 1, (
+        f"this script reads diag(H) assuming n_orb=1 but the checkpoint has n_orb="
+        f"{n_orb}; use g3nat.evaluation.physicality.onsite_block_eigs instead")
     m = g3nat.DNATransportHamiltonianGNN(
         hidden_dim=a['hidden_dim'], num_layers=a['num_layers'], num_heads=a['num_heads'],
         energy_grid=eg, n_orb=a['n_orb'], conv_type=a.get('conv_type', 'gat'),
