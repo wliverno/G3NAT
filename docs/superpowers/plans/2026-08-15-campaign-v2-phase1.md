@@ -1662,6 +1662,12 @@ illegibility (runner override vs argparse default) cannot recur silently."
 - [ ] **Step 2:** Grep audit -- each must return nothing:
   - `grep -rn "alpha_value\|alpha_mode\|alpha_granularity\|structured_onsite" g3nat/ scripts/train.py` (Task 12 completeness; analysis scripts reading OLD checkpoints may keep references -- only g3nat/ and train.py must be clean)
   - `grep -rn "default_rng()" g3nat/training/` (Task 1 completeness)
+- [ ] **Step 3.4:** Checkpoint round-trip test (gap found during Task 11, which
+  verified NO existing test covers this): save a model's state_dict, construct a fresh
+  model, load it, and assert success -- proving the persistent=False energy_grid_t
+  buffer keeps checkpoints mutually loadable across the change. Also load one REAL
+  pre-2026-08 checkpoint from trained_models/ into a current model and assert it loads
+  (that is the case the campaign will actually depend on).
 - [ ] **Step 3.5:** Align the MODEL constructor's log_floor default (hamiltonian.py
   __init__ signature) from 1e-16 to 1e-38 to match the CLI (defaults that disagree are
   the n_orb lesson); run the log-floor and baseline tests after.
