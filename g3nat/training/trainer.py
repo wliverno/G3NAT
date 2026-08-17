@@ -22,6 +22,46 @@ def _center(x, dims):
     return x - x.mean(dim=dims, keepdim=True)
 
 
+# log10 T above which the transmission carries appreciable current. docs/dataset.md
+# measures the median of every spectrum at ~1e-8 and half of all energy points deep
+# in the tunnelling tail, so roughly half the error budget of the whole-window
+# transmission metric is spent where no transport measurement would resolve
+# anything. A model that wins on the tail and loses at the resonances looks better
+# whole-window while being WORSE for transport, so model comparisons are reported
+# both ways: val_transmission (whole window) and val_transmission_appreciable
+# (restricted to targets above this threshold). Strict inequality -- a target
+# sitting exactly at the threshold does not qualify.
+APPRECIABLE_T_LOG10 = -16.0
+
+# LAUNCH-FROZEN metric schema: every key _validate_epoch writes, and nothing else.
+# Anything not recorded per epoch is unavailable at every epoch but one, and
+# re-deriving it means re-running the campaign -- so a metric silently appearing or
+# disappearing mid-campaign has to be an error, not a surprise found afterwards.
+# Editing this set invalidates cross-run schema compatibility; do it deliberately.
+EXPECTED_METRIC_KEYS = frozenset({
+    'epoch',
+    'val_dos',
+    'val_dos_shape',
+    'val_transmission',
+    'val_transmission_appreciable',
+    'val_dos_t_unweighted',
+    'val_dos_t_shape_unweighted',
+    'val_ldos_residue',
+    'val_ldos_base_only',
+    'val_ldos_shape_residue',
+    'val_ldos_shape_base_only',
+    'val_ldos_localization_gap',
+    'floored_frac_dos',
+    'floored_frac_t',
+    'floored_frac_ldos',
+    'neg_frac_dos',
+    'neg_frac_t',
+    'neg_frac_ldos',
+    'nan_skipped_total',
+    'nan_selection_metric_total',
+})
+
+
 class Trainer:
     """Trainer for DNA transport GNN models."""
 
@@ -449,6 +489,12 @@ class Trainer:
         agg_dos = 0.0
         agg_dos_shape = 0.0
         agg_trans = 0.0
+        # Transport-restricted transmission: averaged over the batches that had at
+        # least one appreciable point, NOT over all batches -- a batch with nothing
+        # above the threshold has no value to contribute and must not dilute the
+        # ones that do.
+        agg_t_appreciable = 0.0
+        n_appreciable = 0
         agg_unweighted = 0.0
         agg_shape_unweighted = 0.0
         agg_ldos = 0.0
@@ -468,6 +514,13 @@ class Trainer:
                 agg_dos += losses['dos'].item()
                 agg_dos_shape += losses['dos_shape'].item()
                 agg_trans += losses['transmission'].item()
+                t_target = batch.transmission.view(
+                    dos_pred.size(0), dos_pred.size(1))
+                mask = t_target > APPRECIABLE_T_LOG10
+                if mask.any():
+                    agg_t_appreciable += self.criterion(
+                        transmission_pred[mask], t_target[mask]).item()
+                    n_appreciable += 1
                 agg_unweighted += losses['dos_t_unweighted'].item()
                 agg_shape_unweighted += losses['dos_t_shape_unweighted'].item()
                 ldos_raw, ldos_shape, localization_gap = self._ldos_agreement(batch, dos_pred)
@@ -511,6 +564,12 @@ class Trainer:
             'val_dos': agg_dos / n_batches,
             'val_dos_shape': agg_dos_shape / n_batches,
             'val_transmission': agg_trans / n_batches,
+            # Same Huber, restricted to the energy points whose TARGET carries
+            # appreciable current (see APPRECIABLE_T_LOG10). Read alongside
+            # 'val_transmission', never instead of it. nan when no point in the
+            # whole epoch qualified.
+            'val_transmission_appreciable': (agg_t_appreciable / n_appreciable
+                                             if n_appreciable else float('nan')),
             'val_dos_t_unweighted': agg_unweighted / n_batches,
             'val_dos_t_shape_unweighted': agg_shape_unweighted / n_batches,
             measured_key: agg_ldos / n_batches,
@@ -543,6 +602,13 @@ class Trainer:
             # Equal to the epoch count => no best checkpoint was ever written.
             'nan_selection_metric_total': float(self.nan_selection_metric_total),
         }
+        if set(entry.keys()) != set(EXPECTED_METRIC_KEYS):
+            missing = set(EXPECTED_METRIC_KEYS) - set(entry.keys())
+            extra = set(entry.keys()) - set(EXPECTED_METRIC_KEYS)
+            raise AssertionError(
+                f"metric_history schema drifted: missing={sorted(missing)}, "
+                f"extra={sorted(extra)}. The schema is launch-frozen; edit "
+                "EXPECTED_METRIC_KEYS deliberately if this is intentional.")
         self.metric_history.append(entry)
         return val_loss
 
