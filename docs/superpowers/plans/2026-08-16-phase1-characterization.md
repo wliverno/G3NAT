@@ -134,13 +134,31 @@ every frozen key including the new counters; the C2 no-best warning does NOT app
   irreducible floor; do NOT block on it. Separately decide and record whether the campaign
   sets `use_deterministic_algorithms(warn_only=True)`.
 
-## Carried into the campaign runner (review finding I6, not part of this experiment)
+## Carried into the campaign runner (review finding I6, R8; not part of this experiment)
 
-**Per-run subnormal assertion.** At startup, on the ALLOCATED device, assert
-`torch.log10(torch.zeros(1, device=dev) + 1e-38)` is finite and equals -38. On `ckpt-all`
-a run lands on whatever is free; one validation node proves nothing about the other 71
-runs. Any FTZ/fast-math path would flush the subnormal to zero, make log10 return -inf,
-and the NaN guard would then silently skip every deep-tail optimizer step.
+**Per-run subnormal assertion, precise form.** At startup, on the run's OWN allocated
+device (`dev`, not `cuda:0` by assumption), assert:
+
+```
+v = torch.log10(torch.zeros(1, device=dev) + 1e-38)
+assert torch.isfinite(v).item(), f"non-finite subnormal probe on {dev}: {v.item()}"
+assert abs(v.item() - (-38.0)) < 1e-3, f"subnormal probe off-target on {dev}: {v.item()}"
+```
+
+- Tolerance is `1e-3`, not exact equality: float32 rounding gives `-38.000003814697266`
+  on measured hardware (P100, see R8 below), not exactly `-38.0`.
+- **On failure, the run must ABORT before training starts**, not warn and continue. A
+  flushed subnormal makes `log10(0)` return `-inf`, and the existing non-finite-loss guard
+  then silently skips the optimizer step for every batch that hits the floor -- on a
+  deep-tail-heavy arm that can mean skipping most steps while the run still exits 0. A
+  warning is not enough because nothing downstream is watching for the consequence.
+- Runs on `ckpt-all` land on whatever node is free; one validation node (R8 tested only a
+  Tesla P100) proves nothing about the other 71 runs' nodes, which may include different
+  GPU generations/driver stacks where an FTZ or fast-math path could reach this op. The
+  assertion is the actual defense, not the R8 investigation's single-GPU spot check.
+- See R8 (`docs/metrics.md`) for what was verified about mixed-precision reachability in
+  the current codebase, and why no TF32/precision flag is being set as a substitute for
+  this assertion.
 
 ## What blocks the campaign
 
