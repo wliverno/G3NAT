@@ -1730,15 +1730,31 @@ illegibility (runner override vs argparse default) cannot recur silently."
 
 ---
 
-### Task 16: Full-suite gate + default-behavior audit
+### Task 16: Full-suite gate + default-behavior audit -- DONE 2026-08-17
 
 **Files:** none created; this is the plan's exit gate.
 
-- [ ] **Step 1:** `SRUN 'python -m pytest tests/ -q'` -- everything passes.
-- [ ] **Step 2:** Grep audit -- each must return nothing:
+- [x] **Step 1 (DONE 2026-08-17):** `SRUN 'python -m pytest tests/ -q'` -- 310 passed,
+  0 failed (job 38617686). With the Step 3.4 test added: 323. The count is against
+  the tree at c027e42; edits landing after that were not in it.
+- [x] **Step 2 (DONE 2026-08-17):** Grep audit -- each must return nothing:
   - `grep -rn "alpha_value\|alpha_mode\|alpha_granularity\|structured_onsite" g3nat/ scripts/train.py` (Task 12 completeness; analysis scripts reading OLD checkpoints may keep references -- only g3nat/ and train.py must be clean)
-  - `grep -rn "default_rng()" g3nat/training/` (Task 1 completeness)
-- [ ] **Step 3.4:** Checkpoint round-trip test (gap found during Task 11, which
+    -- `scripts/train.py` clean. 8 JUSTIFIED survivors, all in
+    `g3nat/evaluation/inference.py`, all inside the legacy-checkpoint
+    alpha -> `per_base_onsite` mapping and its error messages: that mapping exists
+    precisely to READ old args, so the names must appear there. No alpha surface
+    remains in the model, the trainer or the CLI.
+  - `grep -rn "default_rng()" g3nat/training/` (Task 1 completeness) -- one survivor,
+    `utils.py:70`, the `seed is None` branch of `LengthBucketBatchSampler._rng`. That
+    branch IS the documented "reproduce historical unseeded behavior" path; the seeded
+    branch is `default_rng((seed, epoch))`. Not a regression.
+  - `grep -rn "learn_eta\|eta_raw\|learned_eta\|Kilgour\|Henderson\|downfolding" g3nat/ scripts/ tests/ docs/`
+    -- empty (exit 1). The feature removed on 2026-08-17 left no residue.
+- [x] **Step 3.4 (DONE 2026-08-17, `tests/test_evaluation/test_legacy_checkpoint_roundtrip.py`,
+  13 tests, job 38617709):** all three real Hamiltonian checkpoints in `trained_models/`
+  load into current code. Their args predate `solver_type`, `log_floor`, `floor_mode`
+  and the whole alpha surface, so they exercise every args-less fallback at once. The
+  test is mutation-checked on three separate lines (job 38617853). ORIGINAL TEXT: (gap found during Task 11, which
   verified NO existing test covers this): save a model's state_dict, construct a fresh
   model, load it, and assert success -- proving the persistent=False energy_grid_t
   buffer keeps checkpoints mutually loadable across the change. Also load one REAL
@@ -1756,12 +1772,18 @@ illegibility (runner override vs argparse default) cannot recur silently."
   ORIGINAL TEXT, superseded: Align the MODEL constructor's log_floor default (hamiltonian.py
   __init__ signature) from 1e-16 to 1e-38 to match the CLI (defaults that disagree are
   the n_orb lesson); run the log-floor and baseline tests after.
-- [ ] **Step 3:** Behavior audit against the spec's intentional-change list: run
+- [ ] **Step 3 SUPERSEDED 2026-08-17 -- DO NOT RUN AS WRITTEN.** The two-run
+  `val_losses` diff below is replaced by the separate characterization gate, which
+  tests determinism directly rather than as a smoke-test side effect. Left unticked
+  because it was not executed here. ORIGINAL TEXT: Behavior audit against the spec's
+  intentional-change list: run
   `SRUN 'python scripts/train.py --data_source tb --num_samples 24 --seq_length 4 --num_epochs 3 --num_energy_points 8 --init_seed 42 --output_dir /tmp/p1_smoke --checkpoint_dir /tmp/p1_smoke_ckpt'`
   twice and diff the two runs' `val_losses` (they must be IDENTICAL on CPU -- the
   first end-to-end determinism evidence; if they differ, STOP and investigate before
   declaring Phase 1 done).
-- [ ] **Step 4: Commit** anything the audit fixed; otherwise no commit.
+- [x] **Step 4 (DONE 2026-08-17): Commit** anything the audit fixed; otherwise no
+  commit. The audit fixed nothing -- it found no regression -- so the commit carries
+  the new round-trip test and this bookkeeping only.
 
 ---
 
