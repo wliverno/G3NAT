@@ -95,6 +95,27 @@ fit is a defensible choice -- but any model comparison should be reported BOTH w
 restricted to where T is appreciable. A model that wins on the tail and loses at the resonances
 would look better on the whole-window metric while being worse for transport.
 
+**HOW that restricted view is produced, because getting this wrong cost a day (2026-08-18).**
+It is an ANALYSIS-TIME view computed from complete data. It is never a cutoff applied while
+training, never a mask inside a metric, and never anything that discards points from the
+recorded signal. `docs/model-results.md` sec. 15 does it correctly: a post-hoc restriction to
+T > 1e-3, computed from the full stored spectra, with the whole-window number reported
+alongside it.
+
+The failure this warns against actually happened: a `val_transmission_appreciable` metric was
+added to the trainer that masked every energy point below log10 T = -16, and the -16 came from
+the solver's old numerical clamp rather than from any physical scale -- eight orders of
+magnitude from the ~1e-8 figure above, which is what "appreciable" refers to. Removed in
+1e5fb95. Two rules follow, and the second is the one that matters:
+
+1. The threshold for a restricted view, if one is used, is a PHYSICAL choice about where
+   current stops flowing. It is not a number already present in the code.
+2. **The deep tail is not error budget to be trimmed. It is the measurement.** Transmission
+   falls exponentially with length and that decay is this project's central claim, so the
+   low-transmission region carries the result. A restricted view exists to stop tail
+   performance from masking resonance performance in a comparison -- not to remove the tail
+   from what is computed, stored, or trained on.
+
 **The rank-1 unitarity ceiling is not a binding constraint.** The model applies its
 self-energy through rank-1 contacts, so its `T = Tr(Gamma_L G^r Gamma_R G^a) <= 1`, whereas the
 DFT reference couples every atomic orbital of each terminal residue (rank ~330/349 for `aaac`)
