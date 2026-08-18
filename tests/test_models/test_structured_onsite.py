@@ -311,3 +311,30 @@ def test_cross_check_accepts_agreeing_sources():
     m_off = _build(seed=12)
     assert per_base_onsite_from_args(
         {'per_base_onsite': False}, 'ok.pth', dict(m_off.state_dict())) is False
+
+
+def test_modern_per_base_checkpoint_is_not_rejected_by_the_orphan_check(tmp_path):
+    """The `and not resolved` clause of the orphan-baseline branch is load-bearing.
+
+    A MODERN per_base_onsite=True checkpoint carries `onsite_baseline` and NO
+    `onsite_alpha_fixed` buffer -- the same two facts the orphan branch fires on --
+    and is distinguished from the orphan case only by the args resolving to True.
+    Dropping `and not resolved` makes every checkpoint the campaign's per-base arm
+    produces unloadable. The other agreement test above cannot see this: its state
+    dict carries `onsite_alpha_fixed`, so it returns at an earlier branch and never
+    reaches this one.
+    """
+    from g3nat.evaluation.inference import (load_trained_model,
+                                            per_base_onsite_from_args)
+    m = _build(seed=13, per_base_onsite=True)
+    sd = dict(m.state_dict())
+    assert 'onsite_baseline' in sd
+    assert not any('alpha' in k for k in sd), "fixture must be a MODERN state dict"
+    args = dict(_BASE_ARGS, per_base_onsite=True)
+
+    assert per_base_onsite_from_args(args, 'modern.pth', sd) is True
+    # ... and end-to-end, with the table actually restored.
+    loaded, _, _ = load_trained_model(_save(tmp_path, 'modern.pth', sd, args),
+                                      device='cpu')
+    assert loaded.per_base_onsite is True
+    assert torch.equal(loaded.onsite_baseline, m.onsite_baseline)
