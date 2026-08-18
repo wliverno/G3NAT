@@ -2,6 +2,7 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from typing import Dict, List, Optional, Callable
 from torch_geometric.loader import DataLoader
 
@@ -493,8 +494,13 @@ class Trainer:
         # least one appreciable point, NOT over all batches -- a batch with nothing
         # above the threshold has no value to contribute and must not dilute the
         # ones that do.
-        agg_t_appreciable = 0.0
-        n_appreciable = 0
+        # Both are 0-dim TENSORS, converted to host floats exactly once, below,
+        # when the entry is built. A per-batch `if mask.any()` (or a boolean-mask
+        # index, which also has to materialise a host-side size) forces a device
+        # sync on every validation batch; validation runs every epoch. This is the
+        # same treatment the floored_/neg_ diagnostics already get.
+        agg_t_appreciable = torch.zeros((), device=self.device, dtype=torch.float64)
+        n_appreciable = torch.zeros((), device=self.device, dtype=torch.float64)
         agg_unweighted = 0.0
         agg_shape_unweighted = 0.0
         agg_ldos = 0.0
@@ -517,10 +523,20 @@ class Trainer:
                 t_target = batch.transmission.view(
                     dos_pred.size(0), dos_pred.size(1))
                 mask = t_target > APPRECIABLE_T_LOG10
-                if mask.any():
-                    agg_t_appreciable += self.criterion(
-                        transmission_pred[mask], t_target[mask]).item()
-                    n_appreciable += 1
+                # Elementwise Huber then a mask-weighted mean, which equals
+                # criterion(pred[mask], target[mask]) but never leaves the device.
+                # torch.where, NOT a multiply by the mask: excluded points may hold
+                # nan/inf, and nan * 0 is nan, whereas indexing never saw them.
+                n_masked = mask.sum()
+                per_point = F.huber_loss(transmission_pred, t_target,
+                                         reduction='none',
+                                         delta=self.criterion.delta)
+                kept = torch.where(mask, per_point, torch.zeros_like(per_point))
+                batch_app = kept.sum() / n_masked.clamp(min=1)
+                qualifies = n_masked > 0
+                agg_t_appreciable += torch.where(
+                    qualifies, batch_app, torch.zeros_like(batch_app)).to(torch.float64)
+                n_appreciable += qualifies.to(torch.float64)
                 agg_unweighted += losses['dos_t_unweighted'].item()
                 agg_shape_unweighted += losses['dos_t_shape_unweighted'].item()
                 ldos_raw, ldos_shape, localization_gap = self._ldos_agreement(batch, dos_pred)
@@ -552,6 +568,10 @@ class Trainer:
         # only changes what 'total' trains on, never what is reported here --
         # every run measures and stores both raw and shape variants of DOS
         # and LDOS so no information is lost and old runs stay comparable.
+        # The ONE host transfer for the appreciable metric, once per epoch.
+        n_app = float(n_appreciable)
+        t_appreciable = (float(agg_t_appreciable) / n_app if n_app else float('nan'))
+
         measured_key = f"val_ldos_{self.config.ldos_target}"
         other_key = 'val_ldos_base_only' if self.config.ldos_target == 'residue' else 'val_ldos_residue'
         shape_measured_key = f"val_ldos_shape_{self.config.ldos_target}"
@@ -568,8 +588,7 @@ class Trainer:
             # appreciable current (see APPRECIABLE_T_LOG10). Read alongside
             # 'val_transmission', never instead of it. nan when no point in the
             # whole epoch qualified.
-            'val_transmission_appreciable': (agg_t_appreciable / n_appreciable
-                                             if n_appreciable else float('nan')),
+            'val_transmission_appreciable': t_appreciable,
             'val_dos_t_unweighted': agg_unweighted / n_batches,
             'val_dos_t_shape_unweighted': agg_shape_unweighted / n_batches,
             measured_key: agg_ldos / n_batches,

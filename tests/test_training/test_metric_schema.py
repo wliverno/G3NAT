@@ -144,3 +144,47 @@ def test_appreciable_metric_averages_over_batches_not_over_points():
     tr._validate_epoch([_Batch(-3.0), _Batch(-20.0)], epoch=0)
     entry = tr.metric_history[-1]
     assert entry['val_transmission_appreciable'] == pytest.approx(_huber(3.0), rel=1e-6)
+
+
+# ---- no per-batch device sync (independent review, finding I4) --------------
+#
+# The metric used to be gated on `if mask.any():` inside the validation batch
+# loop, which forces a CUDA sync on EVERY validation batch. The floor and
+# negative-fraction diagnostics were already fixed this way -- kept as detached
+# tensors, converted once when the entry is built -- and this one was missed.
+# Validation runs every epoch, for 15000 epochs, across 72 planned runs.
+
+
+def test_validation_does_not_gate_on_a_host_side_boolean(monkeypatch):
+    """`Tensor.any()` returns a value the host must wait for. Nothing in the
+    validation loop may call it."""
+    calls = []
+    real_any = torch.Tensor.any
+
+    def spy(self, *a, **kw):
+        calls.append(tuple(self.shape))
+        return real_any(self, *a, **kw)
+
+    monkeypatch.setattr(torch.Tensor, 'any', spy)
+    tr = _trainer()
+    tr._validate_epoch([_Batch(-3.0), _Batch(-20.0)], epoch=0)
+    assert calls == [], f"validation synced on Tensor.any() {len(calls)}x: {calls}"
+
+
+class _NanTail(nn.Module):
+    """Predicts nan for sequence 0 and 0.0 for sequence 1."""
+
+    def forward(self, batch):
+        base = torch.tensor([[float('nan')] * 4, [0.0] * 4])
+        return base, base
+
+
+def test_nonappreciable_points_cannot_poison_the_masked_average():
+    """Masking must SELECT, not multiply by zero: nan * 0 is nan, and the old
+    boolean-indexed implementation never saw the excluded points at all."""
+    tr = _trainer()
+    tr.model = _NanTail()
+    # Sequence 0: deep tail (excluded) and predicted nan. Sequence 1: appreciable.
+    tr._validate_epoch([_Batch(torch.tensor([-20.0] * 4 + [-3.0] * 4))], epoch=0)
+    entry = tr.metric_history[-1]
+    assert entry['val_transmission_appreciable'] == pytest.approx(_huber(3.0), rel=1e-6)
