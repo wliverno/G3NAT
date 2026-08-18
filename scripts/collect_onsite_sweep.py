@@ -70,7 +70,7 @@ def load_model(path):
     m = g3nat.DNATransportHamiltonianGNN(
         hidden_dim=a['hidden_dim'], num_layers=a['num_layers'], num_heads=a['num_heads'],
         energy_grid=eg, n_orb=a['n_orb'], conv_type=a.get('conv_type', 'gat'),
-        per_base_onsite=per_base_onsite_from_args(a, path))
+        per_base_onsite=per_base_onsite_from_args(a, path, ck['model_state_dict']))
     # Pre-boolean checkpoints carry the removed alpha-mix state.
     ck['model_state_dict'] = drop_legacy_alpha_state(
         ck['model_state_dict'], m.per_base_onsite)

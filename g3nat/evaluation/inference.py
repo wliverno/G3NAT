@@ -11,7 +11,75 @@ from g3nat.graph import sequence_to_graph
 _LEGACY_ALPHA_STATE_KEYS = ('onsite_alpha_fixed', 'onsite_alpha_theta')
 
 
-def per_base_onsite_from_args(args: dict, source: str = '<checkpoint>') -> bool:
+def _uniform_alpha(buf) -> float:
+    """The single value in a legacy alpha buffer, or None if it is not uniform.
+
+    Legacy alpha could be global (one entry) or per-base (four). Only a buffer that
+    holds the SAME value everywhere corresponds to one of the two endpoints the
+    current model can express.
+    """
+    t = torch.as_tensor(buf).detach().reshape(-1).to(torch.float64)
+    if t.numel() == 0:
+        return None
+    first = t[0]
+    if not bool(torch.all(t == first)):
+        return None
+    return float(first)
+
+
+def _cross_check_state_dict(resolved: bool, state_dict: dict, args: dict,
+                            source: str) -> None:
+    """Verify the args-derived onsite head against the state dict, which is the
+    stronger authority (it is what the weights actually are).
+
+    Reading args alone is how a per-base-trained checkpoint whose args were never
+    recorded -- including the `args = {}` fallback in `load_trained_model` -- used to
+    resolve to False and then have its `onsite_baseline` silently deleted by
+    `drop_legacy_alpha_state`. It loaded as a pure-context model, with no error.
+    """
+    args_says = ('args per_base_onsite' if 'per_base_onsite' in args else
+                 'args (structured_onsite/alpha_mode/alpha_value)')
+
+    if 'onsite_alpha_theta' in state_dict:
+        raise ValueError(
+            f"{source}: state dict carries 'onsite_alpha_theta', i.e. the REMOVED "
+            "LEARNED continuous onsite alpha. That model is unrepresentable here "
+            "whatever the args say (they resolve to per_base_onsite="
+            f"{resolved}). Check out a commit from before the alpha-booleanization "
+            "change to evaluate it.")
+
+    if 'onsite_alpha_fixed' in state_dict:
+        alpha = _uniform_alpha(state_dict['onsite_alpha_fixed'])
+        if alpha is None or alpha not in (0.0, 1.0):
+            raise ValueError(
+                f"{source}: state dict 'onsite_alpha_fixed' is "
+                f"{state_dict['onsite_alpha_fixed'].reshape(-1).tolist()!r}, which "
+                "is not uniformly 0.0 or 1.0. Only the two endpoints (0 == context "
+                "head, 1 == per-base table) exist in the current model, so this "
+                f"checkpoint cannot be loaded ({args_says} resolves to "
+                f"per_base_onsite={resolved}). Use pre-boolean code.")
+        if (alpha == 1.0) != resolved:
+            raise ValueError(
+                f"{source}: the checkpoint disagrees with itself. State dict "
+                f"'onsite_alpha_fixed' is {alpha} (=> per_base_onsite="
+                f"{alpha == 1.0}), but {args_says} resolves to per_base_onsite="
+                f"{resolved}. The state dict is what the weights actually are; "
+                "loading either answer would score a model that was never trained. "
+                "Fix the recorded args, or load with pre-boolean code.")
+        return
+
+    if 'onsite_baseline' in state_dict and not resolved:
+        raise ValueError(
+            f"{source}: state dict carries 'onsite_baseline' (the per-base onsite "
+            f"table) but {args_says} resolves to per_base_onsite={resolved}, and "
+            "there is no 'onsite_alpha_fixed' buffer to prove the table was "
+            "multiplied by zero. Dropping it would silently load a per-base "
+            "checkpoint as a pure-context model. Record the flag in args, or load "
+            "with pre-boolean code.")
+
+
+def per_base_onsite_from_args(args: dict, source: str = '<checkpoint>',
+                              state_dict: dict = None) -> bool:
     """Resolve the boolean `per_base_onsite` model flag from a checkpoint's args.
 
     Checkpoints written on or after the alpha-booleanization commit record
@@ -24,7 +92,20 @@ def per_base_onsite_from_args(args: dict, source: str = '<checkpoint>') -> bool:
     it as one of the endpoints and report the numbers as if nothing changed, this
     raises: those checkpoints are historical alpha-sweep artifacts and must be read
     with pre-boolean code.
+
+    `state_dict`, when supplied, is CROSS-CHECKED against the args-derived answer and
+    is treated as the stronger authority: any disagreement raises rather than
+    resolving to one of the two. Pass it whenever it is available -- omitting it
+    restores the args-only behaviour that could silently load a per-base checkpoint
+    with unrecorded args as a pure-context model.
     """
+    resolved = _resolve_from_args(args, source)
+    if state_dict is not None:
+        _cross_check_state_dict(resolved, state_dict, args, source)
+    return resolved
+
+
+def _resolve_from_args(args: dict, source: str) -> bool:
     if 'per_base_onsite' in args:
         return bool(args['per_base_onsite'])
     if not bool(args.get('structured_onsite', False)):
@@ -109,7 +190,9 @@ def load_trained_model(model_path: str, device: str = 'auto') -> Tuple[Union[DNA
     if model_type == 'hamiltonian':
         # Resolve the onsite head first: an unrepresentable legacy alpha must abort
         # before anything is built or loaded.
-        per_base_onsite = per_base_onsite_from_args(args, model_path)
+        # The state dict is cross-checked against args here: an unrecorded flag must
+        # not silently drop a per-base table (independent review, finding I3).
+        per_base_onsite = per_base_onsite_from_args(args, model_path, state_dict)
         if 'solver_type' not in args:
             print("WARNING: this checkpoint predates solver_type being recorded in args "
                   "(scripts/train.py). Falling back to the constructor default 'complex', "

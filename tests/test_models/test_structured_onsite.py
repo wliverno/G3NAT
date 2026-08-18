@@ -202,3 +202,112 @@ def test_legacy_fractional_or_learned_alpha_raises(tmp_path, extra):
     msg = str(e.value)
     assert 'frac.pth' in msg
     assert 'alpha' in msg
+
+
+# ---- state dict vs args cross-check (independent review, finding I3) --------
+#
+# `per_base_onsite_from_args` used to read args ONLY. When args did not record the
+# flag -- including the `args = {}` fallback in load_trained_model -- it answered
+# False, and `drop_legacy_alpha_state` then DELETED `onsite_baseline` from a state
+# dict that contained it. A per-base-trained checkpoint loaded as a pure-context
+# model, silently. The state dict is the stronger authority and must be consulted.
+
+
+def _legacy_sd(seed=11, alpha=1.0, baseline=None):
+    """A state dict from a per-base build, optionally carrying a legacy alpha buffer."""
+    m = _build(seed=seed, per_base_onsite=True)
+    if baseline is not None:
+        with torch.no_grad():
+            m.onsite_baseline.copy_(baseline)
+    sd = dict(m.state_dict())
+    if alpha is not None:
+        sd['onsite_alpha_fixed'] = torch.as_tensor(alpha, dtype=torch.float32).reshape(-1)
+    return sd
+
+
+def test_missing_args_with_legacy_per_base_state_dict_raises(tmp_path):
+    """THE bug: no `args` at all, a full legacy per-base state dict. args-only
+    resolution says False and the baseline gets silently dropped."""
+    from g3nat.evaluation.inference import load_trained_model
+    p = tmp_path / 'noargs.pth'
+    torch.save({'model_state_dict': _legacy_sd(), 'energy_grid': EG}, p)
+    with pytest.raises(ValueError) as e:
+        load_trained_model(str(p), device='cpu')
+    msg = str(e.value)
+    assert 'noargs.pth' in msg                    # names the file
+    assert 'onsite_alpha_fixed' in msg            # names the state-dict source
+    assert 'args' in msg                          # names the args source
+
+
+def test_empty_args_dict_with_legacy_per_base_state_dict_raises(tmp_path):
+    """Same failure via an explicitly empty args dict rather than a missing key."""
+    from g3nat.evaluation.inference import load_trained_model
+    path = _save(tmp_path, 'emptyargs.pth', _legacy_sd(), {})
+    with pytest.raises(ValueError) as e:
+        load_trained_model(path, device='cpu')
+    assert 'emptyargs.pth' in str(e.value)
+
+
+def test_learned_alpha_state_raises_even_when_args_agree(tmp_path):
+    """`onsite_alpha_theta` is a learned continuous alpha: unrepresentable, so it
+    raises unconditionally -- args claiming per_base_onsite=True do not rescue it."""
+    from g3nat.evaluation.inference import load_trained_model
+    sd = _legacy_sd(alpha=None)
+    sd['onsite_alpha_theta'] = torch.tensor([0.3])
+    path = _save(tmp_path, 'theta.pth', sd, dict(_BASE_ARGS, per_base_onsite=True))
+    with pytest.raises(ValueError) as e:
+        load_trained_model(path, device='cpu')
+    msg = str(e.value)
+    assert 'onsite_alpha_theta' in msg and 'theta.pth' in msg
+
+
+def test_nonuniform_alpha_buffer_raises(tmp_path):
+    """A per-base alpha granularity (some bases mixed, some not) is not either
+    endpoint, so it cannot be loaded as one."""
+    from g3nat.evaluation.inference import load_trained_model
+    sd = _legacy_sd(alpha=[0.0, 1.0, 0.0, 1.0])
+    # NB: the filename deliberately does NOT contain the word this test greps for.
+    path = _save(tmp_path, 'mixedalpha.pth', sd,
+                 dict(_BASE_ARGS, per_base_onsite=True))
+    with pytest.raises(ValueError) as e:
+        load_trained_model(path, device='cpu')
+    msg = str(e.value)
+    assert 'mixedalpha.pth' in msg and 'onsite_alpha_fixed' in msg
+    # Specifically the non-uniformity, not the generic disagreement message --
+    # otherwise dropping the uniformity check would still "pass" this test.
+    assert 'uniformly' in msg
+    assert [0.0, 1.0, 0.0, 1.0].__repr__() in msg   # reports the offending buffer
+
+
+def test_alpha_buffer_disagreeing_with_args_raises(tmp_path):
+    """args say the per-base head was on, the buffer says alpha=0. One of the two
+    is wrong and the load must not pick a winner silently."""
+    from g3nat.evaluation.inference import load_trained_model
+    path = _save(tmp_path, 'disagree.pth', _legacy_sd(alpha=0.0),
+                 dict(_BASE_ARGS, per_base_onsite=True))
+    with pytest.raises(ValueError) as e:
+        load_trained_model(path, device='cpu')
+    msg = str(e.value)
+    assert 'disagree.pth' in msg and 'onsite_alpha_fixed' in msg and 'args' in msg
+
+
+def test_orphan_baseline_with_args_off_raises(tmp_path):
+    """`onsite_baseline` present, NO alpha buffer to prove it was multiplied by
+    zero, args imply off. Dropping the table here is a guess, not an exact
+    reduction, so it raises."""
+    from g3nat.evaluation.inference import load_trained_model
+    path = _save(tmp_path, 'orphan.pth', _legacy_sd(alpha=None), dict(_BASE_ARGS))
+    with pytest.raises(ValueError) as e:
+        load_trained_model(path, device='cpu')
+    msg = str(e.value)
+    assert 'orphan.pth' in msg and 'onsite_baseline' in msg
+
+
+def test_cross_check_accepts_agreeing_sources():
+    """Guard against an over-eager check: agreement in both directions must pass."""
+    from g3nat.evaluation.inference import per_base_onsite_from_args
+    assert per_base_onsite_from_args(
+        {'per_base_onsite': True}, 'ok.pth', _legacy_sd(alpha=1.0)) is True
+    m_off = _build(seed=12)
+    assert per_base_onsite_from_args(
+        {'per_base_onsite': False}, 'ok.pth', dict(m_off.state_dict())) is False
