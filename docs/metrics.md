@@ -384,8 +384,10 @@ per-run assertion instead.**
   (someone adds `autocast` for speed, or `torch.compile` fuses a kernel onto an FTZ-mode
   path on some future driver/arch) is the **per-run subnormal assertion**, now specified in
   `docs/superpowers/plans/2026-08-16-phase1-characterization.md` under "Carried into the
-  campaign runner": every run asserts `log10(0 + 1e-38)` is finite and within 1e-3 of -38
-  on its OWN allocated device at startup, and ABORTS (not warns) on failure. That check is
+  campaign runner": every run probes `log10(0 + eps)` -- with `eps` read from its OWN
+  configured `log_floor` and the target derived as `log10(eps)` -- on its OWN allocated
+  device at startup, and ABORTS (not warns) on failure. It raises `RuntimeError` rather
+  than using a bare `assert`, which `python -O` strips, failing open. That check is
   cheap, runs on the actual hardware each run lands on, and catches the failure mode
   directly rather than trying to enumerate every mechanism that could cause it.
 
@@ -396,11 +398,15 @@ per-run assertion instead.**
   memory); the subnormal probe is finite and ~-38 on a real GPU (Tesla P100-PCIE-16GB),
   both bare and inside an fp16 autocast context; the full NEGF solver path produces no
   `-inf`/NaN on a chain engineered to floor at eps.
-- INFERRED, not directly tested: behavior on Ampere/Ada-class GPUs with actual tensor
-  cores (the campaign's RTX 2080 Ti was checked by a previous reviewer per the task brief;
-  this session's own GPU draw was a P100, architecturally unable to exercise TF32 at all,
-  so it is a weaker witness for the "TF32 doesn't reach log10" claim than a tensor-core
-  card would have been -- though point 2's documentation-based verification does not
-  depend on which architecture is tested, only on which op TF32 attaches to). Also
+- INFERRED, not directly tested: behavior on Ampere-or-later GPUs, i.e. anything that can
+  actually run TF32. **NO TF32-CAPABLE CARD HAS BEEN TESTED.** Both witnesses are
+  pre-Ampere: the campaign's RTX 2080 Ti (Turing, sm_75) checked by a previous reviewer,
+  and this session's own GPU draw, a P100 (Pascal, sm_60). TF32 arrived with Ampere
+  (sm_80), so NEITHER card can exercise it -- the 2080 Ti's Turing tensor cores do fp16,
+  not TF32, and it is not the tensor-core witness an earlier phrasing here implied it was.
+  The conclusion therefore rests entirely on the DOCUMENTATION argument of point 2 (TF32
+  attaches to matmul/conv reductions, not to elementwise ops such as `log10`), which is
+  architecture-independent and so is not weakened by the gap -- but it is a documentation
+  argument, not a measurement. Also
   inferred: that no future code change introduces an FTZ-capable path; this is exactly why
   the per-run assertion, not a one-time code review, is the actual safeguard.
