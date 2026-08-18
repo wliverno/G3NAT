@@ -78,8 +78,7 @@ def _cross_check_state_dict(resolved: bool, state_dict: dict, args: dict,
             "with pre-boolean code.")
 
 
-def per_base_onsite_from_args(args: dict, source: str = '<checkpoint>',
-                              state_dict: dict = None) -> bool:
+def per_base_onsite_from_args(args: dict, source: str, state_dict: dict) -> bool:
     """Resolve the boolean `per_base_onsite` model flag from a checkpoint's args.
 
     Checkpoints written on or after the alpha-booleanization commit record
@@ -93,15 +92,16 @@ def per_base_onsite_from_args(args: dict, source: str = '<checkpoint>',
     raises: those checkpoints are historical alpha-sweep artifacts and must be read
     with pre-boolean code.
 
-    `state_dict`, when supplied, is CROSS-CHECKED against the args-derived answer and
-    is treated as the stronger authority: any disagreement raises rather than
-    resolving to one of the two. Pass it whenever it is available -- omitting it
-    restores the args-only behaviour that could silently load a per-base checkpoint
-    with unrecorded args as a pure-context model.
+    `state_dict` is REQUIRED, and is CROSS-CHECKED against the args-derived answer as
+    the stronger authority: any disagreement raises rather than resolving to one of
+    the two. It has no default on purpose. It used to default to None, which skipped
+    the cross-check entirely and restored the args-only behaviour that silently loads
+    a per-base checkpoint with unrecorded args as a pure-context model -- i.e. one
+    forgotten argument re-opened the defect this cross-check exists to close
+    (independent review). Every caller has the state dict in hand already.
     """
     resolved = _resolve_from_args(args, source)
-    if state_dict is not None:
-        _cross_check_state_dict(resolved, state_dict, args, source)
+    _cross_check_state_dict(resolved, state_dict, args, source)
     return resolved
 
 
