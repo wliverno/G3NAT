@@ -32,6 +32,26 @@ Both are already used in `g3nat/utils/physics.py` and were carried in the source
   (Distinct from Datta's earlier and more general *Electronic Transport in Mesoscopic
   Systems*, 1995.)
 
+- **Imaginary potentials absorb particles** -- why the `complex_eta` in
+  `g3nat/models/hamiltonian.py` (see the comment above the `A = (energy + 1j *
+  self.complex_eta) * I - ...` line) is a numerical REGULATOR and not a dephasing model
+  Brouwer, P. W., Beenakker, C. W. J. "Voltage-probe and imaginary-potential models for
+  dephasing in a chaotic quantum dot." *Phys. Rev. B* **55**(7), 4695-4702 (1997).
+  doi:[10.1103/PhysRevB.55.4695](https://doi.org/10.1103/PhysRevB.55.4695)
+  **Erratum:** *Phys. Rev. B* **66**, 209901 (2002).
+  doi:[10.1103/PhysRevB.66.209901](https://doi.org/10.1103/PhysRevB.66.209901)
+  An added imaginary potential is not equivalent to a dephasing probe on its own: the two
+  models coincide only under the conditions this paper works out, because the imaginary
+  potential removes carriers from the system where the fictitious voltage probe reinjects
+  them. This is the reference behind the decision NOT to learn eta: at physical-dephasing
+  magnitudes an unaccompanied imaginary term acts as an absorbing potential and suppresses
+  transmission, so eta must stay small enough to be a pole regulator only, with physical
+  broadening entering through the contact Gamma. [SPOT-CHECKED] Metadata (both the article
+  and the erratum) verified against the Crossref REST API and the arXiv record
+  cond-mat/9609252, whose journal-ref carries both. The published abstract is about the
+  equivalence conditions and the conductance distribution; it does not itself contain the
+  phrase "particle number".
+
 ## Model architecture
 
 - **Graph attention (GATConv)** -- the default `--conv_type gat`

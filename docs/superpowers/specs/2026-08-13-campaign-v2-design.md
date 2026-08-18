@@ -54,7 +54,10 @@ already-budgeted ceiling below. Early stopping is NOT implemented (review confir
 such code exists) and under this decision never will be for this campaign.
 
 **Budget scope:** the ~470 GPU-h ceiling (72 x 6.5 h, MEASURED at one cell corner,
-sec. 16d) covers the factorial only. Pilots + alpha epilogue add ~30 GPU-h.
+sec. 16d) covers the factorial only. Pilots + alpha epilogue add AT MOST ~30 GPU-h: that
+figure was costed when this section still carried a broadening-eta pilot, which has since
+been dropped (the surviving GPU cost is the optimizer pilot and the reproducibility gate),
+so read it as an upper bound, not an estimate.
 Pilots record per-corner throughput so the ceiling
 becomes MEASURED across (N_ORB, NUM_LAYERS).
 
@@ -178,7 +181,7 @@ with its on-record caveat).
    << the 0.017 meaningful-difference bar and is documented as the irreducible floor).
    The campaign does not launch on a failed gate -- reproducibility is sec. 1's premise.
 
-**Parallelization:** pilots 1-3 are mutually independent (1 costs no GPU). The
+**Parallelization:** pilots 1-2 are mutually independent (1 costs no GPU), as is gate 3. The
 **n_orb=1 half of the design (36 runs) does not depend on
 the gamma convention and launches as soon as Phase 1 + gate 3 pass**, concurrent with
 the pilots. The n_orb=2 half launches when 5.1's convention is decided.
