@@ -231,28 +231,25 @@ share_i     = mean over E of [ ldos_i(E) / sum_j ldos_j(E) ]
   energy-resolved comparison. (A conclusion was drawn from an energy-averaged share earlier
   and withdrawn.)
 
-## 8a. Transport-restricted transmission
+## 8a. Transmission
 
 ```
-val_transmission              = Huber(log10 T_pred, log10 T_target)   over ALL energy points
-val_transmission_appreciable  = Huber(log10 T_pred, log10 T_target)   over points where
-                                log10 T_target > APPRECIABLE_T_LOG10  (= -16.0)
+val_transmission = Huber(log10 T_pred, log10 T_target)   over ALL energy points
 ```
 
-- `g3nat/training/trainer.py` (`APPRECIABLE_T_LOG10`, accumulated in `_validate_epoch`).
-- Half of every spectrum is deep tunnelling at ~1e-8 (docs/dataset.md, measured over
-  417,477 energy points), so **roughly half the error budget of the whole-window number is
-  spent where no transport measurement would resolve anything**. A model that wins on the
-  tail and loses at the resonances looks better on `val_transmission` while being worse for
-  transport. Report both; neither replaces the other.
-- The threshold is on the **target**, not the prediction, so the point set is a property of
-  the data and identical across models. Strict inequality: a target exactly at -16.0 does
-  not qualify.
-- Averaged over the batches that contained at least one qualifying point, not over all
-  batches. `nan` when no point in the entire epoch qualified -- which is the honest value,
-  not zero.
-- This is a diagnostic only. The trained loss still weights all 201 energy points equally;
-  a uniform log-space fit remains a defensible choice, and nothing here changes it.
+- `g3nat/training/trainer.py`, accumulated in `_validate_epoch`.
+- The window is the whole window. **No point is masked out by target magnitude.** A
+  threshold-restricted companion metric (`val_transmission_appreciable`, cut 2026-08-18)
+  existed briefly and discarded every point whose target sat below log10 T = -16. That
+  number was the old numerical clamp value, an implementation artifact, not a physical
+  transport threshold -- docs/dataset.md puts the deep-tunnelling region at ~1e-8, eight
+  orders of magnitude away. The discarded tail is also exactly the region the
+  length-extrapolation claim rests on.
+- No replacement threshold, percentile, or weighting is being introduced. If a
+  tail-versus-resonance comparison is wanted, it is computed at analysis time from full
+  data, never by discarding points during training or validation.
+- The trained loss weights all 201 energy points equally; a uniform log-space fit remains
+  a defensible choice.
 
 ## 8b. The frozen per-epoch metric schema
 
@@ -270,7 +267,6 @@ by accident is not, and a run whose schema differs is not schema-comparable with
 | `val_dos` | Huber on log10 DOS, absolute magnitude (sec. 1) |
 | `val_dos_shape` | same, after the shared median-residual offset (sec. 1) |
 | `val_transmission` | Huber on log10 T over the whole window (sec. 8a) |
-| `val_transmission_appreciable` | the same, restricted to appreciable targets (sec. 8a) |
 | `val_dos_t_unweighted` | `val_dos + val_transmission`, no `loss_a/b/c` scaling -- **the checkpoint selection criterion** (sec. 1a) |
 | `val_dos_t_shape_unweighted` | shape-variant counterpart of the above |
 | `val_ldos_residue` | held-out LDOS Huber against the residue aggregation; `nan` unless `ldos_target='residue'` |

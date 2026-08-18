@@ -1487,18 +1487,22 @@ must be read with pre-boolean code."
 
 ---
 
-### Task 14: Transport-restricted transmission metric + schema freeze (spec sec. 4 / metric key freeze)
+### Task 14: Metric key schema freeze (spec sec. 4 / metric key freeze)
+
+> **Amended 2026-08-18.** As originally written this task ALSO added a
+> threshold-restricted transmission metric, masking to targets above
+> log10 T = -16. That has been removed: -16 was the old numerical clamp value,
+> an implementation artifact, not a physical transport threshold, and the tail
+> it discarded is the region the length-extrapolation claim depends on. No
+> replacement threshold, percentile, or weighting is introduced -- any
+> tail-versus-resonance split is computed at analysis time from full data. The
+> masked-metric parts of this task below are struck; the schema freeze stands.
 
 **Files:**
 - Modify: `g3nat/training/trainer.py` (_validate_epoch)
 - Test: `tests/test_training/test_metric_schema.py`
 
 **Interfaces:**
-- Produces: metric key `'val_transmission_appreciable'` -- Huber on the (pred, target)
-  pairs where `transmission_target > APPRECIABLE_T_LOG10` with
-  `APPRECIABLE_T_LOG10 = -16.0` a module-level constant in trainer.py (the
-  docs/dataset.md "appreciable transmission" threshold: the half of the spectrum
-  where current actually flows). nan when no points qualify in an epoch.
 - Produces: module-level `EXPECTED_METRIC_KEYS` frozenset in trainer.py listing every
   key `_validate_epoch` writes; `_validate_epoch` asserts its entry matches EXACTLY.
   This is the launch-irreversibility guard: adding a metric later forces a deliberate
@@ -1538,17 +1542,6 @@ def test_entry_matches_frozen_schema_exactly():
     tr = Trainer(_Const(), TrainingConfig(num_epochs=1, warmup_epochs=0))
     tr._validate_epoch([_Batch(-3.0)], epoch=0)
     assert set(tr.metric_history[-1].keys()) == set(EXPECTED_METRIC_KEYS)
-
-
-def test_appreciable_metric_masks_the_deep_tail():
-    tr = Trainer(_Const(), TrainingConfig(num_epochs=1, warmup_epochs=0))
-    tr._validate_epoch([_Batch(-3.0)], epoch=0)   # all points appreciable
-    above = tr.metric_history[-1]['val_transmission_appreciable']
-    assert above == above  # not nan
-    tr2 = Trainer(_Const(), TrainingConfig(num_epochs=1, warmup_epochs=0))
-    tr2._validate_epoch([_Batch(-20.0)], epoch=0)  # none appreciable
-    below = tr2.metric_history[-1]['val_transmission_appreciable']
-    assert below != below  # nan
 ```
 
 - [ ] **Step 2: Run to verify failure** -- expected: ImportError on
@@ -1559,40 +1552,17 @@ EXPECTED_METRIC_KEYS.
 In trainer.py, module level:
 
 ```python
-# The half of the spectrum where current actually flows (docs/dataset.md): model
-# comparisons must be reported both whole-window and restricted to this region.
-APPRECIABLE_T_LOG10 = -16.0
-
 # LAUNCH-FROZEN metric schema. Anything not recorded per-epoch is unavailable at
 # any epoch but one -- re-deriving it means re-running the campaign. Editing this
 # set after launch invalidates cross-run schema compatibility; do it deliberately.
 EXPECTED_METRIC_KEYS = frozenset({
     'epoch', 'val_dos', 'val_dos_shape', 'val_transmission',
-    'val_transmission_appreciable', 'val_dos_t_unweighted',
+    'val_dos_t_unweighted',
     'val_dos_t_shape_unweighted', 'val_ldos_residue', 'val_ldos_base_only',
     'val_ldos_shape_residue', 'val_ldos_shape_base_only',
     'val_ldos_localization_gap', 'nan_skipped_total',
     'floored_frac_dos', 'floored_frac_t',
 })
-```
-
-In `_validate_epoch`'s batch loop, accumulate the masked metric:
-
-```python
-                t_target = batch.transmission.view(dos_pred.size(0), dos_pred.size(1))
-                mask = t_target > APPRECIABLE_T_LOG10
-                if mask.any():
-                    agg_t_appreciable += torch.nn.functional.huber_loss(
-                        transmission_pred[mask], t_target[mask]).item()
-                    n_appreciable += 1
-```
-
-(initialize `agg_t_appreciable = 0.0; n_appreciable = 0` with the other
-accumulators) and in the entry:
-
-```python
-            'val_transmission_appreciable': (agg_t_appreciable / n_appreciable
-                                             if n_appreciable else float('nan')),
 ```
 
 After building `entry`, before appending:
@@ -1617,11 +1587,9 @@ the source of truth and earlier tasks' keys must match it.
 
 ```bash
 git add g3nat/training/trainer.py tests/test_training/test_metric_schema.py
-git commit -m "feat(training): transport-restricted transmission metric; launch-frozen metric schema
+git commit -m "feat(training): launch-frozen metric schema
 
-val_transmission_appreciable reads the region where current actually flows
-(target log10 T > -16), per the standing methods requirement. The schema
-assert makes silent metric drift impossible mid-campaign."
+The schema assert makes silent metric drift impossible mid-campaign."
 ```
 
 ---
@@ -1803,8 +1771,8 @@ illegibility (runner override vs argparse default) cannot recur silently."
 ## Self-review record (per the writing-plans skill)
 
 - Spec coverage: B1(T1) B2(T3) B3(T4) B4(T3) B5(T2) B6(T5) B7(T6) B8(T7) B9(T8)
-  B10(T9) B11(T15) B14(T10) B15(T11) F1(T12); metric freeze +
-  val_transmission_appreciable (T14); nanargmin SHOULD folded into T3. NOT in this
+  B10(T9) B11(T15) B14(T10) B15(T11) F1(T12); metric freeze (T14);
+  nanargmin SHOULD folded into T3. NOT in this
   plan (deliberate): the Phase 2 pilots/gates, the campaign runner, MDE computation,
   analysis scripts, docs/dataset.md coverage notes, references.md merge -- those are
   the Phase 2 plan, written after this plan lands.

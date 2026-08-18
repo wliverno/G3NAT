@@ -1,17 +1,14 @@
-"""Transport-restricted transmission metric and the launch-frozen metric schema.
-
-`val_transmission_appreciable` restricts the transmission Huber to the energy
-points where the TARGET exceeds APPRECIABLE_T_LOG10, i.e. where current actually
-flows (docs/dataset.md: roughly half of every spectrum is deep tunnelling that no
-transport measurement resolves, yet it carries half the error budget of the
-whole-window metric).
+"""The launch-frozen metric schema, and the whole-window transmission metric.
 
 EXPECTED_METRIC_KEYS freezes what `_validate_epoch` records. Anything not recorded
 per epoch is unavailable at every epoch but one, and re-deriving it means re-running
 the campaign -- so schema drift has to fail loudly rather than silently.
-"""
 
-import math
+`val_transmission` is the Huber over the WHOLE energy window. There is deliberately
+no threshold-restricted companion: a metric that discards the deep tail discards the
+region the length-extrapolation claim rests on. Any tail-versus-resonance split is a
+question for analysis time, computed from full data.
+"""
 
 import pytest
 import torch
@@ -19,7 +16,6 @@ import torch.nn as nn
 
 from g3nat.training import trainer as trainer_mod
 from g3nat.training.trainer import (
-    APPRECIABLE_T_LOG10,
     EXPECTED_METRIC_KEYS,
     Trainer,
 )
@@ -76,7 +72,7 @@ def test_frozen_set_covers_every_recorded_diagnostic():
     # every campaign artifact.
     for key in (
         'epoch', 'val_dos', 'val_dos_shape', 'val_transmission',
-        'val_transmission_appreciable', 'val_dos_t_unweighted',
+        'val_dos_t_unweighted',
         'val_dos_t_shape_unweighted', 'val_ldos_residue', 'val_ldos_base_only',
         'val_ldos_shape_residue', 'val_ldos_shape_base_only',
         'val_ldos_localization_gap', 'floored_frac_dos', 'floored_frac_t',
@@ -104,71 +100,12 @@ def test_schema_drift_raises_naming_missing_and_extra_separately():
     assert 'val_dos' in extra_part and 'val_invented' not in extra_part
 
 
-def test_threshold_constant_is_the_documented_value():
-    assert APPRECIABLE_T_LOG10 == -16.0
-
-
-def test_appreciable_metric_masks_the_deep_tail():
-    above = _run(_Batch(-3.0))['val_transmission_appreciable']   # all points appreciable
-    assert above == above  # not nan
-    below = _run(_Batch(-20.0))['val_transmission_appreciable']  # none appreciable
-    assert below != below  # nan
-
-
-def test_appreciable_metric_uses_only_the_appreciable_points():
-    # Sequence 0 sits in the deep tail, sequence 1 at an appreciable resonance.
+def test_transmission_metric_covers_the_whole_window_including_the_deep_tail():
+    # Sequence 0 sits in the deep tunnelling tail, sequence 1 at a resonance.
+    # Prediction is 0 everywhere, so residuals are +20 (tail) and +3 (resonance),
+    # both outside Huber's quadratic region. Every point is counted: the tail
+    # dominates the average precisely because it is not discarded.
     target = torch.tensor([-20.0] * 4 + [-3.0] * 4)
     entry = _run(_Batch(target))
-    # Prediction is 0 everywhere, so residuals are +20 (tail) and +3 (appreciable),
-    # both outside Huber's quadratic region.
-    assert entry['val_transmission_appreciable'] == pytest.approx(_huber(3.0), rel=1e-6)
-    # Whole-window average over all 8 points -- the number the restricted metric
-    # exists to be read alongside, and a different number.
     assert entry['val_transmission'] == pytest.approx(
         0.5 * (_huber(20.0) + _huber(3.0)), rel=1e-6)
-    assert entry['val_transmission_appreciable'] < entry['val_transmission']
-
-
-def test_threshold_is_strict_so_a_target_at_the_floor_does_not_qualify():
-    at = _run(_Batch(APPRECIABLE_T_LOG10))['val_transmission_appreciable']
-    assert math.isnan(at)
-    just_above = _run(_Batch(APPRECIABLE_T_LOG10 + 0.5))['val_transmission_appreciable']
-    assert not math.isnan(just_above)
-
-
-def test_appreciable_metric_averages_over_batches_not_over_points():
-    tr = _trainer()
-    # Two batches: one wholly appreciable, one wholly tail. Only the first
-    # contributes, so the epoch value is that batch's value, not a value diluted
-    # by the batch that had nothing to measure.
-    tr._validate_epoch([_Batch(-3.0), _Batch(-20.0)], epoch=0)
-    entry = tr.metric_history[-1]
-    assert entry['val_transmission_appreciable'] == pytest.approx(_huber(3.0), rel=1e-6)
-
-
-# ---- excluded points must be SELECTED AWAY, not zero-weighted ---------------
-#
-# The metric is computed as `criterion(pred[mask], target[mask])`: a boolean
-# index, which never evaluates the excluded points at all. Any reformulation
-# that instead multiplies an elementwise loss by the mask changes this, because
-# nan * 0 is nan and the deep tail is exactly where a diverging prediction shows
-# up first.
-
-
-class _NanTail(nn.Module):
-    """Predicts nan for sequence 0 and 0.0 for sequence 1."""
-
-    def forward(self, batch):
-        base = torch.tensor([[float('nan')] * 4, [0.0] * 4])
-        return base, base
-
-
-def test_nonappreciable_points_cannot_poison_the_masked_average():
-    """Masking SELECTS: a nan prediction at an excluded point must not appear in
-    the average, which a multiply-by-the-mask formulation would not guarantee."""
-    tr = _trainer()
-    tr.model = _NanTail()
-    # Sequence 0: deep tail (excluded) and predicted nan. Sequence 1: appreciable.
-    tr._validate_epoch([_Batch(torch.tensor([-20.0] * 4 + [-3.0] * 4))], epoch=0)
-    entry = tr.metric_history[-1]
-    assert entry['val_transmission_appreciable'] == pytest.approx(_huber(3.0), rel=1e-6)

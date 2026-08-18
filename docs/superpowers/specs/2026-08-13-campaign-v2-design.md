@@ -116,11 +116,13 @@ time if a headline claim emerges.
 
 **Metric key set freeze (blocking, launch-irreversible):** anything not recorded
 per-epoch in metric_history is unavailable at any epoch but one -- re-deriving means
-re-running all 72 jobs. Frozen set at launch = current keys + `val_transmission_appreciable`
-(T restricted to the region above a pre-stated threshold, per the standing
-docs/dataset.md sec. "appreciable transmission" requirement -- half the error budget
-lives where no measurement would resolve it) + the floored-point fraction (B6) + the
-NaN-skip count (B5).
+re-running all 72 jobs. Frozen set at launch = current keys + the floored-point fraction
+(B6) + the NaN-skip count (B5).
+
+(A threshold-restricted transmission key was in this freeze and was removed 2026-08-18:
+its threshold was the old numerical clamp value, not a physical quantity, and it
+discarded the deep tail the length-extrapolation claim depends on. No replacement
+threshold is introduced -- see docs/metrics.md sec. 8a.)
 
 **SHOULD (never gates a phase transition):** nanargmin for best_val_epoch + a NaN scan
 of the 84 old metric_histories (does the argmin bug touch any quoted best-epoch number);
@@ -135,7 +137,7 @@ gaps (CGTAT 3/4, GCCTGG 2/4) and the GAAAC backfill in docs/dataset.md.
 All read from metric_history AT EACH RESPONSE'S OWN CURVE OPTIMUM (no shared stopping
 epoch exists under the fixed cap; the selection metric in B2/B4 governs only which
 WEIGHTS are saved, stated in methods): val_dos_t_unweighted, val_transmission,
-val_transmission_appreciable, val_dos, val_ldos_residue, ldos localization gap,
+val_dos, val_ldos_residue, ldos localization gap,
 best_epoch [DESCRIPTIVE], floored-point fraction [DESCRIPTIVE].
 Post-hoc on saved best weights (B4 makes these the same epoch as the selection metric's
 optimum): length extrapolation against the 16 held-out L=12 DFT records (sec. 15 set --
