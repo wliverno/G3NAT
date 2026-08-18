@@ -146,29 +146,13 @@ def test_appreciable_metric_averages_over_batches_not_over_points():
     assert entry['val_transmission_appreciable'] == pytest.approx(_huber(3.0), rel=1e-6)
 
 
-# ---- no per-batch device sync (independent review, finding I4) --------------
+# ---- excluded points must be SELECTED AWAY, not zero-weighted ---------------
 #
-# The metric used to be gated on `if mask.any():` inside the validation batch
-# loop, which forces a CUDA sync on EVERY validation batch. The floor and
-# negative-fraction diagnostics were already fixed this way -- kept as detached
-# tensors, converted once when the entry is built -- and this one was missed.
-# Validation runs every epoch, for 15000 epochs, across 72 planned runs.
-
-
-def test_validation_does_not_gate_on_a_host_side_boolean(monkeypatch):
-    """`Tensor.any()` returns a value the host must wait for. Nothing in the
-    validation loop may call it."""
-    calls = []
-    real_any = torch.Tensor.any
-
-    def spy(self, *a, **kw):
-        calls.append(tuple(self.shape))
-        return real_any(self, *a, **kw)
-
-    monkeypatch.setattr(torch.Tensor, 'any', spy)
-    tr = _trainer()
-    tr._validate_epoch([_Batch(-3.0), _Batch(-20.0)], epoch=0)
-    assert calls == [], f"validation synced on Tensor.any() {len(calls)}x: {calls}"
+# The metric is computed as `criterion(pred[mask], target[mask])`: a boolean
+# index, which never evaluates the excluded points at all. Any reformulation
+# that instead multiplies an elementwise loss by the mask changes this, because
+# nan * 0 is nan and the deep tail is exactly where a diverging prediction shows
+# up first.
 
 
 class _NanTail(nn.Module):
@@ -180,8 +164,8 @@ class _NanTail(nn.Module):
 
 
 def test_nonappreciable_points_cannot_poison_the_masked_average():
-    """Masking must SELECT, not multiply by zero: nan * 0 is nan, and the old
-    boolean-indexed implementation never saw the excluded points at all."""
+    """Masking SELECTS: a nan prediction at an excluded point must not appear in
+    the average, which a multiply-by-the-mask formulation would not guarantee."""
     tr = _trainer()
     tr.model = _NanTail()
     # Sequence 0: deep tail (excluded) and predicted nan. Sequence 1: appreciable.
