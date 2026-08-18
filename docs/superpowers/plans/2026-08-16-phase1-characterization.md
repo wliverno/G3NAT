@@ -67,6 +67,25 @@ No training, no RNG, `torch.no_grad()`, eval mode, both sides.
 - Old code: `git worktree add` at `1a992af` (last pre-Phase-1 code commit). NEVER move HEAD
   on the main checkout. Data is gitignored, so the worktree starts empty -- symlink
   `pickle_files_v2/`, `geom_cache/`, and the checkpoint dirs in explicitly (I1).
+- **USABLE-CHECKPOINT LIST (measured 2026-08-17, commit 90bf709 -- "loads" is NOT the
+  same as "runs").** A golden forward-pass fixture found that one tracked checkpoint
+  loads cleanly and then RAISES on the forward pass:
+  - `hamiltonian_DFT_gat_baseaware.pth` -- USABLE (gat, 201-pt DFT grid)
+  - `hamiltonian_2000x_4to10BP_5000epoch.pth` -- USABLE (transformer, 100-pt tb grid)
+  - `standard_2000x_4to10BP_5000epoch.pth` -- USABLE (direct/blind baseline)
+  - `hamiltonian_2000x_4to10BP_5000epoch_baseblind.pth` -- **NOT USABLE**: base-blind-era
+    coupling head is 1x hidden wide where the current base-aware model feeds 3x
+    (`mat1 and mat2 shapes cannot be multiplied`). Not a loader bug; the endpoint-
+    embedding weights were never trained. DO NOT use it in any arm of this experiment.
+  Standing implication: a base-blind-era result cannot be regenerated without checking
+  out period code. Nothing in docs/, scripts/, g3nat/ or the figures depends on one.
+- **The flag assertions and the golden fixture cover DIFFERENT failures -- keep both.**
+  Measured, not assumed: the `solver_type` flip does NOT move the golden numbers (short
+  off-resonance sequences agree inside tolerance; the documented 3.2e-5 median gap has
+  its heavy tail at near-resonance energies these fixtures do not sample), and
+  `enforce_hermiticity` CANNOT move them (every tracked checkpoint is n_orb=1, where
+  symmetrizing a 1x1 block is an exact no-op). A numeric fixture does not subsume
+  per-flag assertions for the flag that has already caused a real campaign-scale error.
 - Checkpoints (MANDATORY arms, review finding I4 -- `trained_models/` is all n_orb=1
   pre-campaign and would validate the wrong configuration):
   - one n_orb=1 checkpoint from `trained_models/`. **PICK FROM THE RUNNABLE THREE**
