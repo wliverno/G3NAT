@@ -64,7 +64,12 @@ default predicts, and it is a narrow instance of Part 1a passing.
 
 No training, no RNG, `torch.no_grad()`, eval mode, both sides.
 
-- Old code: `git worktree add` at `1a992af` (last pre-Phase-1 code commit). NEVER move HEAD
+- Old code: `git worktree add` at **`0157ea8`** = `origin/main`, the last pushed state and the
+  pre-Phase-1 code tree. (This document originally named `1a992af`; that commit was removed
+  from this history line by the 2026-08-17 rewrite and is NOT an ancestor of HEAD. The
+  substitution was verified non-material: `git diff 1a992af 0157ea8 -- g3nat/` is EMPTY, i.e.
+  byte-identical package trees, and 0157ea8's hamiltonian.py contains zero occurrences of
+  `floor_mode` against 19 in HEAD's, confirming it is genuinely pre-Phase-1.) NEVER move HEAD
   on the main checkout. Data is gitignored, so the worktree starts empty -- symlink
   `pickle_files_v2/`, `geom_cache/`, and the checkpoint dirs in explicitly (I1).
 - **USABLE-CHECKPOINT LIST (measured 2026-08-17, commit 90bf709 -- "loads" is NOT the
