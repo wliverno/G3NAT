@@ -223,6 +223,18 @@ Expected: both tests PASS.
 
 - [ ] **Step 7: Skip the stale legacy-checkpoint integration test**
 
+> **STATUS UPDATE 2026-08-17 -- this step's premise is now stale, and the FILE NAMED
+> BELOW IS THE WRONG ONE.** `trained_models/hamiltonian_2000x_4to10BP_5000epoch.pth`
+> was regenerated against the base-aware head (its args record
+> `output_dir=./outputs_regen_transformer`); it loads AND runs, and
+> `test_optimize_with_trained_model` is live, not skipped. The pre-fix artifact that
+> still exhibits exactly the load-then-crash behaviour described here is
+> `trained_models/hamiltonian_2000x_4to10BP_5000epoch_baseblind.pth`, measured
+> 2026-08-17 (job 38618534) and pinned by
+> `tests/baseline/test_baseline_legacy_checkpoints.py::test_baseblind_checkpoint_loads_but_cannot_run`.
+> The recommended follow-up in this plan -- make `load_trained_model` raise a clear
+> error instead of crashing at forward -- is still open.
+
 The committed `trained_models/hamiltonian_2000x_4to10BP_5000epoch.pth` predates the widened coupling head. `load_trained_model` loads it via a legacy shim (`g3nat/evaluation/inference.py:86-106`) that rebuilds `coupling_proj` at the OLD input width, so `load_state_dict` succeeds but the first forward pass shape-mismatches (`3*hidden_dim` vs `hidden_dim`). Retraining is out of scope, so skip until the checkpoint is regenerated.
 
 In `tests/test_models/test_generator.py`, replace the decorator on `test_optimize_with_trained_model` (currently `@pytest.mark.skipif(not os.path.exists(MODEL_PATH), reason=...)`) with an unconditional skip:

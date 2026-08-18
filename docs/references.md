@@ -43,10 +43,13 @@ Both are already used in `g3nat/utils/physics.py` and were carried in the source
   An added imaginary potential is not equivalent to a dephasing probe on its own: the two
   models coincide only under the conditions this paper works out, because the imaginary
   potential removes carriers from the system where the fictitious voltage probe reinjects
-  them. This is the reference behind the decision NOT to learn eta: at physical-dephasing
-  magnitudes an unaccompanied imaginary term acts as an absorbing potential and suppresses
-  transmission, so eta must stay small enough to be a pole regulator only, with physical
-  broadening entering through the contact Gamma. [SPOT-CHECKED] Metadata (both the article
+  them. That reinjection/particle-number statement is THEIRS, for a chaotic quantum dot
+  treated by random-matrix theory. The APPLICATION IS OURS, not the paper's: we infer that
+  in our 1D DNA chain, at physical-dephasing magnitudes, an unaccompanied imaginary term
+  acts as an absorbing potential and suppresses transmission -- the paper neither studies a
+  1D chain nor makes that claim. It is the reasoning behind our decision NOT to learn eta,
+  keeping eta small enough to be a pole regulator only, with physical broadening entering
+  through the contact Gamma. [SPOT-CHECKED] Metadata (both the article
   and the erratum) verified against the Crossref REST API and the arXiv record
   cond-mat/9609252, whose journal-ref carries both. The published abstract is about the
   equivalence conditions and the conductance distribution; it does not itself contain the

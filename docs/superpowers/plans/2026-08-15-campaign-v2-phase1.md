@@ -1734,9 +1734,22 @@ illegibility (runner override vs argparse default) cannot recur silently."
 
 **Files:** none created; this is the plan's exit gate.
 
-- [x] **Step 1 (DONE 2026-08-17):** `SRUN 'python -m pytest tests/ -q'` -- 310 passed,
-  0 failed (job 38617686). With the Step 3.4 test added: 323. The count is against
-  the tree at c027e42; edits landing after that were not in it.
+- [x] **Step 1 (RE-RUN 2026-08-17):** `python -m pytest tests/ -q` -- **320 passed, 0
+  failed, exit 0 (job 38618932, node n3294, 6m12s)**, against HEAD `f69f87a` plus the
+  legacy-checkpoint test work committed alongside this line. THIS is the tick that
+  counts.
+  - SUPERSEDED, kept for the record: the earlier tick read "310 passed, 0 failed (job
+    38617686), 323 with the Step 3.4 test". That run was against a tree containing
+    `c027e42`, WHICH HAS SINCE BEEN REVERTED (`500ef7b`), and predated `f7aede7`,
+    `265e2c2` and `f69f87a` -- including a required-argument signature change in
+    `inference.py`. It certified a tree that no longer exists, so it could not gate
+    anything. Do not quote 310/323.
+  - The 320 includes the legacy-checkpoint coverage added 2026-08-17:
+    `tests/test_evaluation/test_legacy_checkpoint_roundtrip.py` now 19 tests (was 13 --
+    it claimed to exercise "every args-less fallback at once" while asserting only the
+    floor pair and the alpha mapping) and the new
+    `tests/baseline/test_baseline_legacy_checkpoints.py` (4). Mutation-checked on 8
+    separate loader defaults, job 38618836, all 8 killed.
 - [x] **Step 2 (DONE 2026-08-17):** Grep audit -- each must return nothing:
   - `grep -rn "alpha_value\|alpha_mode\|alpha_granularity\|structured_onsite" g3nat/ scripts/train.py` (Task 12 completeness; analysis scripts reading OLD checkpoints may keep references -- only g3nat/ and train.py must be clean)
     -- `scripts/train.py` clean. 8 JUSTIFIED survivors, all in
