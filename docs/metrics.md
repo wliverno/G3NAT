@@ -303,3 +303,104 @@ E_HOMO  = mean(raw Egrid)                               per sequence, absolute e
 - Sequence classes are length-matched so length is not a confound.
 - At alpha=1.0, `shift_b` must be **exactly 0** by construction (onsite is a per-base
   constant). Use it as the mapping control.
+
+## 10. R8: numerical safety of the eps=1e-38 log10 floor
+
+Independent-review finding R8. The solver's smooth floor is
+`log10(clamp_min(x, 0) + eps)` with `eps = 1e-38` (`log10_floored`,
+`g3nat/models/hamiltonian.py:9`, sec. 8b). `1e-38` is a **subnormal** float32 value (min
+normal is `1.1754944e-38`). The epsilon value itself is settled and out of scope here (a
+larger epsilon, e.g. 1e-30, binds on physical transmission targets that reach 6.7e-19 in
+the dataset and ~1e-32 at L=16 -- a previous reviewer's 1e-30 recommendation was overruled
+on that basis). What R8 investigates is whether anything in the current stack could flush
+that subnormal to zero (FTZ), which would turn `log10(0)` into `-inf` and cause the
+existing non-finite-loss guard to silently skip the optimizer step on every batch that
+hits the floor.
+
+**1. Mixed/reduced-precision surface: NOT REACHABLE in the current codebase (VERIFIED).**
+`grep -rniE` for `autocast|GradScaler|\bamp\b|\.half\(\)|bfloat16|float16|allow_tf32|
+set_float32_matmul_precision|cudnn\.benchmark|use_deterministic_algorithms|torch\.compile`
+over `g3nat/` and `scripts/` returns zero matches. No autocast context, no `GradScaler`,
+no explicit half/bfloat16 cast, no `torch.compile` (which can fuse kernels onto FTZ-using
+paths), and no cudnn conv layers at all (the model is message-passing GAT/Transformer
+convs over linear layers, not `nn.Conv*`, so `cudnn.allow_tf32` has no op to act on even
+in principle). Installed PyTorch is `2.7.1+cu126` (read from
+`torch/version.py` in the `g3nat` conda env, not invoked interactively). This means the
+entire forward/backward path currently runs in plain float32 by construction, with no code
+path that could introduce FTZ semantics -- the vulnerability the reviewer flagged is real
+in principle but not currently live.
+
+**2. TF32 does not touch this path (VERIFIED against PyTorch docs, not assumed).**
+`docs.pytorch.org/docs/2.7/notes/cuda.html` states TF32 tensor cores apply to "matmul and
+convolutions on torch.float32 tensors" and the modules/functions built on them
+(`nn.Linear`, `nn.Conv*`, `cdist`, `tensordot`, GRU/LSTM, etc.) -- elementwise ops like
+`log10`/`exp` are not in that list and are not run through tensor cores. So even PyTorch
+2.7's defaults (`torch.backends.cuda.matmul.allow_tf32 = False` since 1.12;
+`torch.backends.cudnn.allow_tf32 = True`, moot here per point 1) are irrelevant to the
+eps=1e-38 floor specifically, independent of whether they are ever flipped. Also VERIFIED
+empirically (not just from docs): on the tested GPU, running the same probe inside a
+`torch.autocast(device_type="cuda", dtype=torch.float16)` context still returned
+`-38.000003814697266`, finite -- consistent with `log10` being one of the ops PyTorch's
+autocast policy keeps in fp32 rather than casting down.
+
+**3. Empirical GPU verification (VERIFIED, not reasoned about).** Run on a
+`ckpt-all` node, GPU model from `nvidia-smi -L`: **Tesla P100-PCIE-16GB** (Pascal
+generation -- no tensor cores at all, so TF32 is not merely off but architecturally
+inapplicable on this specific card; a newer Ampere/Ada card was NOT tested here and would
+be a materially different check, see caveat below).
+  - `torch.log10(torch.zeros(1, device='cuda') + 1e-38)` = `-38.000003814697266`,
+    `torch.isfinite(...)` True.
+  - Full solver round trip: `DNATransportHamiltonianGNN` (`n_orb=1`, `solver_type=
+    'complex'`, `log_floor=1e-38`, `floor_mode='smooth'`) on a 40-base poly-A chain with
+    contact coupling forced to `1e-4` on both sides (deliberately weak, to push
+    transmission far below the dataset's own range). Result: transmission floored
+    (`T_log == -38.00000...`) at 60 of 61 energy points, i.e. raw `T <= eps = 1e-38` at
+    those points -- well below the 1e-30 target in the task brief. `DOS_log` and `T_log`
+    both fully finite, zero NaN, zero `-inf`, over the whole grid.
+  - Test script and log were run from shared scratch outside the repo (per cluster
+    policy) and removed after this write-up; the probe and solver-path code above are
+    reproducible from this description if re-verification is ever needed.
+
+**4. DECISION: set no new precision/determinism flags for this issue. Rely on the
+per-run assertion instead.**
+
+- No flag addresses the actual failure mode. TF32 flags (`torch.backends.cuda.matmul.
+  allow_tf32`, `torch.set_float32_matmul_precision`) govern matmul/conv reduction
+  precision, which point 2 shows does not touch `log10`. Setting
+  `matmul.allow_tf32 = False` explicitly would be a pure no-op restating PyTorch 2.7's own
+  default. Setting `cudnn.allow_tf32 = False` would be a no-op restating a flag that has
+  no cudnn-conv op to act on in this model (point 1). Neither flag would have caught or
+  prevented an FTZ-style flush even if one existed, because FTZ is a different mechanism
+  (fused/fast-math kernel codegen, e.g. via `torch.compile` or a future AMP path) than TF32
+  tensor-core reduction.
+- `torch.use_deterministic_algorithms(warn_only=True)` is a real, separate question
+  (bitwise reproducibility across runs/devices) already tracked as its own decision point
+  in `docs/superpowers/plans/2026-08-16-phase1-characterization.md` Part 3 ("Separately
+  decide and record whether the campaign sets `use_deterministic_algorithms
+  (warn_only=True)`"). It is not a fix for subnormal-flushing and this R8 finding does not
+  change that decision either way; keep it as a separate item so the two questions do not
+  get conflated.
+- The actual defense against a future accidental introduction of a reduced-precision path
+  (someone adds `autocast` for speed, or `torch.compile` fuses a kernel onto an FTZ-mode
+  path on some future driver/arch) is the **per-run subnormal assertion**, now specified in
+  `docs/superpowers/plans/2026-08-16-phase1-characterization.md` under "Carried into the
+  campaign runner": every run asserts `log10(0 + 1e-38)` is finite and within 1e-3 of -38
+  on its OWN allocated device at startup, and ABORTS (not warns) on failure. That check is
+  cheap, runs on the actual hardware each run lands on, and catches the failure mode
+  directly rather than trying to enumerate every mechanism that could cause it.
+
+**What was VERIFIED vs INFERRED, explicitly:**
+- VERIFIED: no mixed-precision API is referenced anywhere in `g3nat/`/`scripts/` (grep,
+  zero matches); installed PyTorch version (`2.7.1+cu126`, read from `torch/version.py`);
+  TF32 scope per PyTorch's own documentation (fetched and quoted, not recalled from
+  memory); the subnormal probe is finite and ~-38 on a real GPU (Tesla P100-PCIE-16GB),
+  both bare and inside an fp16 autocast context; the full NEGF solver path produces no
+  `-inf`/NaN on a chain engineered to floor at eps.
+- INFERRED, not directly tested: behavior on Ampere/Ada-class GPUs with actual tensor
+  cores (the campaign's RTX 2080 Ti was checked by a previous reviewer per the task brief;
+  this session's own GPU draw was a P100, architecturally unable to exercise TF32 at all,
+  so it is a weaker witness for the "TF32 doesn't reach log10" claim than a tensor-core
+  card would have been -- though point 2's documentation-based verification does not
+  depend on which architecture is tested, only on which op TF32 attaches to). Also
+  inferred: that no future code change introduces an FTZ-capable path; this is exactly why
+  the per-run assertion, not a one-time code review, is the actual safeguard.
