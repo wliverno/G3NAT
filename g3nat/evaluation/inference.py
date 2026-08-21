@@ -139,13 +139,89 @@ def drop_legacy_alpha_state(state_dict: dict, per_base_onsite: bool) -> dict:
     return {k: v for k, v in state_dict.items() if k not in drop}
 
 
-def load_trained_model(model_path: str, device: str = 'auto') -> Tuple[Union[DNATransportGNN, DNATransportHamiltonianGNN], np.ndarray, torch.device]:
+#: Which loss weight trains each term a selection metric is built from.
+#:
+#: This is an EXPLICIT per-metric map, not substring matching on the metric
+#: name. Substring matching is wrong in both directions here and both errors
+#: were caught by the tests for this function: `'dos' in 'val_ldos_residue'` is
+#: True (LDOS contains DOS, so the guard fired on a valid arm), while
+#: `'transmission' in 'val_dos_t_unweighted'` is False (the metric spells it
+#: `_t_`, so the transmission check never fired at all).
+#:
+#: Metric definitions: docs/metrics.md sec. 1 and the metric_history key table.
+#: Loss weights: `loss_a` transmission, `loss_b` LDOS/DOS mix, `loss_c` the DOS
+#: family switch (trainer.py:288-332).
+_METRIC_TERM_WEIGHTS = {
+    'val_dos_t_unweighted': {'DOS': 'loss_c', 'transmission': 'loss_a'},
+    'val_dos_t_shape_unweighted': {'DOS': 'loss_c', 'transmission': 'loss_a'},
+    'val_dos': {'DOS': 'loss_c'},
+    'val_dos_shape': {'DOS': 'loss_c'},
+    'val_transmission': {'transmission': 'loss_a'},
+    'val_ldos_residue': {'LDOS': 'loss_b'},
+    'val_ldos_base_only': {'LDOS': 'loss_b'},
+    'val_ldos_shape_residue': {'LDOS': 'loss_b'},
+    'val_ldos_shape_base_only': {'LDOS': 'loss_b'},
+}
+
+
+def check_selection_metric_trained(args: dict, selection_metric, source: str = '') -> None:
+    """Raise if the checkpoint was selected on a metric containing an UNTRAINED term.
+
+    docs/metrics.md sec. 1b, private notes sec. 18d. Measured on the v2
+    campaign: an arm whose selection metric includes a term it does not train
+    selects on that term's own trajectory. On the transmission-only arm
+    (`loss_c=0`, DOS never trained) the untrained `val_dos` term degrades
+    monotonically from an early minimum, so `val_dos + val_transmission` is
+    minimized within the first handful of epochs -- 11 of the 12 v2 cells that
+    published before epoch 100 are that arm, some at epoch 5 of 15000. Those
+    weights are not usable; the per-epoch curves in `metric_history` are.
+
+    This exists because sec. 18d's decision ("report tonly from curves, not from
+    published weights") otherwise rests on a human remembering to read a note.
+    Sec. 16e made checkpoint provenance a programmatic check rather than a
+    memory exercise; this is the same standard for selection validity.
+
+    `selection_metric` records WHICH metric was used, never whether it suited the
+    arm, so the check has to come from the loss weights in `args`.
+
+    Raises:
+        ValueError: the metric contains a term whose loss weight is 0.
+    """
+    if not selection_metric or not isinstance(args, dict):
+        return
+    terms = _METRIC_TERM_WEIGHTS.get(str(selection_metric))
+    if terms is None:
+        # Unknown metric: unknown is not known-bad. Adding a metric to
+        # metric_history without adding it here silently disables the check,
+        # which is why the map lives next to the docstring that explains it.
+        return
+    offending = []
+    for term, weight_key in sorted(terms.items()):
+        w = args.get(weight_key)
+        if w is not None and float(w) == 0.0:
+            offending.append((term, weight_key))
+    if offending:
+        terms = ', '.join(f"'{t}' (weight {k}=0)" for t, k in offending)
+        raise ValueError(
+            f"{source or 'checkpoint'}: selected on '{selection_metric}', which contains "
+            f"{terms} -- never trained by this run. The published weights were chosen by "
+            f"an untrained term's trajectory and do not sit at this arm's optimum "
+            f"(docs/metrics.md sec. 1b). Use the per-epoch `metric_history` instead, or "
+            f"pass allow_untrained_selection=True if you specifically want these weights."
+        )
+
+
+def load_trained_model(model_path: str, device: str = 'auto',
+                       allow_untrained_selection: bool = False) -> Tuple[Union[DNATransportGNN, DNATransportHamiltonianGNN], np.ndarray, torch.device]:
     """
     Load a trained DNA Transport GNN model.
 
     Args:
         model_path: Path to the saved model (.pth file)
         device: Device to load model on ('auto', 'cpu', 'cuda')
+        allow_untrained_selection: bypass the selection-validity check of
+            `check_selection_metric_trained`. Only set this when the weights
+            themselves are the object of study (e.g. characterizing the defect).
 
     Returns:
         Tuple of (model, energy_grid, device)
@@ -164,6 +240,10 @@ def load_trained_model(model_path: str, device: str = 'auto') -> Tuple[Union[DNA
     # Extract model arguments
     args = checkpoint.get('args', {})
     energy_grid = checkpoint.get('energy_grid', np.linspace(-1, 1, 201))
+
+    if not allow_untrained_selection:
+        check_selection_metric_trained(
+            args, checkpoint.get('selection_metric'), source=model_path)
 
     # Detect model type from state dict keys
     state_dict = checkpoint['model_state_dict']
@@ -203,7 +283,7 @@ def load_trained_model(model_path: str, device: str = 'auto') -> Tuple[Union[DNA
                   "heavy-tailed at isolated near-resonance energies: 1.4% of pairs "
                   "differ by >0.1 decade and the worst measured case is 3.8 decades "
                   "(DOS is unaffected, max 2e-3; see "
-                  "docs/model-results.md section 15b). Transmission "
+                  "private notes section 15b). Transmission "
                   "numbers from pre-2026-08-09 evaluations of this checkpoint are "
                   "typically fine but not guaranteed. Pass solver_type explicitly if "
                   "you need to reproduce an older result.")
@@ -233,7 +313,7 @@ def load_trained_model(model_path: str, device: str = 'auto') -> Tuple[Union[DNA
             # was evaluated through a solver it was not trained with. Since 'frobenius'
             # clamped at a hardcoded 1e-16 and 'complex' honours self.log_floor, that
             # mismatch is also what made log_floor a dead knob at evaluation time and
-            # silently invalidated the length curves behind model-results.md 12a.
+            # silently invalidated the length curves behind private notes 12a.
             solver_type=args.get('solver_type', 'complex'),
             use_log_outputs=args.get('use_log_outputs', True),
             log_floor=args.get('log_floor', 1e-16),

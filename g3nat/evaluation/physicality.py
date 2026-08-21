@@ -18,8 +18,22 @@ sanity check against runaway values (onsite at -33 eV is pathological and this c
 it), never as a success criterion, and never as evidence that one model is "more
 physical" than another.
 
-See `docs/model-results.md` ("The [-1,1] window is the supervision range, not a
+See private notes ("The [-1,1] window is the supervision range, not a
 physicality criterion") and `docs/dataset.md` (HOMO centring).
+
+ADDED 2026-08-21: `onsite_metrics` now also returns `abs_mean` / `abs_median`, the
+mean/median of |onsite level|. This is a CONTINUOUS measure and is the PRIMARY way to
+read onsite placement going forward; `frac_in_window` (the window-membership fraction)
+is kept only as a secondary, auditable companion.
+
+Why the change: `frac_in_window` is a THRESHOLD statistic on a metric, which is the same
+failure shape as clamping a value before a log -- the project's standing rule ("NO
+CLAMPING. NO CUTOFFS. NO DISCARDING DATA.", see CLAUDE.local.md and docs/dataset.md) is
+about exactly this effect, not just about literal clamp() calls. A level at 1.01 eV
+counted as a total failure and one at 0.99 eV as a total success under the old metric,
+and a model that moved every level from 3.0 eV to 1.05 eV scored zero improvement. Both
+are artifacts of the bin edge, not of the physics. `abs_mean` has neither problem: it is
+monotonic in how far the levels sit from the HOMO reference (zero), with no boundary.
 """
 import numpy as np
 
@@ -28,7 +42,9 @@ def onsite_metrics(H_diag, window=(-1.0, 1.0)):
     d = np.asarray(H_diag).ravel()
     lo, hi = window
     return {'frac_in_window': float(np.mean((d >= lo) & (d <= hi))),
-            'min': float(d.min()), 'max': float(d.max()), 'range': float(d.max() - d.min())}
+            'min': float(d.min()), 'max': float(d.max()), 'range': float(d.max() - d.min()),
+            'abs_mean': float(np.mean(np.abs(d))),
+            'abs_median': float(np.median(np.abs(d)))}
 
 
 def eig_metrics(H, window=(-1.0, 1.0)):
@@ -73,8 +89,9 @@ def coupling_bandwidth(H):
 
 def baseline_distinctness(baseline):
     # Only the 4 baseline values are available here, so distinctness = pairwise spread.
-    # (True eta^2 needs per-SITE onsite over the val set; that lives in
-    # scripts/probe_onsite_dilution.py::variance_decomposition, which has the per-site data.)
+    # (True eta^2 needs per-SITE onsite over the val set; that lives in the
+    # internal onsite-dilution probe tooling (private notes)::variance_decomposition,
+    # which has the per-site data.)
     b = np.asarray(baseline).reshape(len(baseline), -1).mean(axis=1)  # 1 scalar per base
     pw = [abs(b[i] - b[j]) for i in range(len(b)) for j in range(i + 1, len(b))]
     return {'min_pairwise': float(min(pw)) if pw else 0.0, 'spread': float(b.std())}
