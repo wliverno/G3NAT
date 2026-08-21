@@ -1,6 +1,7 @@
 """A preempted checkpoint write must not destroy the previous checkpoint.
 
-scripts/run_ldos_phases.sh runs on preemptible partitions with --requeue, so
+The campaign runner scripts (private notes) run on preemptible partitions with
+--requeue, so
 SLURM killing the process mid-write is an EXPECTED event, not an edge case. On
 2026-07-31 job 37966189_0 was preempted during a checkpoint write, leaving a
 truncated zip; the requeued attempt then died on resume with

@@ -324,12 +324,12 @@ Both report ELECTROCHEMICAL OXIDATION POTENTIALS measured by voltammetry in chlo
 specifically the effect of Watson-Crick pairing on them (2005: a 0.34 V lowering for a
 guanosine derivative; 2007: adenosine versus the A-T pair, with no thymidine oxidation signal
 detected). These are NOT gas-phase vertical ionization potentials and are not directly
-comparable to them -- see `docs/model-results.md` section 4b for why, and for the retraction
+comparable to them -- see private notes section 4b for why, and for the retraction
 of an earlier entry that wrongly implied the citation could not be traced.
 
 ## Statistical methodology for the training-configuration factorial (EVIDENCED, retrieved 2026-08-09)
 
-Cited from `docs/doe-methods.md`. Each entry below was verified by web retrieval on
+Cited from the private notes on DOE methodology. Each entry below was verified by web retrieval on
 2026-08-09 (title, authors, venue, volume and pages checked against the publisher's or an
 indexing service's record), not quoted from memory.
 

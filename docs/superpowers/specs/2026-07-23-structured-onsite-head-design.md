@@ -8,7 +8,7 @@
 > and the window is the supervision range, not a physicality criterion. The alpha sweep this
 > spec designed also cannot discriminate what it claims, since every alpha < 1 shares one
 > hypothesis class. The implementation and its measurements are sound and are recorded in
-> `docs/model-results.md`; only the framing is wrong. See `docs/dataset.md`.
+> `private analysis notes`; only the framing is wrong. See `docs/dataset.md`.
 
 Status: design approved (brainstorm); revised after adversarial review. Pre-implementation.
 Branch: `structured-onsite-head` (off `main`). Date: 2026-07-23.
@@ -23,8 +23,9 @@ PARAMETERIZATION; supervision stays on DOS/T only.
 
 ## Background (why this, why now)
 
-- The lowest-loss DFT model (GAT, val 0.547) is UNPHYSICAL: onsite/eigenvalues run to -32..-33
-  eV, only ~59% of eigenvalues in the [-1,1] window. DOS+transmission UNDER-DETERMINE H, so the
+- The lowest-loss DFT model on record is UNPHYSICAL: its onsite levels and eigenvalues run far
+  outside the supervision window (magnitudes in private analysis notes). DOS+transmission
+  UNDER-DETERMINE H, so the
   free head dumps states outside the window at no fit cost.
 - The penalty route is DEAD (`constrain-onsite-window`): an out-of-window penalty on diag(H)/
   eigvalsh(H) enforces a RANGE not STRUCTURE, collapsing every onsite to one degenerate value.
@@ -95,8 +96,8 @@ onsite_i = alpha[base_i] * baseline[base_i] + (1 - alpha[base_i]) * onsite_proj(
   `train_test_split(range(len(dataset)), random_state=42)` splits by FLAT INDEX, so the same
   sequence appears in train AND val. The free context head can memorize per-sequence quirks that
   reappear in val; the 4-scalar baseline cannot -- biasing the discriminator toward "context
-  wins" independent of the physics. (This taints prior val numbers project-wide, incl. the 0.547
-  baseline and the geometry ablation.)
+  wins" independent of the physics. (This taints prior val numbers project-wide, including the
+  GAT baseline and the geometry ablation; see private analysis notes.)
 - FIX (prerequisite): group-split by sequence string (`GroupShuffleSplit`/`GroupKFold`). Outer
   grouped held-out TEST set; inner grouped k-fold CV on the rest for alpha SELECTION. Never report
   the selection-set loss as the headline -- report the held-out test loss of the selected alpha.

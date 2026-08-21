@@ -20,7 +20,7 @@ The axes exercised here, each of which a plausible edit would break:
     the floor pair and the alpha mapping. `solver_type` is the one that matters
     most: it ONCE SHIPPED WRONG (the loader said 'frobenius', the constructor
     and therefore training said 'complex'), which silently invalidated the
-    length curves behind docs/model-results.md 12a, and a reintroduction raises
+    length curves behind private analysis notes 12a, and a reintroduction raises
     nothing -- the load simply succeeds through the wrong solver, moving
     near-resonance log10 T by up to 3.8 decades.
   * the DIRECT/standard baseline checkpoint, whose args carry no `conv_type` at

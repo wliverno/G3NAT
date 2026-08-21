@@ -1,5 +1,5 @@
 """The optimizer choice is now configurable. The default MUST stay Adam(weight_decay=1e-5),
-because every recorded result in docs/model-results.md was produced with it -- a silent change
+because every recorded result in the private analysis notes was produced with it -- a silent change
 would invalidate the whole comparison history rather than just the next run.
 
 Why adamw exists: Loshchilov & Hutter, ICLR 2019 (arXiv:1711.05101) show Adam's `weight_decay`

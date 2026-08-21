@@ -4,8 +4,8 @@ Date: 2026-08-13, revised 2026-08-15 after a two-reviewer pass (adversarial +
 constructive) and PI review. Status: decisions final as listed; next step is the
 implementation plan. Review artifacts: private notes tree,
 reviews/2026-08-13-campaign-v2/ (four architecture reviews, two spec reviews, the
-broadening literature pass). Companion history: docs/model-results.md sec. 14-17,
-docs/doe-methods.md.
+broadening literature pass). Companion history: private analysis notes sec. 14-17,
+the private DOE methods notes.
 
 ## 1. Why a from-scratch campaign
 
@@ -14,17 +14,17 @@ Three findings, 2026-08-11..13, each independently sufficient:
 1. **Training is not reproducible from its seeds.** MECHANISM (code-verified): the batch
    sampler builds batches from an unseeded `np.random.default_rng()` every epoch
    (`g3nat/training/utils.py:64,71`), and `set_init_seed` seeds only initialization.
-   Illustrative replica pair (n=2): same-command runs diverge from epoch 0, best-val
-   spread 0.053, best-epoch shift 89. No RNG state is checkpointed.
-2. **73 of 84 published runs hold non-optimal weights** (11 sit exactly at their optimum;
-   58 have a gap above 0.005; median gap 0.0124 over all 84). Checkpoint-cadence bug,
-   fixed in `14f65ca`; see model-results.md sec. 16.
+   Illustrative replica pair (n=2): same-command runs diverge from epoch 0, both in
+   best-val and in the epoch the optimum falls on. No RNG state is checkpointed.
+2. **Most published runs hold non-optimal weights, some with a substantial gap to the
+   true optimum.** Checkpoint-cadence bug, fixed in `14f65ca`; see private analysis
+   notes sec. 16.
 3. **Config illegibility.** The campaign ran n_orb=2 via a runner override while
    `train.py --help` said 1. The PI must be able to read a run's exact parameters from
    its artifacts.
 
 A four-review adversarial audit (2026-08-13; artifacts above) verified the physics core:
-solver matches the float64 reference at n_orb 1 and 2 (max rel err <= 2.5e-5), vectorized
+the solver matches the float64 reference within tolerance at n_orb 1 and 2, vectorized
 assembly is bit-exact against reference implementations, loss composition is correct in
 every branch, and the v2 dataset passes full-set integrity scans (all 2077 records).
 Every serious finding lands in the scaffolding and is fixed in Phase 1.
@@ -46,26 +46,27 @@ is the DOS-only cells' exact training objective, half of DOS+LDOS's, and fully h
 for T-only (differential truncation on SUPERVISION), and post-optimum drift is
 capacity-dependent -- it is on record as having inverted the num_layers ordering at
 final-epoch (train.py:303-309) -- so fixed patience also truncates differentially on
-NUM_LAYERS. The recorded best-epoch distribution (sec. 16b: min 123 / median 1730 /
-max 14600; 18 of 58 recovery-scope runs needed >5000) means patience-2000 would bind
-often. The fixed cap removes the confound entirely; every response is read at its own
+NUM_LAYERS. The recorded best-epoch distribution (sec. 16b; see private analysis notes)
+shows late optima are common enough that patience-2000 would bind often. The fixed cap
+removes the confound entirely; every response is read at its own
 curve's optimum from metric_history (sec. 4), so late optima are never lost. Cost is the
 already-budgeted ceiling below. Early stopping is NOT implemented (review confirmed: no
 such code exists) and under this decision never will be for this campaign.
 
-**Budget scope:** the ~470 GPU-h ceiling (72 x 6.5 h, MEASURED at one cell corner,
-sec. 16d) covers the factorial only. Pilots + alpha epilogue add AT MOST ~30 GPU-h: that
-figure was costed when this section still carried a broadening-eta pilot, which has since
-been dropped (the surviving GPU cost is the optimizer pilot and the reproducibility gate),
-so read it as an upper bound, not an estimate.
+**Budget scope:** a GPU-h ceiling (MEASURED at one cell corner, sec. 16d; see private
+analysis notes) covers the factorial only. Pilots + alpha epilogue add a small additional
+GPU-h cost: that figure was costed when this section still carried a broadening-eta
+pilot, which has since been dropped (the surviving GPU cost is the optimizer pilot and
+the reproducibility gate), so read it as an upper bound, not an estimate.
 Pilots record per-corner throughput so the ceiling
 becomes MEASURED across (N_ORB, NUM_LAYERS).
 
 **Held fixed** (evidence tier per value): complex solver [MEASURED: Frobenius path is
 silently wrong at resonances and ignores eta -- review 2; hard-failed in code for
 campaign runs, not just prose]; log outputs on [data are log10]; hermiticity on
-[hard-fail if off at n_orb>1 -- MEASURED, review 2]; GAT conv [MEASURED-tie with
-transformer on best-val, sec. "conv_type"]; hidden 256, heads 4, lr 1e-3, batch 32
+[hard-fail if off at n_orb>1 -- MEASURED, review 2]; GAT conv [MEASURED: comparable
+best-val fit to the alternative convolution type tested, sec. "conv_type"; see private
+analysis notes]; hidden 256, heads 4, lr 1e-3, batch 32
 [inherited defaults from prior sweeps -- FOLKLORE, no factorial evidence, held for
 continuity]; huber delta 1.0 [inherited -- FOLKLORE; exposed in recorded config];
 ldos_target=residue [DOMAIN: the TB site is a base+backbone residue; base_only is
@@ -76,8 +77,9 @@ train+val leak found in review 3). Optimizer/weight_decay: pinned by pilot 5.2.
 
 **Alpha is not a factor.** The structured-onsite head becomes a BOOLEAN (per-base
 baseline on/off); the fractional alpha machinery is removed in a dedicated commit
-(rationale: measured answer was alpha=0; the per-base-table payoff is largely fixed by
-the HOMO-referenced energy convention). Off in all 72 runs; ONE post-factorial epilogue
+(rationale: prior analysis favored omitting the fractional mixing -- see private
+analysis notes -- and the per-base-table payoff is largely fixed by the HOMO-referenced
+energy convention). Off in all 72 runs; ONE post-factorial epilogue
 run with it on at the winning cell. The geom/init RNG-order fix (B9) exists for this
 epilogue's sake; it is a no-op for the 72 runs (nothing draws RNG after the geometry
 encoder once alpha is off).
@@ -188,7 +190,7 @@ with its on-record caveat).
 the gamma convention and launches as soon as Phase 1 + gate 3 pass**, concurrent with
 the pilots. The n_orb=2 half launches when 5.1's convention is decided.
 
-## 6. Analysis protocol (extends docs/doe-methods.md)
+## 6. Analysis protocol (extends the private DOE methods notes)
 
 - Model ENUMERATED from the factors: SUPERVISION (2 dof) x N_ORB x NUM_LAYERS x
   GEOMETRY, full crossing = 23 dof, n=72, residual df 48. The location model saturates
@@ -207,9 +209,10 @@ the pilots. The n_orb=2 half launches when 5.1's convention is decided.
   cross-check, not "fair"). Everything else is in-loss for at least one level; labeled.
 - Dispersion channel: mains + two-ways only (14 dof on 24 cells, df 9 -- fixed in
   advance), BOTH raw and log10 scales with Shapiro-Wilk on raw spreads, per
-  doe-methods.md. df 9 is nearly powerless: a dispersion null is not evidence of absence.
+  the private DOE methods notes. df 9 is nearly powerless: a dispersion null is not evidence of absence.
 - BH at q=0.05 over the family actually tested, m printed (expected m ~ 460 across ~9
-  responses; the old campaign at m=264 returned 2 survivors, 1 circular). **Minimum
+  responses; the old campaign's smaller family returned few survivors, at least one of
+  them circular -- see private analysis notes). **Minimum
   detectable effects computed per response from the historical residual SD at df 48
   before launch and printed in the analysis header** -- the referee question answered
   in advance.

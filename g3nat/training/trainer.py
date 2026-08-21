@@ -102,7 +102,7 @@ class Trainer:
         # Cumulative count of epochs whose SELECTION metric (val_dos_t_unweighted)
         # came back non-finite. A run in which this equals the epoch count never
         # updates best_unweighted, so no checkpoint_best.pth is ever written --
-        # the silent failure documented in docs/model-results.md sec. 16. Counting
+        # the silent failure documented in private notes sec. 16. Counting
         # it per epoch in metric_history makes that visible from the artifacts
         # alone, instead of only from an absent file.
         self.nan_selection_metric_total = 0
@@ -240,7 +240,7 @@ class Trainer:
         it is a real measurement of what the one-orbital-per-base ansatz is
         missing, not an artifact to be centered away. The level-counting
         explanation this docstring used to give for the offset's SIZE is retracted
-        (see TrainingConfig.shape_loss's docstring and docs/model-results.md sec.
+        (see TrainingConfig.shape_loss's docstring and private notes sec.
         7a); the decision does not rest on it.
 
         Both the raw (magnitude) and shape (offset-corrected) versions of

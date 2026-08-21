@@ -50,7 +50,7 @@ class TrainingConfig:
     # log10(2869/8) = 2.55 decades, wrong by a factor of ~200 in linear terms.
     #
     # The LEVEL-COUNTING replacement for it is ALSO retracted (2026-07-30, and
-    # again on other grounds 2026-08-09; docs/model-results.md sec. 7a). It was
+    # again on other grounds 2026-08-09; private notes sec. 7a). It was
     # claimed to match the measurement to 0.02 decades; that was one seed against
     # a cross-seed range 0.62 decades wide, and counted properly it explains only
     # ~37% of the measured offset, leaving a -0.30 decade residual. Do not quote

@@ -39,9 +39,8 @@ python scripts/train.py \
   --learning_rate 1e-3
 ```
 Outputs (the final model, and `checkpoint_latest.pth` / `checkpoint_best.pth`) are saved under
-`./outputs` and `./checkpoints`. Training itself writes no figures -- plots come from the
-separate scripts `scripts/dos_map.py`, `scripts/plot_ldos_tradeoff.py` and
-`scripts/fray_plots.py`.
+`./outputs` and `./checkpoints`. Training itself writes no figures -- plotting is separate
+analysis tooling (private notes), run against a saved checkpoint after training finishes.
 
 To resume training, pass `--resume_from path/to/checkpoint_latest.pth`.
 
@@ -131,14 +130,14 @@ are **bit-identical** across different sequences of the same length, so only bas
 differ and any geometric descriptor is near-constant by construction. (An early geometry-on
 vs geometry-off comparison, 0.538 vs 0.547, agreed -- but both numbers are final-epoch under
 the since-retired leaking split, so treat them as illustrative, not as the evidence. See
-`docs/model-results.md`.) The feature is infrastructure for future datasets with real
+private notes on the analysis campaign.) The feature is infrastructure for future datasets with real
 geometric variation (MD / crystal / predicted structures).
 
 ### Notes
 - Node features: 4 one-hot features (A, T, G, C)
 - Edge features (`edge_attr`): 5 values per edge: [backbone_onehot, hbond_onehot, contact_onehot, directionality, coupling]
 - Optional edge geometry: with `--use_geometry`, each edge additionally carries a separate SE(3)-invariant `edge_geom` (7 values) channel plus an `edge_geom_mask`; `edge_attr` itself is unchanged. See "Edge geometry" above.
-- Default graph convolution for the Hamiltonian model is `gat`, for continuity with existing runs rather than because it is measurably better: on best-val under a sequence-grouped split the two **tie** (gat 0.592 +/- 0.010 over 3 seeds, transformer 0.579 over 1). The earlier claim that gat won decisively compared final-epoch values under a split that leaked sequences across train and val, and is retracted. `--conv_type transformer` does fit the synthetic TB data better. See `docs/model-results.md`.
+- Default graph convolution for the Hamiltonian model is `gat`, for continuity with existing runs rather than because it is measurably better: on best-val under a sequence-grouped split the two **tie** (gat 0.592 +/- 0.010 over 3 seeds, transformer 0.579 over 1). The earlier claim that gat won decisively compared final-epoch values under a split that leaked sequences across train and val, and is retracted. `--conv_type transformer` does fit the synthetic TB data better. See private notes on the analysis campaign.
 - Hamiltonian NEGF implementation is vectorized for stability; transmission/DOS are returned as log10-safe values for training stability in `DNATransportHamiltonianGNN`.
 
 ### Contact configuration defaults
