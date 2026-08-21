@@ -191,6 +191,40 @@ geom_cache/
 # slurm Logs
 slurm-*.out
 
+# Analysis job logs written to the repo root by sbatch -o. The SCRIPTS are
+# tracked; their outputs are archived in private notes and cited by filename in
+# docs/model-results.md, so the numbers stay traceable without the logs living
+# in the public tree.
+anova_*.out
+anovax_*.out
+audit_v2_*.out
+paired_*.out
+matched_*.out
+degrade_*.out
+recover_*.out
+follow_*.out
+sel_test_*.out
+cohort_test_*.out
+plot_*.out
+doe_v2_*.out
+doetab_*.out
+ldosneg_*.out
+ldosscan_*.out
+negfrac_*.out
+chkloss_*.out
+resp_test_*.out
+fact_test_*.out
+sel_test_*.out
+audit_campaign_v2_report.json
+doe_v2_report.json
+posthoc_v2_report.json
+doe_v2_tables.md
+
+# Known-good source copies taken before in-place mutation testing, so a job
+# preempted mid-mutation cannot leave broken code in the tree unrecoverably.
+.mutation_backups/
+.tmp_analysis/
+
 # NAB build products: dnabuilder writes nuc.nab, compiles it to nuc.c, links a.out.
 # All three are generated per run and must not be committed (see DNADataset/dnabuilder).
 nuc.nab
