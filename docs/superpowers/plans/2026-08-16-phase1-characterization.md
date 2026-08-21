@@ -86,8 +86,9 @@ No training, no RNG, `torch.no_grad()`, eval mode, both sides.
   out period code. Nothing in docs/, scripts/, g3nat/ or the figures depends on one.
 - **The flag assertions and the golden fixture cover DIFFERENT failures -- keep both.**
   Measured, not assumed: the `solver_type` flip does NOT move the golden numbers (short
-  off-resonance sequences agree inside tolerance; the documented 3.2e-5 median gap has
-  its heavy tail at near-resonance energies these fixtures do not sample), and
+  off-resonance sequences agree inside tolerance; the documented solver-vs-solver gap
+  (see private analysis notes) has its heavy tail at near-resonance energies these
+  fixtures do not sample), and
   `enforce_hermiticity` CANNOT move them (every tracked checkpoint is n_orb=1, where
   symmetrizing a 1x1 block is an exact no-op). A numeric fixture does not subsume
   per-flag assertions for the flag that has already caused a real campaign-scale error.
@@ -146,8 +147,8 @@ This is the arm that actually covers the training loop.
 
 ## Part 2 (SMOKE TEST ONLY -- no comparative verdict): short new-code runs
 
-Review finding F2: with 3 seeds a side against old code's ~0.037 sd, the minimum
-detectable effect is **0.081, about 5x the project's own 0.017 meaningful bar**, and the
+Review finding F2: with only 3 seeds a side, the minimum
+detectable effect is well above the project's own 0.017 meaningful bar, and the
 min/max envelope test flags a false displacement 80% of the time under a true null while
 being biased toward passing because new code is tighter by construction. The old-code arm
 is therefore DROPPED. **No comparative verdict may be drawn from Part 2 in either

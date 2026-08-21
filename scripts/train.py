@@ -118,7 +118,7 @@ def parse_args():
                             'values under a leaking split and is retracted. On best-val with '
                             'a grouped split the two TIE (gat 0.592 +/- 0.010 over 3 seeds, '
                             'transformer 0.579 over 1). transformer does fit the synthetic TB '
-                            'data better. See docs/model-results.md.')
+                            'data better. See private notes on the analysis campaign.')
     parser.add_argument('--use_geometry', action='store_true',
                        help='Fuse SE(3)-invariant X3DNA edge geometry (hamiltonian model). '
                             'Requires a geometry cache built via GeomCacheJob.')
@@ -283,7 +283,7 @@ def best_publication_warning(best_ckpt_path: str, metric_history):
     which the selection metric was non-finite every single epoch: best_unweighted
     ['state_dict'] stays None, checkpoint_best.pth is never written, no _best.pth is
     published, and every downstream analysis silently falls back to final-epoch
-    weights or skips the run. Same silent-failure class as docs/model-results.md
+    weights or skips the run. Same silent-failure class as private notes
     sec. 16.
     """
     if os.path.exists(best_ckpt_path):
@@ -507,7 +507,7 @@ def main():
         # metric val_dos_t_unweighted at best_state['epoch']; best_val['value'] tracks the
         # last value actually serialized here, so this single test is the whole condition.
         #
-        # HISTORY (see docs/model-results.md sec. 16). Two successive defects lived here:
+        # HISTORY (see private notes sec. 16). Two successive defects lived here:
         # (a) until 2026-08-11 this also required `val_losses[-1] <= min(val_losses)`, so
         # once epoch-to-epoch noise exceeded the improvement across a checkpoint interval
         # it stopped firing essentially permanently -- over the 84 published runs, stored

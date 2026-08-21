@@ -48,7 +48,7 @@ Batch C and the doc item are NOT.
   passes with a grid of zeros); `test_log_floor`'s "never binds" assertion says a boolean
   mean lies in [0,1], true by construction. Both need real assertions + mutation checks.
 - [x] **R7 (DONE 8c66efb) (DOCS, blocks any pooled table) selection criterion changed and the docs still
-  describe the old one.** `docs/metrics.md` sec 1 and `docs/model-results.md` sec 16 say
+  describe the old one.** `docs/metrics.md` sec 1 and `private analysis notes` sec 16 say
   best = best among CHECKPOINTED epochs on val loss. Since 6a9c51b that is false:
   selection is per-epoch on `val_dos_t_unweighted`. The 84 v1 `_best.pth` were selected
   on the loss-weighted total at 10-epoch cadence; the 72 v2 runs are selected on an
@@ -1198,7 +1198,7 @@ cache covered only the 515 v1 sequences; z-score stats were fit on train+val."
 
 **Files:**
 - Modify: `g3nat/evaluation/physicality.py`
-- Modify: `scripts/collect_bestval_runs.py:130`, `scripts/analyze_learned_hamiltonian.py:60`, `scripts/onsite_offset_test.py:87` (assert n_orb == 1)
+- Modify: `a run collector (private notes):130`, `scripts/analyze_learned_hamiltonian.py:60`, `scripts/onsite_offset_test.py:87` (assert n_orb == 1)
 - Test: `tests/test_evaluation/test_physicality_norb.py`
 
 **Interfaces:**
@@ -1294,7 +1294,7 @@ checkpoint dict with an 'args' key.)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add g3nat/evaluation/physicality.py scripts/collect_bestval_runs.py scripts/analyze_learned_hamiltonian.py scripts/onsite_offset_test.py tests/test_evaluation/test_physicality_norb.py
+git add g3nat/evaluation/physicality.py a run collector (private notes) scripts/analyze_learned_hamiltonian.py scripts/onsite_offset_test.py tests/test_evaluation/test_physicality_norb.py
 git commit -m "fix(evaluation): n_orb-aware onsite/coupling readouts; diag(H) scripts assert n_orb==1
 
 At n_orb=2 diag(H) reads intra-block entries as sites and misclassifies block

@@ -98,7 +98,7 @@ would look better on the whole-window metric while being worse for transport.
 **HOW that restricted view is produced, because getting this wrong cost a day (2026-08-18).**
 It is an ANALYSIS-TIME view computed from complete data. It is never a cutoff applied while
 training, never a mask inside a metric, and never anything that discards points from the
-recorded signal. `docs/model-results.md` sec. 15 does it correctly: a post-hoc restriction to
+recorded signal. Private notes sec. 15 does it correctly: a post-hoc restriction to
 T > 1e-3, computed from the full stored spectra, with the whole-window number reported
 alongside it.
 
@@ -170,7 +170,7 @@ Consequences:
 
 ## RESOLVED: HOMO centring does make the G result convention-driven (2026-07-24)
 
-Tested with `scripts/homo_composition.py` over all 515 sequences. The hypothesis below was
+Tested with internal HOMO-composition tooling (private notes) over all 515 sequences. The hypothesis below was
 **confirmed**, and a second measurement overturned the reason we had for worrying about it.
 
 **Composition drives the HOMO, decisively:**
@@ -191,7 +191,7 @@ whenever any G is present*.
 
 **Consequence:** for 495 of 515 sequences, per-sequence centring pins a G-derived level at
 ~0 by construction. The learned table's "G on top at -0.295, everything else 0.7-1.0 below"
-is substantially the reference convention. `docs/model-results.md` section 4b now carries
+is substantially the reference convention. Private notes section 4b now carries
 this caveat. A single per-base table must reconcile "G at 0" (495 sequences) with "A at 0"
 (20 AT-only sequences), and at 495-to-20 the G constraint dominates.
 
@@ -222,7 +222,7 @@ Every duplex here contains G unless it is AT-only, because every C pairs with a 
 HOMO of a G-containing duplex is a G-derived level, then centring puts G at ~0 **by
 construction**. Our learned per-base table (alpha=1.0) puts G on top at `-0.295` with A, T
 and C 0.7-1.0 eV below, and G was the one base whose position replicated across seeds while
-C scattered with std 0.52 (see `docs/model-results.md`, "Replication across seeds"). That
+C scattered with std 0.52 (see private notes, "Replication across seeds"). That
 pattern is what a HOMO-referenced frame would produce whether or not the model learned
 anything about G.
 
@@ -278,7 +278,7 @@ unreleased local archive `g3nat_dna_transport.h5` is built from it by `export_hd
 Per run: run1 = 520, run2 = 519, run3 = 519, run4 = 519.
 
 `pickle_files/` (2058 records, no `DOSAtom`) is deliberately NOT replaced. Every recorded
-model result in `model-results.md` was trained against it, so switching the training path to
+model result in the private analysis notes was trained against it, so switching the training path to
 `pickle_files_v2/` changes the dataset underneath the model and invalidates comparison
 across that boundary. Re-baseline deliberately rather than swapping in place.
 
@@ -359,7 +359,7 @@ resolved by the broadening, and in this dataset that fails badly in both directi
 eigenvalue reads, the integral runs from ~0.35x the in-window level count to more than 2000x
 it, continuously, with no clean separation. Treat the numbers below as **a property of the
 integrated DOS**, useful for spotting sick records, and not as a state count. Anything built
-on them as a state count is retracted -- see `docs/model-results.md` section 7a.
+on them as a state count is retracted -- see private notes section 7a.
 
 **Medians** (the mean is destroyed by the tail described below):
 

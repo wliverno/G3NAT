@@ -18,7 +18,7 @@ is guaranteed by construction:
 2. THE TABLE IS ONLY MEANINGFUL AT alpha=1.0. For any alpha < 1 the mixing is a vacuous
    reparametrization of the free model -- the baseline collapses to a near-constant and the
    context head does the fitting -- so `onsite_baseline` from those checkpoints is not "the
-   learned parameters" in any useful sense (docs/model-results.md, "CORRECTION").
+   learned parameters" in any useful sense (private notes, "CORRECTION").
 
 The project has retired the goal of recovering universal ABSOLUTE per-base parameters; these
 values are HOMO-referenced and per-sequence. Compare ORDERING and SPACING only, never

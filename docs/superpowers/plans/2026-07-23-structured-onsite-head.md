@@ -1,7 +1,7 @@
 # Structured Onsite Head Implementation Plan
 
 > **SUPERSEDED 2026-07-24 -- historical record of completed work, do not build on the
-> framing.** Tasks 1-7 were implemented and their measurements stand (`docs/model-results.md`).
+> framing.** Tasks 1-7 were implemented and their measurements stand (`private analysis notes`).
 > What is retired is why they were done: the goal of recovering universal absolute per-base
 > parameters, the use of [-1,1] window membership as a physicality criterion, and the belief
 > that the alpha sweep could discriminate how much context the data needs. The energy grid is
@@ -618,7 +618,7 @@ conda run -n g3nat python scripts/train.py --data_source pickle --data_dir pickl
 ```
 Then `conda run -n g3nat python scripts/extract_tb_params.py ckpt_onsite_smoke/<model>.pth` -- confirm baselines are finite + moving toward distinct values. Record wall-clock -> size the sweep.
 
-- [ ] **Step 2: Clean-split reference.** alpha=0 (== current model) under the grouped split, 5000 epochs, >=3 `--split_seed` values {42,43,44}. This is the honest baseline (replaces the leaky 0.547).
+- [ ] **Step 2: Clean-split reference.** alpha=0 (== current model) under the grouped split, 5000 epochs, >=3 `--split_seed` values {42,43,44}. This is the honest baseline (replaces the earlier leaky-split number; see private analysis notes).
 
 - [ ] **Step 3: DFT global sweep.** For `alpha_value` in {0,0.25,0.5,0.75,0.9,1.0} x `--split_seed` in {42,43,44}: train (fixed global). Collect `val_loss(alpha)` mean+/-std (best-checkpoint) + physicality + distinctness. This is the headline discriminator curve. Interpret the moderate-alpha region; report train-convergence per alpha to rule out under-convergence.
 

@@ -1,6 +1,6 @@
 # Metric definitions
 
-Exact formulas for every number tracked in `docs/model-results.md`, with where it is computed
+Exact formulas for every number tracked in the private analysis notes, with where it is computed
 and how to read it. Written because two metrics had already collided under the same word
 ("spread" meaning max-min in one table and standard deviation in a function of the same name).
 
@@ -43,8 +43,8 @@ the model overfits, ending a mean of **0.060** worse (max 0.115). Consequences:
 - `tail_mean` does **not** help (std 0.0295, no better than final-epoch). Do not use it as a
   stability-improved substitute.
 
-Historical numbers quoted before 2026-07-24 are final-epoch. `scripts/collect_bestval.py`
-recomputes any table at best-val from stored curves at no compute cost.
+Historical numbers quoted before 2026-07-24 are final-epoch. The best-val recomputation
+tooling (private notes) recomputes any table at best-val from stored curves at no compute cost.
 
 **But loss curves are recoverable and weights are not.** Runs before 2026-07-24 saved only
 final-epoch weights, so anything measured *from the model* -- per-base baselines, eta2,
@@ -63,7 +63,7 @@ produced. Both the granularity and the metric changed:
 | granularity | best among **checkpointed** epochs only (the callback fires every `checkpoint_frequency`, default 10) | best held in memory and refreshed **every** epoch; the exact-epoch snapshot is what gets serialized |
 | criterion | the loss_b-**weighted** total validation loss (`min(val_losses)`, i.e. `a*T_loss + b*LDOS_loss + (1-b)*DOS_loss`) | the **unweighted** metric `val_dos_t_unweighted` (`dos_loss + transmission_loss`, no `loss_a`/`loss_b`/`loss_c` scaling) -- see `g3nat/training/trainer.py:314` and `:509-514` |
 
-Both changes were correct fixes on their own terms (see model-results.md sec. 16 for the
+Both changes were correct fixes on their own terms (see private notes sec. 16 for the
 granularity bug, and sec. 16e for why the criterion also had to move off the weighted
 total: it is scaled differently in every supervision cell, so "best" was not comparable
 across arms). But the consequence is that **the 84 published v1 `_best.pth` files and the
@@ -95,6 +95,60 @@ The best checkpoint (v1 semantics) is the best among **checkpointed** epochs (ev
 minimum, so its stored weights always match its stored value. `best_val` / `best_val_epoch`
 in that file are the true global minimum of the curve, which may be marginally lower.
 
+### 1b. A selection metric is only valid for an arm that trains every term in it
+
+Measured on the v2 campaign (private notes sec. 18d), where all 72 cells select on
+`val_dos_t_unweighted` = `val_dos + val_transmission` while the three supervision arms
+train different subsets of that sum. The cost tracks the mismatch exactly:
+
+| arm | selection metric vs objective | cost at the published epoch |
+|---|---|---|
+| dos | matches | **0.0%** on transmission |
+| ldos | **omits** a trained term (LDOS) | **6.6%** on LDOS (24/24 cells pay) |
+| tonly | **includes an untrained term** (DOS) | **22.3%** on transmission (max 89.4%) |
+
+**Including a term you do not train is far worse than omitting one you do.** An untrained
+term is not merely uninformative -- it has its own trajectory, and on the tonly arm
+`val_dos` reaches an early minimum and then degrades monotonically. The sum is therefore
+minimized in the first handful of epochs, before the trained objective has learned
+anything: 11 of the 12 v2 cells that published before epoch 100 are tonly, some at epoch 5
+of 15000.
+
+**The rule this implies.** Before using a selection metric for an arm, check that the arm
+trains every term in it. Any future arm that ablates a loss component while leaving that
+component in the selection metric reproduces this failure. The dos arm above is the control
+that shows the effect is real and not validation noise.
+
+Note that this is invisible in the checkpoint: `selection_metric` records *which* metric was
+used, not whether it was appropriate for that arm's objective.
+
+### 1c. The negative-fraction diagnostics are the ones that catch real faults
+
+`neg_frac_dos`, `neg_frac_t`, `neg_frac_ldos` count values BELOW ZERO, disjointly from the
+underflow fractions. DOS and transmission are positive by construction in NEGF, so a nonzero
+negative fraction means the Hamiltonian is not Hermitian, or the solver failed, or the
+arithmetic lost the guarantee.
+
+**Read them.** On the v2 campaign `neg_frac_ldos` was nonzero in 41 of 72 runs and nothing
+looked at it for the whole campaign; it surfaced only because a separate question was asked
+about which responses were constant. The diagnostic was added specifically to catch this
+class of fault -- an earlier combined fraction "summed the two and hid exactly that
+pathology" -- and then went unread. Instrumentation nobody reads is not instrumentation.
+
+**Why LDOS is the vulnerable channel.** DOS is `Tr` and transmission is `Tr[...]`; both are
+SUMS over sites, so individual negative sites cancel inside them. LDOS is the only per-site
+quantity recorded, so it is the only place a per-site sign violation is visible. See
+private notes sec. 20: on the v2 campaign these were float32 rounding on interior sites
+(magnitude ~1e-11, ~1e-9 relative, vanishing in float64), not a physics fault -- but the
+floor turns such a point into `log10(1e-38) = -38`, a 27-decade error from an invisible
+rounding error.
+
+**A constant-zero diagnostic is not automatically good news.** Check that the metric is live
+before reading a zero as a result: the uninitialised value of these fields is `nan`, not 0
+(`hamiltonian.py:173-178`), so a dead metric reads `nan`. On v2 all three floored fractions
+read exactly 0 across 72 runs, which is a genuine result -- no point ever reached the 1e-38
+guard -- precisely because the fields were confirmed live.
+
 ## 2. Convergence and stability
 
 ```
@@ -104,7 +158,8 @@ tail_slope  = polyfit(arange(len(tail)), tail, 1)[0]        # units: loss per ep
 rel_gap     = (final - tail_mean) / tail_mean               # dimensionless
 ```
 
-- `scripts/collect_all_runs.py::curve_stats`, `scripts/collect_onsite_sweep.py::convergence`.
+- Computed by `curve_stats` / `convergence` in the internal analysis collection tooling
+  (private notes).
 - `|tail_slope| <~ 3e-4` means converged. A **positive** slope is the meaningful warning sign,
   not a large magnitude.
 - `rel_gap > 5%` flags a cell that ended on a bad draw. Report both; neither alone is
@@ -152,7 +207,7 @@ scatter_ij  = sqrt(std_i^2 + std_j^2)
 RESOLVED    iff gap_ij > 2 * scatter_ij
 ```
 
-- `scripts/collect_all_runs.py`.
+- Computed by the internal run-collection tooling (private notes).
 - Referencing to G before comparing removes any per-run global energy offset, so a shift
   common to all four bases cannot masquerade as scatter.
 - **This says a gap is larger than run-to-run noise. It does not say the value is physically
@@ -174,8 +229,8 @@ eta2       = SS_between / SS_total                          # correlation ratio
 - `range`/`spread`/`min_pairwise`: `g3nat/evaluation/physicality.py::baseline_distinctness`
   returns `{'min_pairwise', 'spread'}` where **`spread` is the std**, NOT the range. Results
   tables label the max-min column "range (max-min)" precisely to avoid this collision.
-- `eta2`: `scripts/collect_onsite_sweep.py::eta2`. Fraction of the variance in per-site onsite
-  explained by base identity. **eta2 = 1 means onsite is fully determined by which base it is;
+- `eta2`: computed by `eta2` in the internal onsite-sweep collection tooling (private notes).
+  Fraction of the variance in per-site onsite explained by base identity. **eta2 = 1 means onsite is fully determined by which base it is;
   eta2 ~ 0 means context sets everything.** Free model measured 0.028.
 - **eta2 = 1.000 at alpha=1.0 is tautological**, not a finding -- onsite *is* the per-base
   table there.
@@ -267,7 +322,7 @@ by accident is not, and a run whose schema differs is not schema-comparable with
 | `val_dos` | Huber on log10 DOS, absolute magnitude (sec. 1) |
 | `val_dos_shape` | same, after the shared median-residual offset (sec. 1) |
 | `val_transmission` | Huber on log10 T over the whole window (sec. 8a) |
-| `val_dos_t_unweighted` | `val_dos + val_transmission`, no `loss_a/b/c` scaling -- **the checkpoint selection criterion** (sec. 1a) |
+| `val_dos_t_unweighted` | `val_dos + val_transmission`, no `loss_a/b/c` scaling -- **the v2 checkpoint selection criterion**; v1 checkpoints were selected on the weighted total instead, so check `selection_metric` before using this row (sec. 1a). **Not a valid selection metric for every arm** -- see sec. 1b and private notes sec. 18d |
 | `val_dos_t_shape_unweighted` | shape-variant counterpart of the above |
 | `val_ldos_residue` | held-out LDOS Huber against the residue aggregation; `nan` unless `ldos_target='residue'` |
 | `val_ldos_base_only` | same against the base-only aggregation; `nan` unless `ldos_target='base_only'` |
@@ -295,7 +350,7 @@ shift_b = mean(onsite of base b over G-containing sequences)
 E_HOMO  = mean(raw Egrid)                               per sequence, absolute eV
 ```
 
-- `scripts/onsite_offset_test.py`, `scripts/homo_composition.py`.
+- Computed by the internal onsite-offset and HOMO-composition tooling (private notes).
 - Sequence classes are length-matched so length is not a confound.
 - At alpha=1.0, `shift_b` must be **exactly 0** by construction (onsite is a per-base
   constant). Use it as the mapping control.
