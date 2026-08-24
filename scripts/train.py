@@ -449,7 +449,20 @@ def main():
             # hamiltonian model honoured the flag. Any standard-vs-hamiltonian
             # comparison run before 2026-08-01 therefore compared two different
             # convolutions as well as two different readouts.
-            conv_type=args.conv_type
+            conv_type=args.conv_type,
+            # SAME OMISSION, SAME CONSTRUCTOR, FOUND 2026-08-24. --use_geometry
+            # reached the hamiltonian model (below) and not this one, so every
+            # standard-vs-hamiltonian comparison with geometry enabled gave the
+            # hamiltonian model an input the baseline could not see -- an
+            # advantage unrelated to the readout, which is the thing under test.
+            #
+            # THE PATTERN: this constructor takes its arguments explicitly and
+            # silently keeps its own defaults for anything omitted. Adding a flag
+            # to the hamiltonian branch without adding it here produces no error
+            # and no warning; it produces a confounded experiment. Check both
+            # branches whenever a shared flag is added.
+            use_geometry=args.use_geometry,
+            geom_norm_stats=geom_norm_stats,
         )
     else:
         if args.dropout != 0.0:
