@@ -23,9 +23,35 @@ BASELINE_DIR.mkdir(exist_ok=True)
 REGEN = os.environ.get("G3NAT_REGEN_BASELINES") == "1"
 
 # Tolerances: these fixtures are regression guards, not bit-exactness guards.
-# Floating point results can differ in the last bits across BLAS/hardware, but a
-# real behaviour change moves them far more than this.
-ATOL = 1e-6
+#
+# ATOL WAS 1e-6 AND THAT WAS TOO TIGHT. MEASURED, 2026-08-24, not assumed:
+# the same checkpoint, code, torch 2.7.1, numpy 2.3.2 and thread count, run on
+# two node types, on ATATATAT through hamiltonian_DFT_gat_baseaware.pth --
+#
+#   compute-bigmem (n3066): max |delta| vs fixture  0.0        (bit-exact)
+#   cpu-g2         (n3477): max |delta| vs fixture  3.67e-05   (transmission)
+#                                                  1.20e-05   (DOS)
+#
+# So cross-hardware drift on the near-degenerate solves in this fixture set is
+# ~4e-5, NOT "the last bits". A different CPU generation takes a different BLAS
+# kernel path, which changes summation order in the eigensolve; ATATATAT is the
+# most near-degenerate sequence here and therefore the most sensitive. The
+# fixtures were captured on compute-bigmem-class hardware, so they failed for a
+# day purely because the test suite was being run on cpu-g2.
+#
+# THE OLD COMMENT CLAIMED cross-BLAS drift sits "far below" these tolerances.
+# It does not -- 3.67e-5 is about twice the effective tolerance for log10 values
+# near -1.7 (atol + rtol*|v|). That sentence is what sends the next person
+# hunting for a code bug that is not there. Replaced with the measurement.
+#
+# HEADROOM FOR THE THING THESE FIXTURES ACTUALLY GUARD: mutation testing
+# (documented in test_baseline_legacy_checkpoints.py) shows a real default
+# change moves these outputs by DECADES -- the solver_type defect that shipped
+# once moved near-resonance log10 T by up to 3.8. So 1e-3 sits two orders above
+# measured hardware drift and three below the smallest real regression. A
+# fixture that cries wolf gets regenerated to silence it, which destroys the
+# guard; that failure mode is worse than a slightly loose bound.
+ATOL = 1e-3
 RTOL = 1e-5
 
 

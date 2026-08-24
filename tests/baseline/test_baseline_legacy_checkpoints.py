@@ -34,9 +34,32 @@ Adding this file immediately paid for itself: the baseblind checkpoint turns out
 LOAD and then RAISE on the forward pass (see the last test here). Every load-only
 test passed on it.
 
-Tolerance caveat: comparison is at _util's ATOL/RTOL (1e-6/1e-5) on log10-scale
-outputs. Cross-BLAS last-bit drift is far below that; a real default change is far
-above it.
+Tolerance caveat, MEASURED 2026-08-24 and previously stated wrongly. The old text
+here claimed "cross-BLAS last-bit drift is far below" the then-tolerance of
+ATOL=1e-6. It is not. Same code, same checkpoint, same torch/numpy/threads, two
+node types, ATATATAT through hamiltonian_DFT_gat_baseaware.pth:
+
+    compute-bigmem (n3066)  0.0       -- bit-exact against the stored fixture
+    cpu-g2         (n3477)  3.67e-05  -- transmission; 1.20e-05 on DOS
+
+The fixtures were captured on compute-bigmem-class hardware, so these two tests
+failed for a day purely because the suite was being run on cpu-g2, and the
+docstring sent the reader looking for a code bug that did not exist. ATOL is now
+1e-3: two orders above measured cross-hardware drift, three below the smallest
+real regression these fixtures have ever caught (see the mutation coverage above
+-- the solver_type defect moved log10 T by up to 3.8 decades).
+
+The reason to loosen rather than regenerate: a fixture that fails on hardware
+grounds gets regenerated to silence it, and a regenerated fixture no longer
+guards anything. Node-locked exact-match numbers are a worse guard than a bound
+with four orders of headroom.
+
+WHAT LOOSENING COSTS, stated rather than glossed: a solver_type flip has a
+measured MEDIAN log10-T gap of 3.2e-5, which was already below the old tolerance
+(hence "NOT caught here" above) and is now further below it. That defect is
+carried entirely by the per-flag assertions in
+tests/test_evaluation/test_legacy_checkpoint_roundtrip.py. If those are ever
+deleted as redundant with this file, solver_type loses its only guard.
 """
 import os
 
