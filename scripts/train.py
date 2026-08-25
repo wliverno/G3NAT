@@ -426,16 +426,19 @@ def main():
         print("Initialization NOT seeded (pass --init_seed for reproducible weights)")
 
     # Create loaders
-    is_hamiltonian = (args.model_type == 'hamiltonian')
-    if is_hamiltonian:
-        train_sampler = LengthBucketBatchSampler(train_dataset, args.batch_size,
-                                                 shuffle=True, seed=args.init_seed)
-        val_sampler = LengthBucketBatchSampler(val_dataset, args.batch_size, shuffle=False)
-        train_loader = DataLoader(train_dataset, batch_sampler=train_sampler)
-        val_loader = DataLoader(val_dataset, batch_sampler=val_sampler)
-    else:
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
+    # BOTH model types use the same seeded, requeue-safe sampler. The blind branch
+    # previously used DataLoader(..., shuffle=True, no generator), which draws
+    # from the global RNG: batch order is then unreproducible across a preemption
+    # requeue, while the Hamiltonian branch (seeded, with set_epoch) is not. Two
+    # families being compared head to head cannot have different reproducibility
+    # guarantees -- one of them would carry extra run-to-run variance that has
+    # nothing to do with the model.
+    train_sampler = LengthBucketBatchSampler(train_dataset, args.batch_size,
+                                             shuffle=True, seed=args.init_seed)
+    val_sampler = LengthBucketBatchSampler(val_dataset, args.batch_size,
+                                           shuffle=False, seed=args.init_seed)
+    train_loader = DataLoader(train_dataset, batch_sampler=train_sampler)
+    val_loader = DataLoader(val_dataset, batch_sampler=val_sampler)
 
     # Create model
     if args.model_type == 'standard':
