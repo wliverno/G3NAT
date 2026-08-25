@@ -136,11 +136,12 @@ def parse_args():
     parser.add_argument('--split_seed', type=int, default=42,
                        help='Seed for the sequence-grouped train/val split. Controls WHICH '
                             'sequences are held out, and nothing else.')
-    parser.add_argument('--init_seed', type=int, default=None,
-                       help='Seed for model initialization, independent of --split_seed. '
-                            'Default None leaves the RNGs untouched, reproducing historical '
-                            'runs exactly. Set it to vary initialization at a FIXED split, '
-                            'which is what a reproducibility sweep over H actually requires.')
+    parser.add_argument('--init_seed', type=int, required=True,
+                        help='Seed for model initialization AND batch composition, '
+                             'independent of --split_seed. REQUIRED: an unseeded run '
+                             'is not reproducible, and set_init_seed(None) silently '
+                             'touches no RNG at all, so the failure is invisible. '
+                             'Campaign v3 uses 1179027592, 2129768291, 3731635825.')
     parser.add_argument('--per_base_onsite', action='store_true',
                        help='Onsite = a learned per-base table (4 values shared across '
                             'all A/T/G/C sites) instead of the context head. Off in the '
@@ -542,6 +543,7 @@ def main():
                 'train_losses': train_losses,
                 'val_losses': val_losses,
                 'args': vars(args),
+                'init_seed': args.init_seed,
                 'energy_grid': energy_grid,
                 'metric_history': metric_history,
                 'selection_metric': 'val_dos_t_unweighted',
@@ -656,6 +658,7 @@ def main():
     torch.save({
         'model_state_dict': model.state_dict(),
         'args': vars(args),
+        'init_seed': args.init_seed,
         'train_losses': train_losses,
         'val_losses': val_losses,
         'energy_grid': energy_grid,
@@ -673,6 +676,7 @@ def main():
         torch.save({
             'model_state_dict': bc['model_state_dict'],
             'args': vars(args),
+            'init_seed': args.init_seed,
             'train_losses': train_losses,
             'val_losses': val_losses,
             'energy_grid': energy_grid,
