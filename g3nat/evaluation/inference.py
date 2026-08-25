@@ -151,16 +151,24 @@ def drop_legacy_alpha_state(state_dict: dict, per_base_onsite: bool) -> dict:
 #: Metric definitions: docs/metrics.md sec. 1 and the metric_history key table.
 #: Loss weights: `loss_a` transmission, `loss_b` LDOS/DOS mix, `loss_c` the DOS
 #: family switch (trainer.py:288-332).
+#: Values are lists of KEYS INTO `_KEY_TO_FACTORS`, not weight names -- a
+#: composite legacy metric name (e.g. 'val_dos_t_unweighted') lists every
+#: canonical key it sums over, and each key's PRODUCT of factors (not a single
+#: weight) is what decides whether that term was trained. This used to be a
+#: second, parallel {term: weight_key} table that judged DOS on loss_c alone
+#: and LDOS on loss_b alone -- the same defect the recorded-weights path fixed
+#: in _KEY_TO_FACTORS, left in place one level over. Fixed by reusing
+#: _KEY_TO_FACTORS instead of re-encoding the rule here.
 _METRIC_TERM_WEIGHTS = {
-    'val_dos_t_unweighted': {'DOS': 'loss_c', 'transmission': 'loss_a'},
-    'val_dos_t_shape_unweighted': {'DOS': 'loss_c', 'transmission': 'loss_a'},
-    'val_dos': {'DOS': 'loss_c'},
-    'val_dos_shape': {'DOS': 'loss_c'},
-    'val_transmission': {'transmission': 'loss_a'},
-    'val_ldos_residue': {'LDOS': 'loss_b'},
-    'val_ldos_base_only': {'LDOS': 'loss_b'},
-    'val_ldos_shape_residue': {'LDOS': 'loss_b'},
-    'val_ldos_shape_base_only': {'LDOS': 'loss_b'},
+    'val_dos_t_unweighted': ['val_dos', 'val_transmission'],
+    'val_dos_t_shape_unweighted': ['val_dos', 'val_transmission'],
+    'val_dos': ['val_dos'],
+    'val_dos_shape': ['val_dos'],
+    'val_transmission': ['val_transmission'],
+    'val_ldos_residue': ['val_ldos_residue'],
+    'val_ldos_base_only': ['val_ldos_base_only'],
+    'val_ldos_shape_residue': ['val_ldos_residue'],
+    'val_ldos_shape_base_only': ['val_ldos_base_only'],
 }
 
 
@@ -190,6 +198,29 @@ _KEY_TO_FACTORS = {
     'val_ldos_residue':   ('LDOS', (('loss_c', False), ('loss_b', False))),
     'val_ldos_base_only': ('LDOS', (('loss_c', False), ('loss_b', False))),
 }
+
+
+def _collect_offending(key: str, args: dict, seen: set, offending: list) -> None:
+    """Judge one `_KEY_TO_FACTORS` entry against `args`, appending to `offending`
+    (dedup'd via `seen`) if its factor PRODUCT is zero.
+
+    Shared by both the recorded-weights path and the legacy name-map path so
+    there is exactly one place that encodes "a term is trained by the product
+    of its factors, not by a single weight".
+    """
+    term, factors = _KEY_TO_FACTORS[key]
+    for name, complemented in factors:
+        w = args.get(name)
+        if w is None:
+            # Missing weight is unknown, not known-bad.
+            continue
+        value = (1.0 - float(w)) if complemented else float(w)
+        if value == 0.0:
+            why = (f'(1-{name})=0 with {name}={float(w):g}'
+                   if complemented else f'{name}=0')
+            if (term, why) not in seen:
+                seen.add((term, why))
+                offending.append((term, why))
 
 
 def check_selection_metric_trained(args: dict, selection_metric, source: str = '') -> None:
@@ -226,38 +257,25 @@ def check_selection_metric_trained(args: dict, selection_metric, source: str = '
     # for every v3 run. The map stays for checkpoints written before v3.
     recorded = args.get('selection_weights')
     offending = []
+    seen = set()
     if recorded:
         # THE RECORDED PATH JUDGES EACH TERM ON ITS PRODUCT OF LOSS WEIGHTS, not
         # on one of them. See _KEY_TO_FACTORS: DOS is c*(1-b), LDOS is c*b.
-        seen = set()
         for key in sorted(recorded):
             if key not in _KEY_TO_FACTORS:
                 continue
-            term, factors = _KEY_TO_FACTORS[key]
-            for name, complemented in factors:
-                w = args.get(name)
-                if w is None:
-                    # Missing weight is unknown, not known-bad -- same rule the
-                    # legacy path below has always used.
-                    continue
-                value = (1.0 - float(w)) if complemented else float(w)
-                if value == 0.0:
-                    why = (f'(1-{name})=0 with {name}={float(w):g}'
-                           if complemented else f'{name}=0')
-                    if (term, why) not in seen:
-                        seen.add((term, why))
-                        offending.append((term, why))
+            _collect_offending(key, args, seen, offending)
     else:
-        terms = _METRIC_TERM_WEIGHTS.get(str(selection_metric))
-        if terms is None:
+        keys = _METRIC_TERM_WEIGHTS.get(str(selection_metric))
+        if keys is None:
             # Unknown metric: unknown is not known-bad. Adding a metric to
             # metric_history without adding it here silently disables the check,
             # which is why the map lives next to the docstring that explains it.
             return
-        for term, weight_key in sorted(terms.items()):
-            w = args.get(weight_key)
-            if w is not None and float(w) == 0.0:
-                offending.append((term, f'{weight_key}=0'))
+        # SAME PRODUCT RULE AS THE RECORDED PATH -- via the same _KEY_TO_FACTORS
+        # entries, not a second re-encoding of which weight trains which term.
+        for key in sorted(keys):
+            _collect_offending(key, args, seen, offending)
     if offending:
         terms = ', '.join(f"'{t}' (weight {why})" for t, why in offending)
         raise ValueError(

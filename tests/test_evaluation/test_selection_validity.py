@@ -178,3 +178,33 @@ def test_recorded_weights_override_a_stale_metric_name():
     args = {'loss_a': 1.0, 'loss_b': 0.0, 'loss_c': 0.0, 'n_orb': 1,
             'selection_weights': {'val_transmission': 1.0}}
     check_selection_metric_trained(args, SEL, source='x.pth')
+
+
+# --------------------------------------- legacy name-map path: same hole, one level over
+
+
+def test_legacy_dos_metric_with_dos_untrained_via_loss_b_is_refused():
+    """A pre-v3 checkpoint (no `selection_weights`) at the LDOS+T arm
+    (loss_b=1, loss_c=1) has DOS untrained via c*(1-b)=0, but is selected on
+    'val_dos_t_unweighted'. The legacy name map used to judge DOS on loss_c
+    alone (sees 1.0, does not raise) -- the same hole the recorded-weights path
+    closed in _KEY_TO_FACTORS, left open here one level over. There are 12 real
+    campaign-v2 checkpoints at exactly this (loss_a, loss_b, loss_c)."""
+    with pytest.raises(ValueError) as e:
+        check_selection_metric_trained(_args(loss_b=1.0, loss_c=1.0), SEL,
+                                       source='v2_ldos_t.pth')
+    msg = str(e.value)
+    assert 'DOS' in msg
+    assert 'loss_b' in msg, 'message must identify loss_b as what zeroes the DOS half'
+
+
+def test_legacy_ldos_metric_with_ldos_untrained_via_loss_c_is_refused():
+    """Mirror of the above: a pre-v3 checkpoint with loss_b=1, loss_c=0 has LDOS
+    untrained (c*b=0 whatever b is), selected on 'val_ldos_residue'. The legacy
+    map used to judge LDOS on loss_b alone (sees 1.0, does not raise)."""
+    with pytest.raises(ValueError) as e:
+        check_selection_metric_trained(_args(loss_b=1.0, loss_c=0.0),
+                                       'val_ldos_residue', source='v2_ldos.pth')
+    msg = str(e.value)
+    assert 'LDOS' in msg
+    assert 'loss_c=0' in msg
