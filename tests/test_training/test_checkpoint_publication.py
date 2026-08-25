@@ -89,11 +89,13 @@ def test_best_value_is_inf_with_nothing_to_seed_from(tmp_path):
 
 def test_warning_when_the_selection_metric_was_nonfinite_every_epoch(tmp_path):
     best = os.path.join(str(tmp_path), 'checkpoint_best.pth')
-    history = [{'val_dos_t_unweighted': float('nan')} for _ in range(4)]
-    msg = train_script.best_publication_warning(best, history)
+    # nan_selection_metric_total is CUMULATIVE and counts the run's OWN criterion.
+    history = [{'nan_selection_metric_total': float(i + 1)} for i in range(4)]
+    msg = train_script.best_publication_warning(best, history,
+                                                selection_metric_name='transmission*1')
     assert msg is not None, \
         "the run published no best checkpoint and said nothing about it"
-    assert 'WARNING' in msg and 'NON-FINITE' in msg and 'val_dos_t_unweighted' in msg
+    assert 'WARNING' in msg and 'NON-FINITE' in msg and 'transmission*1' in msg
     assert '4' in msg
 
 
@@ -104,8 +106,8 @@ def test_warning_when_no_validation_epoch_ran(tmp_path):
 
 
 def test_warning_names_a_partial_nonfinite_cause(tmp_path):
-    history = [{'val_dos_t_unweighted': float('nan')},
-               {'val_dos_t_unweighted': 0.5}]
+    history = [{'nan_selection_metric_total': 1.0},
+               {'nan_selection_metric_total': 1.0}]
     msg = train_script.best_publication_warning(
         os.path.join(str(tmp_path), 'checkpoint_best.pth'), history)
     assert msg is not None and '1 of 2' in msg
@@ -114,8 +116,34 @@ def test_warning_names_a_partial_nonfinite_cause(tmp_path):
 def test_no_warning_when_a_best_checkpoint_exists(tmp_path):
     best = os.path.join(str(tmp_path), 'checkpoint_best.pth')
     _touch(best, {'selection_value': 0.1})
-    history = [{'val_dos_t_unweighted': 0.1}]
+    history = [{'nan_selection_metric_total': 0.0}]
     assert train_script.best_publication_warning(best, history) is None
+
+
+def test_the_diagnosis_counts_the_runs_own_criterion_not_val_dos_t(tmp_path):
+    """THE WRONG-CAUSE BUG. For an LDOS+T run whose own criterion is nan every
+    epoch, the fixed metric val_dos_t_unweighted can be FINITE every epoch.
+    Counting the old key tells the operator the metric was fine and blames the
+    checkpoint callback -- entirely the wrong subsystem."""
+    history = [{'val_dos_t_unweighted': 0.5,
+                'nan_selection_metric_total': float(i + 1)} for i in range(3)]
+    msg = train_script.best_publication_warning(
+        os.path.join(str(tmp_path), 'checkpoint_best.pth'), history,
+        selection_metric_name='ldos*1+transmission*1')
+    assert 'NON-FINITE in all 3 epochs' in msg, \
+        'diagnosed from val_dos_t_unweighted, which was finite the whole run'
+    assert 'checkpoint callback' not in msg, 'blamed the wrong subsystem'
+    assert 'ldos*1+transmission*1' in msg, \
+        'the message must name the metric actually in use'
+
+
+def test_the_diagnosis_falls_back_for_histories_without_the_counter(tmp_path):
+    """Pre-v3 metric_history carries no nan_selection_metric_total key."""
+    history = [{'val_dos_t_unweighted': float('nan')},
+               {'val_dos_t_unweighted': 0.5}]
+    msg = train_script.best_publication_warning(
+        os.path.join(str(tmp_path), 'checkpoint_best.pth'), history)
+    assert msg is not None and '1 of 2' in msg
 
 
 # ------------------------------------------- C2 (metadata half): the new counter
@@ -147,3 +175,249 @@ def test_metric_history_carries_the_nonfinite_selection_counter():
     trainer._validate_epoch([_B()], 0)
     trainer._validate_epoch([_B()], 1)
     assert trainer.metric_history[-1]['nan_selection_metric_total'] == 2.0
+
+
+# ------------------- Ruling B: the requeue fallback must use the RUN'S criterion
+
+def _ldos_t_history():
+    """LDOS+T (loss_a=1, loss_b=1, loss_c=1): the run's own criterion is T+LDOS.
+
+    Built so the two criteria disagree AND the old one is the SMALLER of the two,
+    which is the dangerous direction: a bar seeded at 0.60 is stricter than
+    anything this run can reach, so checkpoint_best.pth would never be written
+    again for the rest of the run.
+    """
+    return [{'val_transmission': 0.50, 'val_dos': 0.10, 'val_ldos_residue': 0.20,
+             'val_dos_t_unweighted': 0.60},
+            {'val_transmission': 0.40, 'val_dos': 0.90, 'val_ldos_residue': 0.90,
+             'val_dos_t_unweighted': 1.30}]
+
+
+def test_ldos_arm_fallback_is_seeded_from_its_own_objective_not_dos_t(tmp_path):
+    """No best checkpoint on disk -- the path a run preempted before its first
+    best write actually lands on. These runs are preemptible, so it is live."""
+    from g3nat.training.selection import resolve_selection_metric
+
+    _name, weights = resolve_selection_metric(1.0, 1.0, 1.0)
+    history = _ldos_t_history()
+    seeded = train_script.seed_best_value(str(tmp_path), history,
+                                          selection_weights=weights)
+    assert seeded == 0.70, (
+        "seeded from val_dos_t_unweighted (0.60), a bar this run's own T+LDOS "
+        "objective can never beat -- no best checkpoint for the rest of the run")
+    assert min(m['val_dos_t_unweighted'] for m in history) == 0.60, \
+        'fixture is pointless unless the two criteria disagree'
+
+
+def test_t_only_fallback_ignores_the_untrained_dos_term(tmp_path):
+    from g3nat.training.selection import resolve_selection_metric
+
+    _name, weights = resolve_selection_metric(1.0, 0.0, 0.0)
+    history = [{'val_transmission': 0.90, 'val_dos': 0.10,
+                'val_ldos_residue': float('nan'), 'val_dos_t_unweighted': 1.00},
+               {'val_transmission': 0.40, 'val_dos': 0.80,
+                'val_ldos_residue': float('nan'), 'val_dos_t_unweighted': 1.20}]
+    assert train_script.seed_best_value(str(tmp_path), history,
+                                        selection_weights=weights) == 0.40, \
+        'a T-only run must not have its resume bar set by an untrained DOS term'
+
+
+def test_fallback_skips_entries_missing_a_contributing_term(tmp_path):
+    """Pre-v3 histories do not carry every key. A resume must not crash on them."""
+    from g3nat.training.selection import resolve_selection_metric
+
+    _name, weights = resolve_selection_metric(1.0, 1.0, 1.0)
+    history = [{'val_transmission': 0.5},                       # no LDOS key
+               {'val_transmission': 0.4, 'val_ldos_residue': None},
+               {'val_transmission': 0.4, 'val_ldos_residue': 0.3}]
+    assert train_script.seed_best_value(str(tmp_path), history,
+                                        selection_weights=weights) == 0.70
+
+
+def test_the_resume_call_site_passes_the_runs_resolved_weights():
+    """seed_best_value defaults to the legacy criterion when given no weights, so
+    a call site that forgets them is silently wrong -- exactly the defect this
+    fixes. Pin that main() passes them."""
+    import ast
+
+    path = os.path.join(os.path.dirname(__file__), '..', '..', 'scripts', 'train.py')
+    with open(path) as fh:
+        tree = ast.parse(fh.read())
+    calls = [n for n in ast.walk(tree)
+             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+             and n.func.id == 'seed_best_value']
+    assert calls, 'seed_best_value is never called'
+    for call in calls:
+        passed = [kw.arg for kw in call.keywords] + ['_pos'] * len(call.args)
+        assert 'selection_weights' in passed or len(call.args) >= 3, \
+            'seed_best_value called without the run\'s resolved selection weights'
+
+
+# ------------- Finding 4: the PREFERRED branch must also match the run's criterion
+
+def test_a_best_checkpoint_written_under_a_DIFFERENT_criterion_is_not_trusted(tmp_path):
+    """A pre-v3 checkpoint_best.pth in a reused checkpoint dir stores a
+    val_dos_t_unweighted number under the key 'selection_value'. Seeding a v3 run's
+    bar from it compares two different quantities -- the same defect Ruling B fixed
+    in the fallback, one branch up."""
+    from g3nat.training.selection import resolve_selection_metric
+
+    d = str(tmp_path)
+    _touch(os.path.join(d, 'checkpoint_best.pth'),
+           {'selection_value': 0.50, 'selection_metric': 'val_dos_t_unweighted'})
+    _name, weights = resolve_selection_metric(1.0, 1.0, 1.0)   # T+LDOS
+    history = _ldos_t_history()
+    assert train_script.seed_best_value(d, history, selection_weights=weights) == 0.70, \
+        "seeded the T+LDOS bar from a stored T+DOS number"
+
+
+def test_a_best_checkpoint_written_under_the_SAME_criterion_is_trusted(tmp_path):
+    """The converse: matching recorded weights means the stored value is the right
+    quantity and must still win over the history minimum."""
+    from g3nat.training.selection import resolve_selection_metric
+
+    d = str(tmp_path)
+    _name, weights = resolve_selection_metric(1.0, 1.0, 1.0)
+    _touch(os.path.join(d, 'checkpoint_best.pth'),
+           {'selection_value': 0.90, 'selection_metric': _name,
+            'selection_weights': dict(weights)})
+    assert train_script.seed_best_value(d, _ldos_t_history(),
+                                        selection_weights=weights) == 0.90
+
+
+# --------- Finding 3: the SNAPSHOT itself, not just the helper, follows the run
+
+def test_the_weights_snapshot_epoch_follows_the_runs_own_criterion():
+    """BEHAVIOURAL 198-vs-512 GUARD.
+
+    Runs Trainer.fit for two epochs with stubbed train/validate, over a history in
+    which the run's own criterion (T only, loss_c=0) and the old fixed metric
+    val_dos_t_unweighted prefer DIFFERENT epochs. best_unweighted['epoch'] is the
+    state that becomes checkpoint_best.pth, so this fails if the snapshot is still
+    gated on the fixed metric -- including the case where selection_value is called
+    somewhere else in fit purely for logging.
+    """
+    import torch.nn as nn
+    from g3nat.training.config import TrainingConfig
+    from g3nat.training.trainer import Trainer
+
+    entries = [
+        {'val_transmission': 0.90, 'val_dos': 0.10, 'val_dos_t_unweighted': 1.00},
+        {'val_transmission': 0.40, 'val_dos': 0.80, 'val_dos_t_unweighted': 1.20},
+    ]
+    own = [e['val_transmission'] for e in entries]
+    old = [e['val_dos_t_unweighted'] for e in entries]
+    assert own.index(min(own)) == 1 and old.index(min(old)) == 0, \
+        'fixture is pointless unless the two criteria disagree'
+
+    cfg = TrainingConfig(num_epochs=2, warmup_epochs=0, device='cpu',
+                         loss_a=1.0, loss_b=0.0, loss_c=0.0)      # T only
+    trainer = Trainer(nn.Linear(1, 1), cfg)
+    trainer._train_epoch = lambda loader: 0.0
+
+    def _fake_validate(loader, epoch):
+        trainer.metric_history.append(entries[epoch])
+        return float(epoch)
+
+    trainer._validate_epoch = _fake_validate
+    trainer.fit([], [])
+
+    assert trainer.best_unweighted['epoch'] == 1, (
+        "the published weights came from epoch %r -- the epoch preferred by the "
+        "fixed metric val_dos_t_unweighted, not by this run's own objective"
+        % trainer.best_unweighted['epoch'])
+    assert trainer.best_unweighted['value'] == 0.40
+    assert trainer.best_unweighted['state_dict'] is not None
+
+
+# --------------- FINAL REVIEW, CRITICAL half 1: a failed run must EXIT NON-ZERO
+
+def _main_source_tree():
+    import ast
+    path = os.path.join(os.path.dirname(__file__), '..', '..', 'scripts', 'train.py')
+    with open(path) as fh:
+        tree = ast.parse(fh.read())
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name == 'main':
+            return ast, node
+    raise AssertionError('scripts/train.py has no main()')
+
+
+def _no_best_branch():
+    """The `if _no_best_warning is not None:` block inside main()."""
+    ast, main = _main_source_tree()
+    for node in ast.walk(main):
+        if not isinstance(node, ast.If):
+            continue
+        t = node.test
+        if (isinstance(t, ast.Compare)
+                and isinstance(t.left, ast.Name)
+                and t.left.id == '_no_best_warning'
+                and any(isinstance(op, ast.IsNot) for op in t.ops)):
+            return ast, node
+    raise AssertionError(
+        'main() no longer branches on `_no_best_warning is not None` -- the '
+        'no-best-checkpoint failure path is gone or was renamed')
+
+
+def test_a_run_with_no_best_checkpoint_exits_non_zero():
+    """THE DEFECT: the comment said "a FAILED run, not a completed one" while the
+    code printed a warning, printed "Training complete!" and exited 0, so SLURM
+    recorded COMPLETED. Nothing downstream counts the runs, so a cell that
+    published nothing is invisible and every gate still reports PASS. The arms
+    most exposed are the ones campaign v3 introduces (LDOS+T at n_orb=2, T only),
+    so cells go missing BY ARM."""
+    ast, branch = _no_best_branch()
+    raises = [n for n in ast.walk(branch) if isinstance(n, ast.Raise)]
+    assert raises, (
+        'the no-best-checkpoint branch does not raise; it warns and falls '
+        'through to "Training complete!" and exit 0')
+    exc_names = set()
+    for r in raises:
+        exc = r.exc
+        if isinstance(exc, ast.Call):
+            exc = exc.func
+        if isinstance(exc, ast.Name):
+            exc_names.add(exc.id)
+        elif isinstance(exc, ast.Attribute):
+            exc_names.add(exc.attr)
+    assert 'SystemExit' in exc_names, (
+        f'expected the branch to raise SystemExit (non-zero exit); got {exc_names}')
+
+
+def test_training_complete_is_never_printed_on_the_failed_path():
+    """A non-zero exit that still says "Training complete!" first is half the
+    defect: the operator reads the log, not the exit code."""
+    ast, branch = _no_best_branch()
+    printed = []
+    for node in ast.walk(branch):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == 'print'):
+            for a in node.args:
+                if isinstance(a, ast.Constant) and isinstance(a.value, str):
+                    printed.append(a.value)
+                elif isinstance(a, ast.JoinedStr):
+                    printed.extend(v.value for v in a.values
+                                   if isinstance(v, ast.Constant)
+                                   and isinstance(v.value, str))
+    assert not any('Training complete' in p for p in printed), \
+        f'the failure branch prints a success line: {printed}'
+    # And the branch must terminate main(), so the success block below it is
+    # unreachable on this path.
+    assert isinstance(branch.body[-1], ast.Raise), \
+        'the failure branch does not end in a raise, so execution falls through'
+
+
+def test_the_requeue_note_is_recorded_next_to_the_exit():
+    """Preempted runs are killed inside the epoch loop and never reach this line,
+    so requeue is unaffected. That has to be stated where someone would otherwise
+    "fix" the non-zero exit back to a warning."""
+    path = os.path.join(os.path.dirname(__file__), '..', '..', 'scripts', 'train.py')
+    with open(path) as fh:
+        src = fh.read()
+    head = src[:src.index('_no_best_warning = best_publication_warning')]
+    tail = head[head.rindex('# A run with no best checkpoint'):]
+    low = tail.lower()
+    assert 'requeue' in low and 'preempt' in low, (
+        'the comment above the failure exit does not explain that preempted runs '
+        'never reach it; someone will revert the exit code')

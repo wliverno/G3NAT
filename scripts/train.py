@@ -18,6 +18,7 @@ from g3nat.data import (generate_tight_binding_data, load_pickle_directory,
 from g3nat.training import (train_model, TrainingConfig, LengthBucketBatchSampler,
                             set_init_seed)
 from g3nat.training.callbacks import save_checkpoint, save_progress_file
+from g3nat.training.selection import resolve_selection_metric, selection_value
 from g3nat.utils import setup_device
 
 from torch_geometric.loader import DataLoader
@@ -136,11 +137,12 @@ def parse_args():
     parser.add_argument('--split_seed', type=int, default=42,
                        help='Seed for the sequence-grouped train/val split. Controls WHICH '
                             'sequences are held out, and nothing else.')
-    parser.add_argument('--init_seed', type=int, default=None,
-                       help='Seed for model initialization, independent of --split_seed. '
-                            'Default None leaves the RNGs untouched, reproducing historical '
-                            'runs exactly. Set it to vary initialization at a FIXED split, '
-                            'which is what a reproducibility sweep over H actually requires.')
+    parser.add_argument('--init_seed', type=int, required=True,
+                        help='Seed for model initialization AND batch composition, '
+                             'independent of --split_seed. REQUIRED: an unseeded run '
+                             'is not reproducible, and set_init_seed(None) silently '
+                             'touches no RNG at all, so the failure is invisible. '
+                             'Campaign v3 uses 1179027592, 2129768291, 3731635825.')
     parser.add_argument('--per_base_onsite', action='store_true',
                        help='Onsite = a learned per-base table (4 values shared across '
                             'all A/T/G/C sites) instead of the context head. Off in the '
@@ -245,7 +247,15 @@ def maybe_clear_stale_best(checkpoint_dir: str) -> bool:
     return False
 
 
-def seed_best_value(checkpoint_dir: str, metric_history) -> float:
+#: The criterion every run used before campaign v3, kept ONLY so that a caller
+#: that passes no weights reproduces the old fallback exactly (the pre-v3 tests
+#: for `seed_best_value`). Production callers must pass the run's resolved
+#: weights -- see the call site in main().
+_LEGACY_SELECTION_WEIGHTS = {'val_dos_t_unweighted': 1.0}
+
+
+def seed_best_value(checkpoint_dir: str, metric_history,
+                    selection_weights=None) -> float:
     """The running best selection value to carry across a requeue.
 
     Prefer the on-disk checkpoint_best.pth's OWN 'selection_value'. The history
@@ -257,8 +267,18 @@ def seed_best_value(checkpoint_dir: str, metric_history) -> float:
     the run finishes carrying weights it already beat.
 
     Falls back to the history minimum only when the best checkpoint is absent or
-    predates the 'selection_value' key.
+    predates the 'selection_value' key. That fallback is a REAL path here: these
+    runs are preemptible, so a run killed before it ever wrote a best checkpoint
+    lands on it. The fallback therefore has to use the SAME criterion the trainer
+    selects on (`selection_weights`, from this run's loss weights). Using the old
+    fixed val_dos_t_unweighted would set a bar on a different quantity: for LDOS+T
+    the run's own T+LDOS can EXCEED T+DOS, so the bar would be too strict and
+    checkpoint_best.pth would never be written again for the rest of the run.
+
+    An entry missing any contributing key is skipped rather than crashing the
+    resume -- pre-v3 histories do not carry every term.
     """
+    weights = selection_weights or _LEGACY_SELECTION_WEIGHTS
     best_path = os.path.join(checkpoint_dir, 'checkpoint_best.pth')
     if os.path.exists(best_path):
         try:
@@ -269,14 +289,33 @@ def seed_best_value(checkpoint_dir: str, metric_history) -> float:
             bc = None
         if isinstance(bc, dict):
             sv = bc.get('selection_value')
-            if sv is not None and float(sv) == float(sv):
+            # Only trust the stored value when it is the SAME QUANTITY this run
+            # minimises. A pre-v3 checkpoint_best.pth left in a reused checkpoint
+            # dir stores a val_dos_t_unweighted number under this key; seeding a
+            # v3 bar from it compares two different scales, which is the defect
+            # fixed in the history fallback below, one branch up.
+            recorded = bc.get('selection_weights')
+            same_criterion = (recorded == weights if recorded is not None
+                              else selection_weights is None)
+            if sv is not None and float(sv) == float(sv) and same_criterion:
                 return float(sv)
-    values = [m.get('val_dos_t_unweighted') for m in (metric_history or [])]
-    values = [float(v) for v in values if v is not None and v == v]
+            if sv is not None and not same_criterion:
+                print(f"WARNING: {best_path} was selected on {recorded!r}, not on this "
+                      f"run's {weights!r}; seeding the running best from "
+                      "metric_history instead")
+    values = []
+    for m in (metric_history or []):
+        try:
+            v = selection_value(m, weights)
+        except (KeyError, TypeError, ValueError):
+            continue
+        if v == v and abs(v) != float('inf'):
+            values.append(float(v))
     return min(values) if values else float('inf')
 
 
-def best_publication_warning(best_ckpt_path: str, metric_history):
+def best_publication_warning(best_ckpt_path: str, metric_history,
+                             selection_metric_name=None):
     """Return a WARNING string when no best checkpoint exists, else None.
 
     Without this the script prints "Training complete!" and exits 0 after a run in
@@ -285,28 +324,45 @@ def best_publication_warning(best_ckpt_path: str, metric_history):
     published, and every downstream analysis silently falls back to final-epoch
     weights or skips the run. Same silent-failure class as private notes
     sec. 16.
+
+    THE CAUSE IS COUNTED FROM THE RUN'S OWN CRITERION. `nan_selection_metric_total`
+    is the trainer's cumulative count of epochs whose OWN selection metric came back
+    non-finite (trainer.py, _validate_epoch). Counting non-finite
+    `val_dos_t_unweighted` instead -- which this used to do -- states a WRONG CAUSE
+    for exactly the arms campaign v3 introduced: an LDOS or T-only run can have a
+    perfectly finite val_dos_t_unweighted in every epoch while its own criterion is
+    nan throughout, and the operator would be told the metric was fine and pointed
+    at the checkpoint callback, the wrong subsystem entirely.
+
+    Falls back to counting non-finite `val_dos_t_unweighted` only for pre-v3
+    histories, which do not carry the counter.
     """
     if os.path.exists(best_ckpt_path):
         return None
     history = list(metric_history or [])
     n_epochs = len(history)
-    n_bad = sum(1 for m in history
-                if not (m.get('val_dos_t_unweighted') is not None
-                        and m.get('val_dos_t_unweighted') == m.get('val_dos_t_unweighted')))
+    name = selection_metric_name or 'the selection metric'
+    counter = history[-1].get('nan_selection_metric_total') if history else None
+    if counter is not None and counter == counter:
+        n_bad = int(counter)
+    else:
+        n_bad = sum(1 for m in history
+                    if not (m.get('val_dos_t_unweighted') is not None
+                            and m.get('val_dos_t_unweighted') == m.get('val_dos_t_unweighted')))
     if n_epochs == 0:
-        cause = ("no validation epoch ran, so the selection metric "
-                 "val_dos_t_unweighted was never computed")
-    elif n_bad == n_epochs:
-        cause = (f"the selection metric val_dos_t_unweighted was NON-FINITE in all "
+        cause = (f"no validation epoch ran, so the selection metric ({name}) "
+                 "was never computed")
+    elif n_bad >= n_epochs:
+        cause = (f"the selection metric ({name}) was NON-FINITE in all "
                  f"{n_epochs} epochs, so no epoch could ever become the best")
     elif n_bad:
-        cause = (f"the selection metric val_dos_t_unweighted was non-finite in "
+        cause = (f"the selection metric ({name}) was non-finite in "
                  f"{n_bad} of {n_epochs} epochs and no finite epoch improved on the "
                  "running best")
     else:
-        cause = (f"the selection metric was finite in all {n_epochs} epochs but no "
-                 "best checkpoint was written -- the checkpoint callback may never "
-                 "have fired, or the file was removed")
+        cause = (f"the selection metric ({name}) was finite in all {n_epochs} epochs "
+                 "but no best checkpoint was written -- the checkpoint callback may "
+                 "never have fired, or the file was removed")
     return ("WARNING: NO BEST CHECKPOINT WAS PUBLISHED for this run. "
             + cause + ". The published final weights are the LAST epoch's, not the "
             "best; treat this run as FAILED rather than as a completed cell.")
@@ -363,6 +419,18 @@ def main():
         if args.num_energy_points != len(energy_grid):
             print(f"NOTE: --num_energy_points ({args.num_energy_points}) is ignored for "
                   f"pickle data; the grid comes from the files ({len(energy_grid)} points).")
+
+        # --num_samples / --seq_length / --min_length are synthetic-TB generator
+        # arguments (generate_tight_binding_data above). For pickle data the
+        # sample count and the strand lengths are whatever the directory holds,
+        # so these flags do nothing. SAY SO: a 120-run campaign sized off
+        # --num_samples would be sized off a flag with no effect.
+        _ignored_tb_flags = [f'--num_samples ({args.num_samples})',
+                             f'--seq_length ({args.seq_length})',
+                             f'--min_length ({args.min_length})']
+        print(f"NOTE: {', '.join(_ignored_tb_flags)} are ignored for pickle data; "
+              f"they size the synthetic tight-binding generator only. This run uses "
+              f"the {len(seqs)} sample(s) found in {args.data_dir}.")
 
     print(f"Loaded {len(seqs)} samples")
 
@@ -425,16 +493,23 @@ def main():
         print("Initialization NOT seeded (pass --init_seed for reproducible weights)")
 
     # Create loaders
-    is_hamiltonian = (args.model_type == 'hamiltonian')
-    if is_hamiltonian:
-        train_sampler = LengthBucketBatchSampler(train_dataset, args.batch_size,
-                                                 shuffle=True, seed=args.init_seed)
-        val_sampler = LengthBucketBatchSampler(val_dataset, args.batch_size, shuffle=False)
-        train_loader = DataLoader(train_dataset, batch_sampler=train_sampler)
-        val_loader = DataLoader(val_dataset, batch_sampler=val_sampler)
-    else:
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
+    # BOTH model types use the same seeded, requeue-safe sampler. The blind branch
+    # previously used DataLoader(shuffle=True) with no generator, which draws from
+    # the global RNG: batch order is then unreproducible across a preemption
+    # requeue, while the Hamiltonian branch (seeded, with set_epoch) is not. Two
+    # families being compared head to head cannot have different reproducibility
+    # guarantees -- one of them would carry extra run-to-run variance that has
+    # nothing to do with the model.
+    train_sampler = LengthBucketBatchSampler(train_dataset, args.batch_size,
+                                             shuffle=True, seed=args.init_seed)
+    # val_sampler's seed= is inert: shuffle=False means LengthBucketBatchSampler
+    # never consults it (see g3nat/training/utils.py _rng), so validation order
+    # is already deterministic without it. Kept anyway to match the train_sampler
+    # construction, not because it does anything.
+    val_sampler = LengthBucketBatchSampler(val_dataset, args.batch_size,
+                                           shuffle=False, seed=args.init_seed)
+    train_loader = DataLoader(train_dataset, batch_sampler=train_sampler)
+    val_loader = DataLoader(val_dataset, batch_sampler=val_sampler)
 
     # Create model
     if args.model_type == 'standard':
@@ -500,8 +575,9 @@ def main():
     # can invert an ordering (it inverted the num_layers trend). See docs/metrics.md.
     #
     # Granularity: NO LONGER a rounding to the checkpoint cadence. As of 2026-08-16 the
-    # Trainer keeps the best weights in memory, refreshed every epoch on the UNWEIGHTED
-    # metric val_dos_t_unweighted, and hands them here as `best_state`. So the serialized
+    # Trainer keeps the best weights in memory, refreshed every epoch on the run's OWN
+    # validation objective (g3nat/training/selection.py; before campaign v3 this was the
+    # fixed metric val_dos_t_unweighted), and hands them here as `best_state`. So the serialized
     # "best" weights are exactly the ones from the optimum epoch, and the selection
     # criterion no longer depends on loss_b (the weighted 'total' is scaled differently
     # in every supervision cell, which made "best" incomparable across arms).
@@ -509,15 +585,21 @@ def main():
     # that variable is defined. Do not move this initialisation down into the callback.
     best_val = {'value': float('inf')}
 
+    # Resolved once, from this run's loss weights, and written into every
+    # checkpoint so a consumer can verify what selection actually optimised.
+    _sel_name, _sel_weights = resolve_selection_metric(
+        args.loss_a, args.loss_b, args.loss_c, ldos_target=args.ldos_target)
+    print(f'Selecting best checkpoint on: {_sel_name}')
+
     def checkpoint_cb(model, opt, epoch, train_losses, val_losses, metric_history=None,
                       best_state=None):
         save_checkpoint(model, opt, epoch, train_losses, val_losses,
                        vars(args), energy_grid,
                        os.path.join(args.checkpoint_dir, 'checkpoint_latest.pth'),
-                       metric_history=metric_history)
+                       metric_history=metric_history, init_seed=args.init_seed)
         # Save the in-memory BEST-EPOCH weights the trainer handed us, whenever they beat
-        # what has already been written to disk. best_state['value'] is the unweighted
-        # metric val_dos_t_unweighted at best_state['epoch']; best_val['value'] tracks the
+        # what has already been written to disk. best_state['value'] is this run's own
+        # selection metric (_sel_name) at best_state['epoch']; best_val['value'] tracks the
         # last value actually serialized here, so this single test is the whole condition.
         #
         # HISTORY (see private notes sec. 16). Two successive defects lived here:
@@ -529,7 +611,7 @@ def main():
         # that fix, the weights written were the LIVE model's, i.e. the checkpointed
         # epoch's, not the optimum's, and the criterion was the loss_b-weighted total.
         # Both are gone: the trainer snapshots a detached CPU copy of the weights at the
-        # exact epoch that minimises the unweighted metric, and that snapshot is what is
+        # exact epoch that minimises this run's own objective, and that snapshot is what is
         # serialized below. 'saved_at_epoch' is therefore the true optimum epoch.
         if best_state and best_state.get('state_dict') is not None \
                 and best_state['value'] < best_val['value'] - 1e-12:
@@ -542,9 +624,11 @@ def main():
                 'train_losses': train_losses,
                 'val_losses': val_losses,
                 'args': vars(args),
+                'init_seed': args.init_seed,
                 'energy_grid': energy_grid,
                 'metric_history': metric_history,
-                'selection_metric': 'val_dos_t_unweighted',
+                'selection_metric': _sel_name,
+                'selection_weights': _sel_weights,
                 'selection_value': float(best_state['value']),
                 'timestamp': time.time(),
             }
@@ -610,19 +694,25 @@ def main():
         print(f"Resuming from epoch {start_epoch}")
         # Carry the running best across a requeue, or the first post-resume checkpoint
         # would overwrite a genuinely better earlier one. Seed it from the SAME quantity
-        # the callback now compares against -- the unweighted metric, not the weighted
-        # val loss, which is a different scale entirely and would make the comparison
-        # meaningless. A checkpoint written before metric_history existed carries no such
+        # the callback now compares against -- this run's own selection metric
+        # (_sel_weights), not the weighted val loss, which is a different scale entirely
+        # and would make the comparison meaningless. Passing _sel_weights is REQUIRED:
+        # seed_best_value's history fallback otherwise defaults to the pre-v3 fixed
+        # criterion, which for LDOS+T sets a bar the run's own objective cannot beat.
+        #
+        # A checkpoint written before metric_history existed carries no such
         # values, in which case the running best restarts at inf: the first post-resume
         # improvement overwrites the old best. That is the safe direction (the trainer's
         # in-memory best is empty after a restart anyway, so nothing better is lost).
         #
-        # The value comes from the on-disk best checkpoint's own 'selection_value' when
-        # present, NOT from the history minimum -- see seed_best_value's docstring for
-        # why those differ after a kill between the two writes.
-        best_val['value'] = seed_best_value(args.checkpoint_dir, resume_metric_history)
+        # The value comes from the on-disk best checkpoint's own 'selection_value'
+        # when present AND recorded under the same criterion, NOT from the history
+        # minimum -- see seed_best_value's docstring for why those differ after a
+        # kill between the two writes.
+        best_val['value'] = seed_best_value(args.checkpoint_dir, resume_metric_history,
+                                            selection_weights=_sel_weights)
         if best_val['value'] != float('inf'):
-            print(f"Resuming best val_dos_t_unweighted: {best_val['value']:.4f}")
+            print(f"Resuming best {_sel_name}: {best_val['value']:.4f}")
 
     print("Training...")
     metric_history = []
@@ -656,6 +746,7 @@ def main():
     torch.save({
         'model_state_dict': model.state_dict(),
         'args': vars(args),
+        'init_seed': args.init_seed,
         'train_losses': train_losses,
         'val_losses': val_losses,
         'energy_grid': energy_grid,
@@ -673,6 +764,7 @@ def main():
         torch.save({
             'model_state_dict': bc['model_state_dict'],
             'args': vars(args),
+            'init_seed': args.init_seed,
             'train_losses': train_losses,
             'val_losses': val_losses,
             'energy_grid': energy_grid,
@@ -684,17 +776,47 @@ def main():
             'best_val': float(np.nanmin(val_losses)),
             'best_val_epoch': int(np.nanargmin(val_losses)),
             'saved_at_epoch': bc.get('epoch'),
-            # What the published weights were actually selected on -- the unweighted
-            # metric, not the loss_b-weighted 'best_val' above.
+            # What the published weights were actually selected on -- this run's own
+            # validation objective, not the loss_b-weighted 'best_val' above.
             'selection_metric': bc.get('selection_metric'),
+            # Carried through as well as the NAME. load_trained_model's
+            # selection-validity guard prefers the recorded weights, and this
+            # published file is what it is normally pointed at -- without the key
+            # here the guard falls back to a name map that contains none of the
+            # v3 names and silently returns, which is the exact bypass the guard
+            # exists to prevent.
+            'selection_weights': bc.get('selection_weights'),
             'selection_value': bc.get('selection_value'),
         }, best_path)
 
     # A run with no best checkpoint is a FAILED run, not a completed one. Say so
     # loudly instead of printing "Training complete!" and exiting 0.
-    _no_best_warning = best_publication_warning(best_ckpt, metric_history)
+    #
+    # THE NON-ZERO EXIT IS THE POINT, not the warning text. Printing a warning and
+    # exiting 0 makes SLURM record the run COMPLETED, so `sacct` shows a full
+    # factorial while that cell published nothing. Nothing downstream counts the
+    # runs -- hand the gates 90 of 120 checkpoints and all of them report PASS --
+    # so a lost cell is invisible. The arms most exposed are exactly the ones
+    # campaign v3 introduces (LDOS+T at n_orb=2, never run before; and T only),
+    # which means cells would go missing NON-UNIFORMLY BY ARM: a silently wrong
+    # paper number with every gate green.
+    #
+    # THIS DOES NOT AFFECT REQUEUE. A preempted run is killed inside the epoch loop
+    # and never reaches this line; requeue is driven by SLURM's preemption signal
+    # and checkpoint_latest.pth, not by this exit code. checkpoint_latest.pth is
+    # deliberately NOT removed on this path either, so a failed cell can still be
+    # resumed or inspected. Do NOT "fix" this back to warn-and-exit-0.
+    _no_best_warning = best_publication_warning(best_ckpt, metric_history,
+                                                selection_metric_name=_sel_name)
     if _no_best_warning is not None:
         print(_no_best_warning)
+        print(f"Model saved: {model_path}")
+        print(f"Final train loss: {train_losses[-1]:.4f}")
+        print(f"Final val loss: {val_losses[-1]:.4f}")
+        raise SystemExit(
+            "TRAINING FAILED: no best checkpoint was published, so this cell "
+            "contributes nothing to the factorial. Exiting NON-ZERO so SLURM "
+            "records FAILED rather than COMPLETED.")
 
     print(f"Training complete!")
     print(f"Model saved: {model_path}")

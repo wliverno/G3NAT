@@ -100,3 +100,111 @@ def test_dos_metric_is_not_attributed_to_the_ldos_weight():
         check_selection_metric_trained(_args(loss_b=0.0, loss_c=0.0), 'val_dos',
                                        source='x.pth')
     assert 'loss_c=0' in str(e.value)
+
+
+# ------------------------------------------ campaign v3: weights, not a metric name
+
+def test_v3_style_weights_still_trigger_the_guard():
+    """The v3 selection metric names are not in _METRIC_TERM_WEIGHTS. Before the
+    weights-first lookup they made this guard a no-op for every campaign run."""
+    args = {'loss_a': 1.0, 'loss_b': 0.0, 'loss_c': 0.0, 'n_orb': 1,
+            'selection_weights': {'val_transmission': 1.0, 'val_dos': 1.0}}
+    with pytest.raises(ValueError) as e:
+        check_selection_metric_trained(args, 'dos*1+transmission*1', source='x.pth')
+    assert 'loss_c=0' in str(e.value)
+
+
+def test_v3_weights_that_match_the_loss_are_accepted():
+    args = {'loss_a': 1.0, 'loss_b': 0.0, 'loss_c': 0.0, 'n_orb': 1,
+            'selection_weights': {'val_transmission': 1.0}}
+    check_selection_metric_trained(args, 'transmission*1', source='x.pth')
+
+
+def test_every_arm_the_campaign_runs_passes_its_own_resolved_weights():
+    """End to end against the real resolver: the four supervision arms must each
+    be accepted when selected on what resolve_selection_metric gives them."""
+    from g3nat.training.selection import resolve_selection_metric
+
+    for loss_a, loss_b, loss_c in [(1.0, 0.0, 1.0),    # DOS+T
+                                   (1.0, 0.5, 1.0),    # LDOS+DOS+T
+                                   (1.0, 1.0, 1.0),    # LDOS+T
+                                   (1.0, 0.0, 0.0)]:   # T only
+        name, weights = resolve_selection_metric(loss_a, loss_b, loss_c)
+        args = {'loss_a': loss_a, 'loss_b': loss_b, 'loss_c': loss_c, 'n_orb': 2,
+                'selection_weights': weights}
+        check_selection_metric_trained(args, name, source='x.pth')
+
+
+def test_an_ldos_arm_selected_on_dos_is_refused_by_the_weights_path():
+    """THE LDOS+T ARM: loss_b=1 AND loss_c=1.
+
+    DOS is trained with weight c*(1-b), which is 0 here, so a recorded val_dos
+    term is the defect. But loss_c is 1, so a guard that judges val_dos on
+    loss_c ALONE sails straight past it -- and LDOS+T at n_orb=2 is the arm
+    campaign v3 newly promotes and has never run before.
+
+    This fixture used to set loss_c=0.0 while its docstring named loss_b=1 as the
+    mechanism, so it passed on the T-only mechanism instead and left the arm it
+    is named for entirely uncovered.
+    """
+    args = {'loss_a': 1.0, 'loss_b': 1.0, 'loss_c': 1.0, 'n_orb': 2,
+            'selection_weights': {'val_transmission': 1.0, 'val_dos': 1.0,
+                                  'val_ldos_residue': 1.0}}
+    with pytest.raises(ValueError) as e:
+        check_selection_metric_trained(args, 'dos*1+ldos*1+transmission*1',
+                                       source='x.pth')
+    assert 'DOS' in str(e.value)
+    assert 'loss_b' in str(e.value), \
+        'the message must name loss_b=1 as what zeroes the DOS half'
+
+
+def test_an_ldos_term_under_loss_c_zero_is_refused_by_the_weights_path():
+    """The mirror hole. LDOS is trained with weight c*b, so at c=0 it is untrained
+    no matter what b is -- but loss_b alone is 1 here, so a guard judging
+    val_ldos_* on loss_b ALONE would pass it. Both terms are the PRODUCT."""
+    args = {'loss_a': 1.0, 'loss_b': 1.0, 'loss_c': 0.0, 'n_orb': 2,
+            'selection_weights': {'val_transmission': 1.0,
+                                  'val_ldos_residue': 1.0}}
+    with pytest.raises(ValueError) as e:
+        check_selection_metric_trained(args, 'ldos*1+transmission*1',
+                                       source='x.pth')
+    assert 'LDOS' in str(e.value)
+    assert 'loss_c=0' in str(e.value)
+
+
+def test_recorded_weights_override_a_stale_metric_name():
+    """A checkpoint whose NAME is the old fixed metric but whose recorded weights
+    say transmission-only must be judged on the weights."""
+    args = {'loss_a': 1.0, 'loss_b': 0.0, 'loss_c': 0.0, 'n_orb': 1,
+            'selection_weights': {'val_transmission': 1.0}}
+    check_selection_metric_trained(args, SEL, source='x.pth')
+
+
+# --------------------------------------- legacy name-map path: same hole, one level over
+
+
+def test_legacy_dos_metric_with_dos_untrained_via_loss_b_is_refused():
+    """A pre-v3 checkpoint (no `selection_weights`) at the LDOS+T arm
+    (loss_b=1, loss_c=1) has DOS untrained via c*(1-b)=0, but is selected on
+    'val_dos_t_unweighted'. The legacy name map used to judge DOS on loss_c
+    alone (sees 1.0, does not raise) -- the same hole the recorded-weights path
+    closed in _KEY_TO_FACTORS, left open here one level over. There are 12 real
+    campaign-v2 checkpoints at exactly this (loss_a, loss_b, loss_c)."""
+    with pytest.raises(ValueError) as e:
+        check_selection_metric_trained(_args(loss_b=1.0, loss_c=1.0), SEL,
+                                       source='v2_ldos_t.pth')
+    msg = str(e.value)
+    assert 'DOS' in msg
+    assert 'loss_b' in msg, 'message must identify loss_b as what zeroes the DOS half'
+
+
+def test_legacy_ldos_metric_with_ldos_untrained_via_loss_c_is_refused():
+    """Mirror of the above: a pre-v3 checkpoint with loss_b=1, loss_c=0 has LDOS
+    untrained (c*b=0 whatever b is), selected on 'val_ldos_residue'. The legacy
+    map used to judge LDOS on loss_b alone (sees 1.0, does not raise)."""
+    with pytest.raises(ValueError) as e:
+        check_selection_metric_trained(_args(loss_b=1.0, loss_c=0.0),
+                                       'val_ldos_residue', source='v2_ldos.pth')
+    msg = str(e.value)
+    assert 'LDOS' in msg
+    assert 'loss_c=0' in msg
