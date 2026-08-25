@@ -11,6 +11,7 @@ import pathlib
 import pytest
 
 TRAIN_PY = pathlib.Path(__file__).resolve().parents[2] / 'scripts' / 'train.py'
+CALLBACKS_PY = pathlib.Path(__file__).resolve().parents[2] / 'g3nat' / 'training' / 'callbacks.py'
 
 
 def _argparse_kwargs(flag):
@@ -44,3 +45,53 @@ def test_init_seed_is_written_into_the_checkpoint():
     assert "'init_seed': args.init_seed" in src, (
         "checkpoint payload must record init_seed so a run can be matched to "
         "the campaign's three fixed seeds after the fact")
+
+
+def _dict_literals_with_key(source_path, key):
+    """Every ast.Dict literal anywhere in `source_path` that has `key` among
+    its (string-constant) keys."""
+    tree = ast.parse(source_path.read_text())
+    found = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Dict):
+            continue
+        keys = [k.value for k in node.keys
+                if isinstance(k, ast.Constant) and isinstance(k.value, str)]
+        if key in keys:
+            found.append(node)
+    return found
+
+
+def _dict_has_key(dict_node, key):
+    return any(isinstance(k, ast.Constant) and k.value == key for k in dict_node.keys)
+
+
+def test_every_energy_grid_checkpoint_in_train_py_carries_init_seed():
+    """Every checkpoint payload in train.py -- not just the one substring
+    match above -- must carry init_seed. Catches a regression that adds a
+    new payload, or drops the key from one of the existing three, which the
+    plain substring test above cannot see (it only proves the string occurs
+    at least once, anywhere, including in a comment)."""
+    literals = _dict_literals_with_key(TRAIN_PY, 'energy_grid')
+    assert len(literals) >= 3, (
+        f"expected at least 3 checkpoint payload dict literals containing "
+        f"'energy_grid' in train.py, found {len(literals)} -- the checkpoint "
+        f"inventory this test protects may have shrunk")
+    missing = [i for i, d in enumerate(literals) if not _dict_has_key(d, 'init_seed')]
+    assert not missing, (
+        f"checkpoint payload(s) at index {missing} of {len(literals)} found "
+        f"in train.py contain 'energy_grid' but not 'init_seed'")
+
+
+def test_callbacks_save_checkpoint_carries_init_seed():
+    """save_checkpoint() in g3nat/training/callbacks.py writes
+    checkpoint_latest.pth every epoch -- it is a checkpoint type distinct
+    from the three in train.py and must carry init_seed too."""
+    literals = _dict_literals_with_key(CALLBACKS_PY, 'energy_grid')
+    assert len(literals) >= 1, (
+        "expected at least 1 checkpoint payload dict literal containing "
+        "'energy_grid' in callbacks.py (save_checkpoint's payload), found none")
+    missing = [i for i, d in enumerate(literals) if not _dict_has_key(d, 'init_seed')]
+    assert not missing, (
+        f"checkpoint payload(s) at index {missing} of {len(literals)} found "
+        f"in callbacks.py contain 'energy_grid' but not 'init_seed'")

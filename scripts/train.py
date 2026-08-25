@@ -515,7 +515,7 @@ def main():
         save_checkpoint(model, opt, epoch, train_losses, val_losses,
                        vars(args), energy_grid,
                        os.path.join(args.checkpoint_dir, 'checkpoint_latest.pth'),
-                       metric_history=metric_history)
+                       metric_history=metric_history, init_seed=args.init_seed)
         # Save the in-memory BEST-EPOCH weights the trainer handed us, whenever they beat
         # what has already been written to disk. best_state['value'] is the unweighted
         # metric val_dos_t_unweighted at best_state['epoch']; best_val['value'] tracks the

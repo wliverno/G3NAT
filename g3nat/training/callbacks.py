@@ -12,7 +12,8 @@ from typing import List, Dict, Optional
 def save_checkpoint(model: nn.Module, optimizer: torch.optim.Optimizer, epoch: int,
                    train_losses: List[float], val_losses: List[float], args: Dict,
                    energy_grid: np.ndarray, checkpoint_path: str,
-                   metric_history: Optional[List[Dict[str, float]]] = None):
+                   metric_history: Optional[List[Dict[str, float]]] = None,
+                   init_seed: Optional[int] = None):
     """Save training checkpoint.
 
     metric_history is optional and backward compatible: existing callers that
@@ -20,6 +21,13 @@ def save_checkpoint(model: nn.Module, optimizer: torch.optim.Optimizer, epoch: i
     is written to the checkpoint dict (no 'metric_history' key at all, rather
     than a key holding None) -- so a resume read that guards with .get()
     behaves exactly as it did before this parameter existed.
+
+    init_seed is written unconditionally (unlike metric_history) so every
+    checkpoint written by this function carries the key, even when a caller
+    (e.g. a test) omits it and the value is None. Production callers must
+    pass the campaign's required --init_seed here explicitly -- it is not
+    read out of `args`, so the function's signature states exactly what it
+    depends on.
     """
     checkpoint = {
         'epoch': epoch,
@@ -28,6 +36,7 @@ def save_checkpoint(model: nn.Module, optimizer: torch.optim.Optimizer, epoch: i
         'train_losses': train_losses,
         'val_losses': val_losses,
         'args': args,
+        'init_seed': init_seed,
         'energy_grid': energy_grid,
         'timestamp': time.time()
     }
