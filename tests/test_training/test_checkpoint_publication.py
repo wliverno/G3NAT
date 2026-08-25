@@ -147,3 +147,79 @@ def test_metric_history_carries_the_nonfinite_selection_counter():
     trainer._validate_epoch([_B()], 0)
     trainer._validate_epoch([_B()], 1)
     assert trainer.metric_history[-1]['nan_selection_metric_total'] == 2.0
+
+
+# ------------------- Ruling B: the requeue fallback must use the RUN'S criterion
+
+def _ldos_t_history():
+    """LDOS+T (loss_a=1, loss_b=1, loss_c=1): the run's own criterion is T+LDOS.
+
+    Built so the two criteria disagree AND the old one is the SMALLER of the two,
+    which is the dangerous direction: a bar seeded at 0.60 is stricter than
+    anything this run can reach, so checkpoint_best.pth would never be written
+    again for the rest of the run.
+    """
+    return [{'val_transmission': 0.50, 'val_dos': 0.10, 'val_ldos_residue': 0.20,
+             'val_dos_t_unweighted': 0.60},
+            {'val_transmission': 0.40, 'val_dos': 0.90, 'val_ldos_residue': 0.90,
+             'val_dos_t_unweighted': 1.30}]
+
+
+def test_ldos_arm_fallback_is_seeded_from_its_own_objective_not_dos_t(tmp_path):
+    """No best checkpoint on disk -- the path a run preempted before its first
+    best write actually lands on. These runs are preemptible, so it is live."""
+    from g3nat.training.selection import resolve_selection_metric
+
+    _name, weights = resolve_selection_metric(1.0, 1.0, 1.0)
+    history = _ldos_t_history()
+    seeded = train_script.seed_best_value(str(tmp_path), history,
+                                          selection_weights=weights)
+    assert seeded == 0.70, (
+        "seeded from val_dos_t_unweighted (0.60), a bar this run's own T+LDOS "
+        "objective can never beat -- no best checkpoint for the rest of the run")
+    assert min(m['val_dos_t_unweighted'] for m in history) == 0.60, \
+        'fixture is pointless unless the two criteria disagree'
+
+
+def test_t_only_fallback_ignores_the_untrained_dos_term(tmp_path):
+    from g3nat.training.selection import resolve_selection_metric
+
+    _name, weights = resolve_selection_metric(1.0, 0.0, 0.0)
+    history = [{'val_transmission': 0.90, 'val_dos': 0.10,
+                'val_ldos_residue': float('nan'), 'val_dos_t_unweighted': 1.00},
+               {'val_transmission': 0.40, 'val_dos': 0.80,
+                'val_ldos_residue': float('nan'), 'val_dos_t_unweighted': 1.20}]
+    assert train_script.seed_best_value(str(tmp_path), history,
+                                        selection_weights=weights) == 0.40, \
+        'a T-only run must not have its resume bar set by an untrained DOS term'
+
+
+def test_fallback_skips_entries_missing_a_contributing_term(tmp_path):
+    """Pre-v3 histories do not carry every key. A resume must not crash on them."""
+    from g3nat.training.selection import resolve_selection_metric
+
+    _name, weights = resolve_selection_metric(1.0, 1.0, 1.0)
+    history = [{'val_transmission': 0.5},                       # no LDOS key
+               {'val_transmission': 0.4, 'val_ldos_residue': None},
+               {'val_transmission': 0.4, 'val_ldos_residue': 0.3}]
+    assert train_script.seed_best_value(str(tmp_path), history,
+                                        selection_weights=weights) == 0.70
+
+
+def test_the_resume_call_site_passes_the_runs_resolved_weights():
+    """seed_best_value defaults to the legacy criterion when given no weights, so
+    a call site that forgets them is silently wrong -- exactly the defect this
+    fixes. Pin that main() passes them."""
+    import ast
+
+    path = os.path.join(os.path.dirname(__file__), '..', '..', 'scripts', 'train.py')
+    with open(path) as fh:
+        tree = ast.parse(fh.read())
+    calls = [n for n in ast.walk(tree)
+             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+             and n.func.id == 'seed_best_value']
+    assert calls, 'seed_best_value is never called'
+    for call in calls:
+        passed = [kw.arg for kw in call.keywords] + ['_pos'] * len(call.args)
+        assert 'selection_weights' in passed or len(call.args) >= 3, \
+            'seed_best_value called without the run\'s resolved selection weights'

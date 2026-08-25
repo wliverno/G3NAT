@@ -164,6 +164,22 @@ _METRIC_TERM_WEIGHTS = {
 }
 
 
+#: The same mapping, keyed by the metric_history KEY rather than by a composite
+#: metric name. Campaign-v3 checkpoints record `selection_weights` -- an explicit
+#: {metric key: weight} dict resolved from the run's own loss weights
+#: (g3nat/training/selection.py) -- so the check no longer has to recognise a name.
+#: `_KEY_TO_TERM` exists only so the error message keeps naming the physical term
+#: ('DOS') rather than the metric key ('val_dos').
+_KEY_TO_WEIGHT = {'val_transmission': 'loss_a',
+                  'val_dos': 'loss_c',
+                  'val_ldos_residue': 'loss_b',
+                  'val_ldos_base_only': 'loss_b'}
+_KEY_TO_TERM = {'val_transmission': 'transmission',
+                'val_dos': 'DOS',
+                'val_ldos_residue': 'LDOS',
+                'val_ldos_base_only': 'LDOS'}
+
+
 def check_selection_metric_trained(args: dict, selection_metric, source: str = '') -> None:
     """Raise if the checkpoint was selected on a metric containing an UNTRAINED term.
 
@@ -189,7 +205,16 @@ def check_selection_metric_trained(args: dict, selection_metric, source: str = '
     """
     if not selection_metric or not isinstance(args, dict):
         return
-    terms = _METRIC_TERM_WEIGHTS.get(str(selection_metric))
+    # PREFER THE RECORDED WEIGHTS. v3 checkpoints carry `selection_weights`, which
+    # says exactly what was optimised; the name map only covers the fixed v2 names
+    # and returns early on anything else, which would silently disable this guard
+    # for every v3 run. The map stays for checkpoints written before v3.
+    recorded = args.get('selection_weights')
+    if recorded:
+        terms = {_KEY_TO_TERM[k]: _KEY_TO_WEIGHT[k] for k in recorded
+                 if k in _KEY_TO_WEIGHT}
+    else:
+        terms = _METRIC_TERM_WEIGHTS.get(str(selection_metric))
     if terms is None:
         # Unknown metric: unknown is not known-bad. Adding a metric to
         # metric_history without adding it here silently disables the check,
@@ -242,8 +267,15 @@ def load_trained_model(model_path: str, device: str = 'auto',
     energy_grid = checkpoint.get('energy_grid', np.linspace(-1, 1, 201))
 
     if not allow_untrained_selection:
+        # `selection_weights` lives at checkpoint TOP LEVEL, but the guard reads it
+        # out of the args dict. Merge into a SHALLOW COPY -- mutating `args` would
+        # write a training-provenance key into the dict that is handed to the model
+        # constructor below and re-saved by anything that round-trips it.
+        _guard_args = dict(args)
+        if checkpoint.get('selection_weights') is not None:
+            _guard_args['selection_weights'] = checkpoint['selection_weights']
         check_selection_metric_trained(
-            args, checkpoint.get('selection_metric'), source=model_path)
+            _guard_args, checkpoint.get('selection_metric'), source=model_path)
 
     # Detect model type from state dict keys
     state_dict = checkpoint['model_state_dict']

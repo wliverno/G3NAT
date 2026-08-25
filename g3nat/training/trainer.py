@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Callable
 from torch_geometric.loader import DataLoader
 
 from .config import TrainingConfig
+from .selection import resolve_selection_metric, selection_value
 
 
 def _center(x, dims):
@@ -70,6 +71,12 @@ class Trainer:
         self.model = model
         self.config = config or TrainingConfig.from_kwargs(**kwargs)
 
+        # Resolved once at construction. The name is written into the checkpoint so a
+        # consumer can verify what was actually minimised.
+        self._selection_name, self._selection_weights = resolve_selection_metric(
+            self.config.loss_a, self.config.loss_b, self.config.loss_c)
+        print(f'Trainer selecting best weights on: {self._selection_name}')
+
         # Set device
         if self.config.device == 'auto':
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -99,16 +106,18 @@ class Trainer:
         self.val_losses = []
         self.metric_history: List[Dict[str, float]] = []
         self.nan_skipped_total = 0
-        # Cumulative count of epochs whose SELECTION metric (val_dos_t_unweighted)
-        # came back non-finite. A run in which this equals the epoch count never
-        # updates best_unweighted, so no checkpoint_best.pth is ever written --
+        # Cumulative count of epochs whose SELECTION metric (self._selection_name,
+        # resolved from this run's own loss weights) came back non-finite. A run
+        # in which this equals the epoch count never updates best_unweighted, so no checkpoint_best.pth is ever written --
         # the silent failure documented in private notes sec. 16. Counting
         # it per epoch in metric_history makes that visible from the artifacts
         # alone, instead of only from an absent file.
         self.nan_selection_metric_total = 0
 
-        # Best weights by the UNWEIGHTED metric (val_dos_t_unweighted), held in
-        # memory and refreshed EVERY epoch. Two separate problems this fixes:
+        # Best weights by the run's OWN validation objective (self._selection_name;
+        # the attribute name predates it and is kept so checkpoint payloads and
+        # callbacks do not have to be renamed). Held in memory and refreshed EVERY
+        # epoch. Three separate problems this fixes:
         #   1. Selection used the loss_b-weighted 'total', which is scaled
         #      differently in every supervision cell, so "best" was not
         #      comparable across arms.
@@ -118,6 +127,9 @@ class Trainer:
         #      many epochs. The snapshot below is a detached CPU clone taken at
         #      the exact epoch of the optimum, and it -- not the live model --
         #      is what gets serialized as checkpoint_best.
+        #   3. Selection was on the FIXED metric val_dos_t_unweighted for every
+        #      arm, including arms that never train DOS (loss_c=0, or loss_b=1
+        #      which zeroes the DOS half). See g3nat/training/selection.py.
         self.best_unweighted = {'value': float('inf'), 'epoch': -1, 'state_dict': None}
 
     def fit(
@@ -140,7 +152,8 @@ class Trainer:
                 a callback that forwards it to save_checkpoint() survive a preemption
                 without losing per-epoch LDOS/DOS/transmission history. Also passed
                 best_state=self.best_unweighted, the in-memory CPU snapshot of the
-                weights at the best val_dos_t_unweighted epoch, so a callback can
+                weights at the epoch that minimises this run's own objective
+                (see g3nat/training/selection.py), so a callback can
                 serialize THOSE weights rather than the live model's current ones.
             progress_callback: Optional callback for tracking progress
             start_epoch: Starting epoch for resumption (default: 0)
@@ -192,11 +205,13 @@ class Trainer:
             val_loss = self._validate_epoch(val_loader, epoch)
             self.val_losses.append(val_loss)
 
-            # Track the best UNWEIGHTED-metric weights every epoch, before any
-            # user callback can mutate the model. `metric == metric` is the NaN
+            # Track the best-metric weights every epoch, before any user callback
+            # can mutate the model. The criterion is the run's OWN objective, not a
+            # fixed metric. A run that never trains DOS must never be selected on
+            # DOS -- see g3nat/training/selection.py. `metric == metric` is the NaN
             # check: a nan metric never wins, so a poisoned epoch cannot
             # overwrite a good snapshot.
-            metric = self.metric_history[-1].get('val_dos_t_unweighted', float('nan'))
+            metric = selection_value(self.metric_history[-1], self._selection_weights)
             if metric == metric and metric < self.best_unweighted['value'] - 1e-12:
                 self.best_unweighted = {
                     'value': float(metric),
@@ -506,13 +521,6 @@ class Trainer:
 
         val_loss /= len(val_loader)
 
-        # The SELECTION metric for best-weight tracking. Count it here, before the
-        # entry is built, so metric_history carries the running total of epochs on
-        # which selection could not happen at all.
-        selection_metric = agg_unweighted / n_batches
-        if not (selection_metric == selection_metric and abs(selection_metric) != float('inf')):
-            self.nan_selection_metric_total += 1
-
         # Key the measured LDOS agreement under whichever aggregation this run
         # is actually configured against (self.config.ldos_target); the other
         # key is always nan. Both keys are always present so the schema is
@@ -571,6 +579,18 @@ class Trainer:
             # Equal to the epoch count => no best checkpoint was ever written.
             'nan_selection_metric_total': float(self.nan_selection_metric_total),
         }
+
+        # The SELECTION metric for best-weight tracking, computed from the entry
+        # itself so this counts EXACTLY the quantity Trainer.fit selects on -- the
+        # run's own objective, not the fixed val_dos_t_unweighted. It has to come
+        # after the entry dict, because the entry is what carries the terms. The
+        # counter still INCLUDES the current epoch (a run whose count equals its
+        # epoch count never wrote a best checkpoint), so the key is refreshed below.
+        selection_metric = selection_value(entry, self._selection_weights)
+        if not (selection_metric == selection_metric and abs(selection_metric) != float('inf')):
+            self.nan_selection_metric_total += 1
+            entry['nan_selection_metric_total'] = float(self.nan_selection_metric_total)
+
         if set(entry.keys()) != set(EXPECTED_METRIC_KEYS):
             missing = set(EXPECTED_METRIC_KEYS) - set(entry.keys())
             extra = set(entry.keys()) - set(EXPECTED_METRIC_KEYS)

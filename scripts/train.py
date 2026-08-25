@@ -18,6 +18,7 @@ from g3nat.data import (generate_tight_binding_data, load_pickle_directory,
 from g3nat.training import (train_model, TrainingConfig, LengthBucketBatchSampler,
                             set_init_seed)
 from g3nat.training.callbacks import save_checkpoint, save_progress_file
+from g3nat.training.selection import resolve_selection_metric, selection_value
 from g3nat.utils import setup_device
 
 from torch_geometric.loader import DataLoader
@@ -246,7 +247,15 @@ def maybe_clear_stale_best(checkpoint_dir: str) -> bool:
     return False
 
 
-def seed_best_value(checkpoint_dir: str, metric_history) -> float:
+#: The criterion every run used before campaign v3, kept ONLY so that a caller
+#: that passes no weights reproduces the old fallback exactly (the pre-v3 tests
+#: for `seed_best_value`). Production callers must pass the run's resolved
+#: weights -- see the call site in main().
+_LEGACY_SELECTION_WEIGHTS = {'val_dos_t_unweighted': 1.0}
+
+
+def seed_best_value(checkpoint_dir: str, metric_history,
+                    selection_weights=None) -> float:
     """The running best selection value to carry across a requeue.
 
     Prefer the on-disk checkpoint_best.pth's OWN 'selection_value'. The history
@@ -258,7 +267,16 @@ def seed_best_value(checkpoint_dir: str, metric_history) -> float:
     the run finishes carrying weights it already beat.
 
     Falls back to the history minimum only when the best checkpoint is absent or
-    predates the 'selection_value' key.
+    predates the 'selection_value' key. That fallback is a REAL path here: these
+    runs are preemptible, so a run killed before it ever wrote a best checkpoint
+    lands on it. The fallback therefore has to use the SAME criterion the trainer
+    selects on (`selection_weights`, from this run's loss weights). Using the old
+    fixed val_dos_t_unweighted would set a bar on a different quantity: for LDOS+T
+    the run's own T+LDOS can EXCEED T+DOS, so the bar would be too strict and
+    checkpoint_best.pth would never be written again for the rest of the run.
+
+    An entry missing any contributing key is skipped rather than crashing the
+    resume -- pre-v3 histories do not carry every term.
     """
     best_path = os.path.join(checkpoint_dir, 'checkpoint_best.pth')
     if os.path.exists(best_path):
@@ -272,8 +290,15 @@ def seed_best_value(checkpoint_dir: str, metric_history) -> float:
             sv = bc.get('selection_value')
             if sv is not None and float(sv) == float(sv):
                 return float(sv)
-    values = [m.get('val_dos_t_unweighted') for m in (metric_history or [])]
-    values = [float(v) for v in values if v is not None and v == v]
+    weights = selection_weights or _LEGACY_SELECTION_WEIGHTS
+    values = []
+    for m in (metric_history or []):
+        try:
+            v = selection_value(m, weights)
+        except (KeyError, TypeError, ValueError):
+            continue
+        if v == v and abs(v) != float('inf'):
+            values.append(float(v))
     return min(values) if values else float('inf')
 
 
@@ -508,14 +533,21 @@ def main():
     # can invert an ordering (it inverted the num_layers trend). See docs/metrics.md.
     #
     # Granularity: NO LONGER a rounding to the checkpoint cadence. As of 2026-08-16 the
-    # Trainer keeps the best weights in memory, refreshed every epoch on the UNWEIGHTED
-    # metric val_dos_t_unweighted, and hands them here as `best_state`. So the serialized
+    # Trainer keeps the best weights in memory, refreshed every epoch on the run's OWN
+    # validation objective (g3nat/training/selection.py; before campaign v3 this was the
+    # fixed metric val_dos_t_unweighted), and hands them here as `best_state`. So the serialized
     # "best" weights are exactly the ones from the optimum epoch, and the selection
     # criterion no longer depends on loss_b (the weighted 'total' is scaled differently
     # in every supervision cell, which made "best" incomparable across arms).
     # NOTE: seeded from resume_val_losses AFTER the resume block below, which is where
     # that variable is defined. Do not move this initialisation down into the callback.
     best_val = {'value': float('inf')}
+
+    # Resolved once, from this run's loss weights, and written into every
+    # checkpoint so a consumer can verify what selection actually optimised.
+    _sel_name, _sel_weights = resolve_selection_metric(
+        args.loss_a, args.loss_b, args.loss_c)
+    print(f'Selecting best checkpoint on: {_sel_name}')
 
     def checkpoint_cb(model, opt, epoch, train_losses, val_losses, metric_history=None,
                       best_state=None):
@@ -524,8 +556,8 @@ def main():
                        os.path.join(args.checkpoint_dir, 'checkpoint_latest.pth'),
                        metric_history=metric_history, init_seed=args.init_seed)
         # Save the in-memory BEST-EPOCH weights the trainer handed us, whenever they beat
-        # what has already been written to disk. best_state['value'] is the unweighted
-        # metric val_dos_t_unweighted at best_state['epoch']; best_val['value'] tracks the
+        # what has already been written to disk. best_state['value'] is this run's own
+        # selection metric (_sel_name) at best_state['epoch']; best_val['value'] tracks the
         # last value actually serialized here, so this single test is the whole condition.
         #
         # HISTORY (see private notes sec. 16). Two successive defects lived here:
@@ -537,7 +569,7 @@ def main():
         # that fix, the weights written were the LIVE model's, i.e. the checkpointed
         # epoch's, not the optimum's, and the criterion was the loss_b-weighted total.
         # Both are gone: the trainer snapshots a detached CPU copy of the weights at the
-        # exact epoch that minimises the unweighted metric, and that snapshot is what is
+        # exact epoch that minimises this run's own objective, and that snapshot is what is
         # serialized below. 'saved_at_epoch' is therefore the true optimum epoch.
         if best_state and best_state.get('state_dict') is not None \
                 and best_state['value'] < best_val['value'] - 1e-12:
@@ -553,7 +585,8 @@ def main():
                 'init_seed': args.init_seed,
                 'energy_grid': energy_grid,
                 'metric_history': metric_history,
-                'selection_metric': 'val_dos_t_unweighted',
+                'selection_metric': _sel_name,
+                'selection_weights': _sel_weights,
                 'selection_value': float(best_state['value']),
                 'timestamp': time.time(),
             }
@@ -619,9 +652,11 @@ def main():
         print(f"Resuming from epoch {start_epoch}")
         # Carry the running best across a requeue, or the first post-resume checkpoint
         # would overwrite a genuinely better earlier one. Seed it from the SAME quantity
-        # the callback now compares against -- the unweighted metric, not the weighted
-        # val loss, which is a different scale entirely and would make the comparison
-        # meaningless. A checkpoint written before metric_history existed carries no such
+        # the callback now compares against -- this run's own selection metric
+        # (_sel_weights), not the weighted val loss, which is a different scale entirely
+        # and would make the comparison meaningless. Passing _sel_weights is REQUIRED:
+        # seed_best_value's history fallback otherwise defaults to the pre-v3 fixed
+        # criterion, which for LDOS+T sets a bar the run's own objective cannot beat. A checkpoint written before metric_history existed carries no such
         # values, in which case the running best restarts at inf: the first post-resume
         # improvement overwrites the old best. That is the safe direction (the trainer's
         # in-memory best is empty after a restart anyway, so nothing better is lost).
@@ -629,9 +664,10 @@ def main():
         # The value comes from the on-disk best checkpoint's own 'selection_value' when
         # present, NOT from the history minimum -- see seed_best_value's docstring for
         # why those differ after a kill between the two writes.
-        best_val['value'] = seed_best_value(args.checkpoint_dir, resume_metric_history)
+        best_val['value'] = seed_best_value(args.checkpoint_dir, resume_metric_history,
+                                            selection_weights=_sel_weights)
         if best_val['value'] != float('inf'):
-            print(f"Resuming best val_dos_t_unweighted: {best_val['value']:.4f}")
+            print(f"Resuming best {_sel_name}: {best_val['value']:.4f}")
 
     print("Training...")
     metric_history = []
@@ -695,9 +731,16 @@ def main():
             'best_val': float(np.nanmin(val_losses)),
             'best_val_epoch': int(np.nanargmin(val_losses)),
             'saved_at_epoch': bc.get('epoch'),
-            # What the published weights were actually selected on -- the unweighted
-            # metric, not the loss_b-weighted 'best_val' above.
+            # What the published weights were actually selected on -- this run's own
+            # validation objective, not the loss_b-weighted 'best_val' above.
             'selection_metric': bc.get('selection_metric'),
+            # Carried through as well as the NAME. load_trained_model's
+            # selection-validity guard prefers the recorded weights, and this
+            # published file is what it is normally pointed at -- without the key
+            # here the guard falls back to a name map that contains none of the
+            # v3 names and silently returns, which is the exact bypass the guard
+            # exists to prevent.
+            'selection_weights': bc.get('selection_weights'),
             'selection_value': bc.get('selection_value'),
         }, best_path)
 

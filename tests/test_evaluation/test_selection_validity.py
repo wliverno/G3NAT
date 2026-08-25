@@ -100,3 +100,56 @@ def test_dos_metric_is_not_attributed_to_the_ldos_weight():
         check_selection_metric_trained(_args(loss_b=0.0, loss_c=0.0), 'val_dos',
                                        source='x.pth')
     assert 'loss_c=0' in str(e.value)
+
+
+# ------------------------------------------ campaign v3: weights, not a metric name
+
+def test_v3_style_weights_still_trigger_the_guard():
+    """The v3 selection metric names are not in _METRIC_TERM_WEIGHTS. Before the
+    weights-first lookup they made this guard a no-op for every campaign run."""
+    args = {'loss_a': 1.0, 'loss_b': 0.0, 'loss_c': 0.0, 'n_orb': 1,
+            'selection_weights': {'val_transmission': 1.0, 'val_dos': 1.0}}
+    with pytest.raises(ValueError) as e:
+        check_selection_metric_trained(args, 'dos*1+transmission*1', source='x.pth')
+    assert 'loss_c=0' in str(e.value)
+
+
+def test_v3_weights_that_match_the_loss_are_accepted():
+    args = {'loss_a': 1.0, 'loss_b': 0.0, 'loss_c': 0.0, 'n_orb': 1,
+            'selection_weights': {'val_transmission': 1.0}}
+    check_selection_metric_trained(args, 'transmission*1', source='x.pth')
+
+
+def test_every_arm_the_campaign_runs_passes_its_own_resolved_weights():
+    """End to end against the real resolver: the four supervision arms must each
+    be accepted when selected on what resolve_selection_metric gives them."""
+    from g3nat.training.selection import resolve_selection_metric
+
+    for loss_a, loss_b, loss_c in [(1.0, 0.0, 1.0),    # DOS+T
+                                   (1.0, 0.5, 1.0),    # LDOS+DOS+T
+                                   (1.0, 1.0, 1.0),    # LDOS+T
+                                   (1.0, 0.0, 0.0)]:   # T only
+        name, weights = resolve_selection_metric(loss_a, loss_b, loss_c)
+        args = {'loss_a': loss_a, 'loss_b': loss_b, 'loss_c': loss_c, 'n_orb': 2,
+                'selection_weights': weights}
+        check_selection_metric_trained(args, name, source='x.pth')
+
+
+def test_an_ldos_arm_selected_on_dos_is_refused_by_the_weights_path():
+    """loss_b=1 zeroes the DOS half, so a recorded val_dos term is the defect."""
+    args = {'loss_a': 1.0, 'loss_b': 1.0, 'loss_c': 0.0, 'n_orb': 2,
+            'selection_weights': {'val_transmission': 1.0, 'val_dos': 1.0,
+                                  'val_ldos_residue': 1.0}}
+    with pytest.raises(ValueError) as e:
+        check_selection_metric_trained(args, 'dos*1+ldos*1+transmission*1',
+                                       source='x.pth')
+    assert 'loss_c=0' in str(e.value)
+    assert 'DOS' in str(e.value)
+
+
+def test_recorded_weights_override_a_stale_metric_name():
+    """A checkpoint whose NAME is the old fixed metric but whose recorded weights
+    say transmission-only must be judged on the weights."""
+    args = {'loss_a': 1.0, 'loss_b': 0.0, 'loss_c': 0.0, 'n_orb': 1,
+            'selection_weights': {'val_transmission': 1.0}}
+    check_selection_metric_trained(args, SEL, source='x.pth')
