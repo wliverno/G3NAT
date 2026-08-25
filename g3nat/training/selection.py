@@ -34,7 +34,12 @@ from typing import Dict, Tuple
 
 TRANSMISSION = 'val_transmission'
 DOS = 'val_dos'
-LDOS = 'val_ldos_residue'
+#: NAMED FOR THE TARGET IT HOLDS. This is the 'residue' aggregation's key
+#: SPECIFICALLY, not "the LDOS key" -- `base_only` runs key off
+#: `val_ldos_base_only` instead, and resolve_selection_metric builds that key from
+#: `ldos_target` rather than reading this constant. A generic name holding a
+#: target-specific value is the shape of the bugs this branch spent the day fixing.
+LDOS_RESIDUE = 'val_ldos_residue'
 
 #: Mirrors TrainingConfig.ldos_target's allowed values, and hence which
 #: `val_ldos_*` key Trainer._validate_epoch actually fills in.

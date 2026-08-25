@@ -30,6 +30,7 @@ To use synthetic data from an approximate tight-binding hamiltonian:
 ```bash
 python scripts/train.py \
   --data_source tb \
+  --init_seed 1179027592 \
   --num_samples 2000 \
   --seq_length 8 \
   --num_energy_points 100 \
@@ -38,6 +39,10 @@ python scripts/train.py \
   --num_epochs 100 \
   --learning_rate 1e-3
 ```
+`--init_seed` is REQUIRED, not optional: an unseeded run is not reproducible, and its
+weights cannot be compared against another run's. Any integer works; the value above is one
+of the seeds used for the published runs.
+
 Outputs (the final model, and `checkpoint_latest.pth` / `checkpoint_best.pth`) are saved under
 `./outputs` and `./checkpoints`. Training itself writes no figures -- plotting is separate
 analysis tooling (private notes), run against a saved checkpoint after training finishes.
@@ -86,6 +91,7 @@ To use this data set, ensure that all pickle files are in the correct directory,
 python scripts/train.py \
     --data_source pickle \
     --data_dir /path/to/pickle/files \
+    --init_seed 1179027592 \
     --model_type hamiltonian \
     --hidden_dim 128 \
     --num_layers 4 \
@@ -119,6 +125,7 @@ Then train with geometry on:
 
 ```bash
 python scripts/train.py --data_source pickle --data_dir /path/to/pickle/files \
+    --init_seed 1179027592 \
     --model_type hamiltonian --conv_type gat --use_geometry \
     --geom_cache geom_cache/geometry.pkl
 ```

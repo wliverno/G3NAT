@@ -8,9 +8,20 @@ were saved at epoch 6 of 15,000.
 """
 import pytest
 
-from g3nat.training.selection import resolve_selection_metric, selection_value
+import g3nat.training.selection as selection
+from g3nat.training.selection import (LDOS_RESIDUE, resolve_selection_metric,
+                                      selection_value)
 
 T, D, L = 'val_transmission', 'val_dos', 'val_ldos_residue'
+
+
+def test_the_ldos_constant_is_named_for_the_target_it_holds():
+    """`LDOS` was a generic name holding a target-SPECIFIC value: the 'residue'
+    key only. `base_only` runs key off val_ldos_base_only, so anything that read
+    the old constant as "the LDOS key" was silently wrong for that target."""
+    assert LDOS_RESIDUE == 'val_ldos_residue'
+    assert not hasattr(selection, 'LDOS'), \
+        'the ambiguous generic name is back'
 
 
 def test_dos_plus_t():

@@ -420,6 +420,18 @@ def main():
             print(f"NOTE: --num_energy_points ({args.num_energy_points}) is ignored for "
                   f"pickle data; the grid comes from the files ({len(energy_grid)} points).")
 
+        # --num_samples / --seq_length / --min_length are synthetic-TB generator
+        # arguments (generate_tight_binding_data above). For pickle data the
+        # sample count and the strand lengths are whatever the directory holds,
+        # so these flags do nothing. SAY SO: a 120-run campaign sized off
+        # --num_samples would be sized off a flag with no effect.
+        _ignored_tb_flags = [f'--num_samples ({args.num_samples})',
+                             f'--seq_length ({args.seq_length})',
+                             f'--min_length ({args.min_length})']
+        print(f"NOTE: {', '.join(_ignored_tb_flags)} are ignored for pickle data; "
+              f"they size the synthetic tight-binding generator only. This run uses "
+              f"the {len(seqs)} sample(s) found in {args.data_dir}.")
+
     print(f"Loaded {len(seqs)} samples")
 
     # Optional SE(3)-invariant edge geometry (hamiltonian model only)
@@ -779,10 +791,32 @@ def main():
 
     # A run with no best checkpoint is a FAILED run, not a completed one. Say so
     # loudly instead of printing "Training complete!" and exiting 0.
+    #
+    # THE NON-ZERO EXIT IS THE POINT, not the warning text. Printing a warning and
+    # exiting 0 makes SLURM record the run COMPLETED, so `sacct` shows a full
+    # factorial while that cell published nothing. Nothing downstream counts the
+    # runs -- hand the gates 90 of 120 checkpoints and all of them report PASS --
+    # so a lost cell is invisible. The arms most exposed are exactly the ones
+    # campaign v3 introduces (LDOS+T at n_orb=2, never run before; and T only),
+    # which means cells would go missing NON-UNIFORMLY BY ARM: a silently wrong
+    # paper number with every gate green.
+    #
+    # THIS DOES NOT AFFECT REQUEUE. A preempted run is killed inside the epoch loop
+    # and never reaches this line; requeue is driven by SLURM's preemption signal
+    # and checkpoint_latest.pth, not by this exit code. checkpoint_latest.pth is
+    # deliberately NOT removed on this path either, so a failed cell can still be
+    # resumed or inspected. Do NOT "fix" this back to warn-and-exit-0.
     _no_best_warning = best_publication_warning(best_ckpt, metric_history,
                                                 selection_metric_name=_sel_name)
     if _no_best_warning is not None:
         print(_no_best_warning)
+        print(f"Model saved: {model_path}")
+        print(f"Final train loss: {train_losses[-1]:.4f}")
+        print(f"Final val loss: {val_losses[-1]:.4f}")
+        raise SystemExit(
+            "TRAINING FAILED: no best checkpoint was published, so this cell "
+            "contributes nothing to the factorial. Exiting NON-ZERO so SLURM "
+            "records FAILED rather than COMPLETED.")
 
     print(f"Training complete!")
     print(f"Model saved: {model_path}")

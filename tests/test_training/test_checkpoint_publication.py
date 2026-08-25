@@ -328,3 +328,96 @@ def test_the_weights_snapshot_epoch_follows_the_runs_own_criterion():
         % trainer.best_unweighted['epoch'])
     assert trainer.best_unweighted['value'] == 0.40
     assert trainer.best_unweighted['state_dict'] is not None
+
+
+# --------------- FINAL REVIEW, CRITICAL half 1: a failed run must EXIT NON-ZERO
+
+def _main_source_tree():
+    import ast
+    path = os.path.join(os.path.dirname(__file__), '..', '..', 'scripts', 'train.py')
+    with open(path) as fh:
+        tree = ast.parse(fh.read())
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name == 'main':
+            return ast, node
+    raise AssertionError('scripts/train.py has no main()')
+
+
+def _no_best_branch():
+    """The `if _no_best_warning is not None:` block inside main()."""
+    ast, main = _main_source_tree()
+    for node in ast.walk(main):
+        if not isinstance(node, ast.If):
+            continue
+        t = node.test
+        if (isinstance(t, ast.Compare)
+                and isinstance(t.left, ast.Name)
+                and t.left.id == '_no_best_warning'
+                and any(isinstance(op, ast.IsNot) for op in t.ops)):
+            return ast, node
+    raise AssertionError(
+        'main() no longer branches on `_no_best_warning is not None` -- the '
+        'no-best-checkpoint failure path is gone or was renamed')
+
+
+def test_a_run_with_no_best_checkpoint_exits_non_zero():
+    """THE DEFECT: the comment said "a FAILED run, not a completed one" while the
+    code printed a warning, printed "Training complete!" and exited 0, so SLURM
+    recorded COMPLETED. Nothing downstream counts the runs, so a cell that
+    published nothing is invisible and every gate still reports PASS. The arms
+    most exposed are the ones campaign v3 introduces (LDOS+T at n_orb=2, T only),
+    so cells go missing BY ARM."""
+    ast, branch = _no_best_branch()
+    raises = [n for n in ast.walk(branch) if isinstance(n, ast.Raise)]
+    assert raises, (
+        'the no-best-checkpoint branch does not raise; it warns and falls '
+        'through to "Training complete!" and exit 0')
+    exc_names = set()
+    for r in raises:
+        exc = r.exc
+        if isinstance(exc, ast.Call):
+            exc = exc.func
+        if isinstance(exc, ast.Name):
+            exc_names.add(exc.id)
+        elif isinstance(exc, ast.Attribute):
+            exc_names.add(exc.attr)
+    assert 'SystemExit' in exc_names, (
+        f'expected the branch to raise SystemExit (non-zero exit); got {exc_names}')
+
+
+def test_training_complete_is_never_printed_on_the_failed_path():
+    """A non-zero exit that still says "Training complete!" first is half the
+    defect: the operator reads the log, not the exit code."""
+    ast, branch = _no_best_branch()
+    printed = []
+    for node in ast.walk(branch):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == 'print'):
+            for a in node.args:
+                if isinstance(a, ast.Constant) and isinstance(a.value, str):
+                    printed.append(a.value)
+                elif isinstance(a, ast.JoinedStr):
+                    printed.extend(v.value for v in a.values
+                                   if isinstance(v, ast.Constant)
+                                   and isinstance(v.value, str))
+    assert not any('Training complete' in p for p in printed), \
+        f'the failure branch prints a success line: {printed}'
+    # And the branch must terminate main(), so the success block below it is
+    # unreachable on this path.
+    assert isinstance(branch.body[-1], ast.Raise), \
+        'the failure branch does not end in a raise, so execution falls through'
+
+
+def test_the_requeue_note_is_recorded_next_to_the_exit():
+    """Preempted runs are killed inside the epoch loop and never reach this line,
+    so requeue is unaffected. That has to be stated where someone would otherwise
+    "fix" the non-zero exit back to a warning."""
+    path = os.path.join(os.path.dirname(__file__), '..', '..', 'scripts', 'train.py')
+    with open(path) as fh:
+        src = fh.read()
+    head = src[:src.index('_no_best_warning = best_publication_warning')]
+    tail = head[head.rindex('# A run with no best checkpoint'):]
+    low = tail.lower()
+    assert 'requeue' in low and 'preempt' in low, (
+        'the comment above the failure exit does not explain that preempted runs '
+        'never reach it; someone will revert the exit code')

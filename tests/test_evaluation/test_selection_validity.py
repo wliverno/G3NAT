@@ -136,15 +136,40 @@ def test_every_arm_the_campaign_runs_passes_its_own_resolved_weights():
 
 
 def test_an_ldos_arm_selected_on_dos_is_refused_by_the_weights_path():
-    """loss_b=1 zeroes the DOS half, so a recorded val_dos term is the defect."""
-    args = {'loss_a': 1.0, 'loss_b': 1.0, 'loss_c': 0.0, 'n_orb': 2,
+    """THE LDOS+T ARM: loss_b=1 AND loss_c=1.
+
+    DOS is trained with weight c*(1-b), which is 0 here, so a recorded val_dos
+    term is the defect. But loss_c is 1, so a guard that judges val_dos on
+    loss_c ALONE sails straight past it -- and LDOS+T at n_orb=2 is the arm
+    campaign v3 newly promotes and has never run before.
+
+    This fixture used to set loss_c=0.0 while its docstring named loss_b=1 as the
+    mechanism, so it passed on the T-only mechanism instead and left the arm it
+    is named for entirely uncovered.
+    """
+    args = {'loss_a': 1.0, 'loss_b': 1.0, 'loss_c': 1.0, 'n_orb': 2,
             'selection_weights': {'val_transmission': 1.0, 'val_dos': 1.0,
                                   'val_ldos_residue': 1.0}}
     with pytest.raises(ValueError) as e:
         check_selection_metric_trained(args, 'dos*1+ldos*1+transmission*1',
                                        source='x.pth')
-    assert 'loss_c=0' in str(e.value)
     assert 'DOS' in str(e.value)
+    assert 'loss_b' in str(e.value), \
+        'the message must name loss_b=1 as what zeroes the DOS half'
+
+
+def test_an_ldos_term_under_loss_c_zero_is_refused_by_the_weights_path():
+    """The mirror hole. LDOS is trained with weight c*b, so at c=0 it is untrained
+    no matter what b is -- but loss_b alone is 1 here, so a guard judging
+    val_ldos_* on loss_b ALONE would pass it. Both terms are the PRODUCT."""
+    args = {'loss_a': 1.0, 'loss_b': 1.0, 'loss_c': 0.0, 'n_orb': 2,
+            'selection_weights': {'val_transmission': 1.0,
+                                  'val_ldos_residue': 1.0}}
+    with pytest.raises(ValueError) as e:
+        check_selection_metric_trained(args, 'ldos*1+transmission*1',
+                                       source='x.pth')
+    assert 'LDOS' in str(e.value)
+    assert 'loss_c=0' in str(e.value)
 
 
 def test_recorded_weights_override_a_stale_metric_name():

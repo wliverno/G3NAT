@@ -168,16 +168,28 @@ _METRIC_TERM_WEIGHTS = {
 #: metric name. Campaign-v3 checkpoints record `selection_weights` -- an explicit
 #: {metric key: weight} dict resolved from the run's own loss weights
 #: (g3nat/training/selection.py) -- so the check no longer has to recognise a name.
-#: `_KEY_TO_TERM` exists only so the error message keeps naming the physical term
-#: ('DOS') rather than the metric key ('val_dos').
-_KEY_TO_WEIGHT = {'val_transmission': 'loss_a',
-                  'val_dos': 'loss_c',
-                  'val_ldos_residue': 'loss_b',
-                  'val_ldos_base_only': 'loss_b'}
-_KEY_TO_TERM = {'val_transmission': 'transmission',
-                'val_dos': 'DOS',
-                'val_ldos_residue': 'LDOS',
-                'val_ldos_base_only': 'LDOS'}
+#: The `term` half of each entry exists only so the error message keeps naming the
+#: physical term ('DOS') rather than the metric key ('val_dos').
+#:
+#: WHAT TRAINS EACH KEY IS A PRODUCT, NOT A SINGLE WEIGHT. The loss is
+#:
+#:     L = a*T + c*[ b*LDOS + (1-b)*DOS ]
+#:
+#: so DOS is trained with weight `c*(1-b)` and LDOS with `c*b`. Judging `val_dos`
+#: on `loss_c` alone left a hole exactly on the LDOS+T arm (b=1, c=1), which
+#: campaign v3 newly promotes and which has never been run at n_orb=2: DOS is
+#: untrained there because (1-b)=0, but loss_c is 1, so a recorded `val_dos` term
+#: sailed through. The mirror hole existed for `val_ldos_*` judged on `loss_b`
+#: alone -- untrained at c=0 whatever b is.
+#:
+#: Each entry is (term, factors), where a factor is (loss weight name, is it
+#: complemented). A complemented factor contributes `(1 - w)`.
+_KEY_TO_FACTORS = {
+    'val_transmission':   ('transmission', (('loss_a', False),)),
+    'val_dos':            ('DOS',  (('loss_c', False), ('loss_b', True))),
+    'val_ldos_residue':   ('LDOS', (('loss_c', False), ('loss_b', False))),
+    'val_ldos_base_only': ('LDOS', (('loss_c', False), ('loss_b', False))),
+}
 
 
 def check_selection_metric_trained(args: dict, selection_metric, source: str = '') -> None:
@@ -201,7 +213,10 @@ def check_selection_metric_trained(args: dict, selection_metric, source: str = '
     arm, so the check has to come from the loss weights in `args`.
 
     Raises:
-        ValueError: the metric contains a term whose loss weight is 0.
+        ValueError: the metric contains a term whose EFFECTIVE loss weight is 0.
+            Effective, not nominal: DOS is trained with `loss_c*(1-loss_b)` and
+            LDOS with `loss_c*loss_b`, so either can be untrained while the single
+            weight it was previously judged on is nonzero. See _KEY_TO_FACTORS.
     """
     if not selection_metric or not isinstance(args, dict):
         return
@@ -210,23 +225,41 @@ def check_selection_metric_trained(args: dict, selection_metric, source: str = '
     # and returns early on anything else, which would silently disable this guard
     # for every v3 run. The map stays for checkpoints written before v3.
     recorded = args.get('selection_weights')
+    offending = []
     if recorded:
-        terms = {_KEY_TO_TERM[k]: _KEY_TO_WEIGHT[k] for k in recorded
-                 if k in _KEY_TO_WEIGHT}
+        # THE RECORDED PATH JUDGES EACH TERM ON ITS PRODUCT OF LOSS WEIGHTS, not
+        # on one of them. See _KEY_TO_FACTORS: DOS is c*(1-b), LDOS is c*b.
+        seen = set()
+        for key in sorted(recorded):
+            if key not in _KEY_TO_FACTORS:
+                continue
+            term, factors = _KEY_TO_FACTORS[key]
+            for name, complemented in factors:
+                w = args.get(name)
+                if w is None:
+                    # Missing weight is unknown, not known-bad -- same rule the
+                    # legacy path below has always used.
+                    continue
+                value = (1.0 - float(w)) if complemented else float(w)
+                if value == 0.0:
+                    why = (f'(1-{name})=0 with {name}={float(w):g}'
+                           if complemented else f'{name}=0')
+                    if (term, why) not in seen:
+                        seen.add((term, why))
+                        offending.append((term, why))
     else:
         terms = _METRIC_TERM_WEIGHTS.get(str(selection_metric))
-    if terms is None:
-        # Unknown metric: unknown is not known-bad. Adding a metric to
-        # metric_history without adding it here silently disables the check,
-        # which is why the map lives next to the docstring that explains it.
-        return
-    offending = []
-    for term, weight_key in sorted(terms.items()):
-        w = args.get(weight_key)
-        if w is not None and float(w) == 0.0:
-            offending.append((term, weight_key))
+        if terms is None:
+            # Unknown metric: unknown is not known-bad. Adding a metric to
+            # metric_history without adding it here silently disables the check,
+            # which is why the map lives next to the docstring that explains it.
+            return
+        for term, weight_key in sorted(terms.items()):
+            w = args.get(weight_key)
+            if w is not None and float(w) == 0.0:
+                offending.append((term, f'{weight_key}=0'))
     if offending:
-        terms = ', '.join(f"'{t}' (weight {k}=0)" for t, k in offending)
+        terms = ', '.join(f"'{t}' (weight {why})" for t, why in offending)
         raise ValueError(
             f"{source or 'checkpoint'}: selected on '{selection_metric}', which contains "
             f"{terms} -- never trained by this run. The published weights were chosen by "
