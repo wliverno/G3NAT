@@ -278,6 +278,7 @@ def seed_best_value(checkpoint_dir: str, metric_history,
     An entry missing any contributing key is skipped rather than crashing the
     resume -- pre-v3 histories do not carry every term.
     """
+    weights = selection_weights or _LEGACY_SELECTION_WEIGHTS
     best_path = os.path.join(checkpoint_dir, 'checkpoint_best.pth')
     if os.path.exists(best_path):
         try:
@@ -288,9 +289,20 @@ def seed_best_value(checkpoint_dir: str, metric_history,
             bc = None
         if isinstance(bc, dict):
             sv = bc.get('selection_value')
-            if sv is not None and float(sv) == float(sv):
+            # Only trust the stored value when it is the SAME QUANTITY this run
+            # minimises. A pre-v3 checkpoint_best.pth left in a reused checkpoint
+            # dir stores a val_dos_t_unweighted number under this key; seeding a
+            # v3 bar from it compares two different scales, which is the defect
+            # fixed in the history fallback below, one branch up.
+            recorded = bc.get('selection_weights')
+            same_criterion = (recorded == weights if recorded is not None
+                              else selection_weights is None)
+            if sv is not None and float(sv) == float(sv) and same_criterion:
                 return float(sv)
-    weights = selection_weights or _LEGACY_SELECTION_WEIGHTS
+            if sv is not None and not same_criterion:
+                print(f"WARNING: {best_path} was selected on {recorded!r}, not on this "
+                      f"run's {weights!r}; seeding the running best from "
+                      "metric_history instead")
     values = []
     for m in (metric_history or []):
         try:
@@ -302,7 +314,8 @@ def seed_best_value(checkpoint_dir: str, metric_history,
     return min(values) if values else float('inf')
 
 
-def best_publication_warning(best_ckpt_path: str, metric_history):
+def best_publication_warning(best_ckpt_path: str, metric_history,
+                             selection_metric_name=None):
     """Return a WARNING string when no best checkpoint exists, else None.
 
     Without this the script prints "Training complete!" and exits 0 after a run in
@@ -311,28 +324,45 @@ def best_publication_warning(best_ckpt_path: str, metric_history):
     published, and every downstream analysis silently falls back to final-epoch
     weights or skips the run. Same silent-failure class as private notes
     sec. 16.
+
+    THE CAUSE IS COUNTED FROM THE RUN'S OWN CRITERION. `nan_selection_metric_total`
+    is the trainer's cumulative count of epochs whose OWN selection metric came back
+    non-finite (trainer.py, _validate_epoch). Counting non-finite
+    `val_dos_t_unweighted` instead -- which this used to do -- states a WRONG CAUSE
+    for exactly the arms campaign v3 introduced: an LDOS or T-only run can have a
+    perfectly finite val_dos_t_unweighted in every epoch while its own criterion is
+    nan throughout, and the operator would be told the metric was fine and pointed
+    at the checkpoint callback, the wrong subsystem entirely.
+
+    Falls back to counting non-finite `val_dos_t_unweighted` only for pre-v3
+    histories, which do not carry the counter.
     """
     if os.path.exists(best_ckpt_path):
         return None
     history = list(metric_history or [])
     n_epochs = len(history)
-    n_bad = sum(1 for m in history
-                if not (m.get('val_dos_t_unweighted') is not None
-                        and m.get('val_dos_t_unweighted') == m.get('val_dos_t_unweighted')))
+    name = selection_metric_name or 'the selection metric'
+    counter = history[-1].get('nan_selection_metric_total') if history else None
+    if counter is not None and counter == counter:
+        n_bad = int(counter)
+    else:
+        n_bad = sum(1 for m in history
+                    if not (m.get('val_dos_t_unweighted') is not None
+                            and m.get('val_dos_t_unweighted') == m.get('val_dos_t_unweighted')))
     if n_epochs == 0:
-        cause = ("no validation epoch ran, so the selection metric "
-                 "val_dos_t_unweighted was never computed")
-    elif n_bad == n_epochs:
-        cause = (f"the selection metric val_dos_t_unweighted was NON-FINITE in all "
+        cause = (f"no validation epoch ran, so the selection metric ({name}) "
+                 "was never computed")
+    elif n_bad >= n_epochs:
+        cause = (f"the selection metric ({name}) was NON-FINITE in all "
                  f"{n_epochs} epochs, so no epoch could ever become the best")
     elif n_bad:
-        cause = (f"the selection metric val_dos_t_unweighted was non-finite in "
+        cause = (f"the selection metric ({name}) was non-finite in "
                  f"{n_bad} of {n_epochs} epochs and no finite epoch improved on the "
                  "running best")
     else:
-        cause = (f"the selection metric was finite in all {n_epochs} epochs but no "
-                 "best checkpoint was written -- the checkpoint callback may never "
-                 "have fired, or the file was removed")
+        cause = (f"the selection metric ({name}) was finite in all {n_epochs} epochs "
+                 "but no best checkpoint was written -- the checkpoint callback may "
+                 "never have fired, or the file was removed")
     return ("WARNING: NO BEST CHECKPOINT WAS PUBLISHED for this run. "
             + cause + ". The published final weights are the LAST epoch's, not the "
             "best; treat this run as FAILED rather than as a completed cell.")
@@ -546,7 +576,7 @@ def main():
     # Resolved once, from this run's loss weights, and written into every
     # checkpoint so a consumer can verify what selection actually optimised.
     _sel_name, _sel_weights = resolve_selection_metric(
-        args.loss_a, args.loss_b, args.loss_c)
+        args.loss_a, args.loss_b, args.loss_c, ldos_target=args.ldos_target)
     print(f'Selecting best checkpoint on: {_sel_name}')
 
     def checkpoint_cb(model, opt, epoch, train_losses, val_losses, metric_history=None,
@@ -656,14 +686,17 @@ def main():
         # (_sel_weights), not the weighted val loss, which is a different scale entirely
         # and would make the comparison meaningless. Passing _sel_weights is REQUIRED:
         # seed_best_value's history fallback otherwise defaults to the pre-v3 fixed
-        # criterion, which for LDOS+T sets a bar the run's own objective cannot beat. A checkpoint written before metric_history existed carries no such
+        # criterion, which for LDOS+T sets a bar the run's own objective cannot beat.
+        #
+        # A checkpoint written before metric_history existed carries no such
         # values, in which case the running best restarts at inf: the first post-resume
         # improvement overwrites the old best. That is the safe direction (the trainer's
         # in-memory best is empty after a restart anyway, so nothing better is lost).
         #
-        # The value comes from the on-disk best checkpoint's own 'selection_value' when
-        # present, NOT from the history minimum -- see seed_best_value's docstring for
-        # why those differ after a kill between the two writes.
+        # The value comes from the on-disk best checkpoint's own 'selection_value'
+        # when present AND recorded under the same criterion, NOT from the history
+        # minimum -- see seed_best_value's docstring for why those differ after a
+        # kill between the two writes.
         best_val['value'] = seed_best_value(args.checkpoint_dir, resume_metric_history,
                                             selection_weights=_sel_weights)
         if best_val['value'] != float('inf'):
@@ -746,7 +779,8 @@ def main():
 
     # A run with no best checkpoint is a FAILED run, not a completed one. Say so
     # loudly instead of printing "Training complete!" and exiting 0.
-    _no_best_warning = best_publication_warning(best_ckpt, metric_history)
+    _no_best_warning = best_publication_warning(best_ckpt, metric_history,
+                                                selection_metric_name=_sel_name)
     if _no_best_warning is not None:
         print(_no_best_warning)
 

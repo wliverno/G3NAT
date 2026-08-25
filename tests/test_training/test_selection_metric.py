@@ -8,7 +8,7 @@ were saved at epoch 6 of 15,000.
 """
 import pytest
 
-from g3nat.training.selection import resolve_selection_metric
+from g3nat.training.selection import resolve_selection_metric, selection_value
 
 T, D, L = 'val_transmission', 'val_dos', 'val_ldos_residue'
 
@@ -55,3 +55,47 @@ def test_name_is_stable_and_descriptive():
     n2, _ = resolve_selection_metric(1.0, 1.0, 1.0)
     assert n1 == n2
     assert 'transmission' in n1 and 'ldos' in n1 and 'dos+' not in n1
+
+
+# ------------------------------------------------- selection follows ldos_target
+
+def test_base_only_runs_select_on_the_key_they_actually_measure():
+    """`--ldos_target base_only` is SUPPORTED but not exercised by campaign v2 or the
+    v3 matrix -- this closes a latent trap, it does not fix a live run. The trainer
+    records the measured LDOS under val_ldos_{ldos_target} and pins the OTHER variant
+    to nan, so a base_only run selected on val_ldos_residue would have a nan
+    criterion every epoch, never update best_unweighted, and publish nothing."""
+    name, w = resolve_selection_metric(1.0, 1.0, 1.0, ldos_target='base_only')
+    assert w == pytest.approx({T: 1.0, 'val_ldos_base_only': 1.0})
+    assert L not in w
+    assert 'ldos' in name
+
+
+def test_ldos_target_defaults_to_residue():
+    """Three-argument callers keep the behaviour they had."""
+    assert (resolve_selection_metric(1.0, 1.0, 1.0)
+            == resolve_selection_metric(1.0, 1.0, 1.0, ldos_target='residue'))
+
+
+def test_a_base_only_run_gets_a_finite_selection_value_from_a_real_entry():
+    """THE POINT OF THE FIX. `entry` is shaped exactly the way
+    Trainer._validate_epoch builds it for ldos_target='base_only': the measured
+    value under val_ldos_base_only, nan under val_ldos_residue."""
+    entry = {'val_transmission': 0.4, 'val_dos': 0.2,
+             'val_ldos_residue': float('nan'), 'val_ldos_base_only': 0.3}
+    _n, w = resolve_selection_metric(1.0, 1.0, 1.0, ldos_target='base_only')
+    got = selection_value(entry, w)
+    assert got == pytest.approx(0.7), 'a base_only run cannot select on a nan'
+
+
+def test_an_unknown_ldos_target_is_rejected():
+    """Silently building val_ldos_typo would give a KeyError thousands of epochs
+    later, inside the epoch loop, instead of at construction."""
+    with pytest.raises(ValueError):
+        resolve_selection_metric(1.0, 1.0, 1.0, ldos_target='base-only')
+
+
+def test_ldos_target_is_irrelevant_when_ldos_is_untrained():
+    """b=0 drops the LDOS term entirely, so the target cannot matter."""
+    assert (resolve_selection_metric(1.0, 0.0, 1.0, ldos_target='base_only')
+            == resolve_selection_metric(1.0, 0.0, 1.0, ldos_target='residue'))

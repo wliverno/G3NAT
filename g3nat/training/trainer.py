@@ -73,8 +73,12 @@ class Trainer:
 
         # Resolved once at construction. The name is written into the checkpoint so a
         # consumer can verify what was actually minimised.
+        # ldos_target is passed because _validate_epoch fills in only
+        # val_ldos_<ldos_target> and leaves the other key at nan -- selecting on
+        # the wrong one is a nan criterion every epoch and no published weights.
         self._selection_name, self._selection_weights = resolve_selection_metric(
-            self.config.loss_a, self.config.loss_b, self.config.loss_c)
+            self.config.loss_a, self.config.loss_b, self.config.loss_c,
+            ldos_target=self.config.ldos_target)
         print(f'Trainer selecting best weights on: {self._selection_name}')
 
         # Set device
@@ -108,7 +112,8 @@ class Trainer:
         self.nan_skipped_total = 0
         # Cumulative count of epochs whose SELECTION metric (self._selection_name,
         # resolved from this run's own loss weights) came back non-finite. A run
-        # in which this equals the epoch count never updates best_unweighted, so no checkpoint_best.pth is ever written --
+        # in which this equals the epoch count never updates best_unweighted, so
+        # no checkpoint_best.pth is ever written --
         # the silent failure documented in private notes sec. 16. Counting
         # it per epoch in metric_history makes that visible from the artifacts
         # alone, instead of only from an absent file.
