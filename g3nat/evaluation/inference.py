@@ -425,7 +425,17 @@ def load_trained_model(model_path: str, device: str = 'auto',
             # with a dos_proj/transmission_proj size mismatch.
             output_dim=len(energy_grid),
             dropout=args.get('dropout', 0.1),
-            conv_type=args.get('conv_type', 'transformer')
+            conv_type=args.get('conv_type', 'transformer'),
+            # Must mirror the hamiltonian branch above: a geometry-trained standard
+            # checkpoint's state_dict carries geom_mean/geom_std/geom_encoder.* keys.
+            # Without forwarding use_geometry, this branch always built a
+            # use_geometry=False model and load_state_dict raised "Unexpected
+            # key(s) in state_dict" for every geometry-on standard-model checkpoint
+            # (all 12 blind_*_geom_* campaign-v3 runs). geom_norm_stats is only an
+            # init convenience -- the buffers it seeds are overwritten by
+            # load_state_dict below regardless -- so it is not forwarded here,
+            # matching the hamiltonian branch above.
+            use_geometry=args.get('use_geometry', False),
         )
         print("DNATransportGNN initialized successfully")
 

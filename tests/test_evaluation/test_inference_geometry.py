@@ -11,6 +11,7 @@ import pytest
 import torch
 
 from g3nat.models.hamiltonian import DNATransportHamiltonianGNN
+from g3nat.models.standard import DNATransportGNN
 from g3nat.evaluation import inference
 
 N_ENERGY = 8
@@ -82,6 +83,38 @@ def test_geom_model_with_cache_hit_succeeds(tmp_path):
         model, 'GATT', 'AATC', geometry_cache=cache)
     assert dos_pred.shape == (N_ENERGY,)
     assert t_pred.shape == (N_ENERGY,)
+
+
+def test_standard_geom_model_loads_without_dropping_geometry_encoder(tmp_path):
+    """Regression test: load_trained_model's standard-model branch never forwarded
+    use_geometry (or any geometry constructor arg) to DNATransportGNN, so it always
+    built a use_geometry=False model. A geometry-trained standard checkpoint's
+    state_dict then carries geom_mean/geom_std/geom_encoder.* keys the freshly
+    built model does not have, and torch's load_state_dict raises
+    'Unexpected key(s) in state_dict'. All 12 blind_*_geom_* campaign-v3
+    checkpoints hit this. The Hamiltonian branch already forwards use_geometry
+    correctly (see the args dict below); the standard branch must match it.
+    """
+    stats = {'backbone': {'mean': np.zeros(7), 'std': np.ones(7)},
+             'hbond': {'mean': np.zeros(7), 'std': np.ones(7)}}
+    m = DNATransportGNN(hidden_dim=16, num_layers=1, num_heads=2,
+                         output_dim=N_ENERGY, conv_type='gat',
+                         use_geometry=True, geom_norm_stats=stats)
+    path = tmp_path / 'standard_geom_model.pth'
+    torch.save({'model_state_dict': m.state_dict(),
+                'args': {'model_type': 'standard', 'hidden_dim': 16,
+                         'num_layers': 1, 'num_heads': 2,
+                         'use_geometry': True, 'conv_type': 'gat',
+                         'dropout': 0.0},
+                'energy_grid': GRID}, path)
+
+    model, grid, device = inference.load_trained_model(str(path), device='cpu')
+
+    assert isinstance(model, DNATransportGNN)
+    assert model.use_geometry is True
+    # Confirm the geometry parameters actually loaded (not left at random init).
+    assert torch.allclose(model.geom_mean, m.geom_mean)
+    assert torch.allclose(model.geom_std, m.geom_std)
 
 
 def test_non_geom_model_ignores_geometry_cache_argument(tmp_path):
