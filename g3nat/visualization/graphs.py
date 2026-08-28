@@ -12,7 +12,8 @@ from g3nat.graph import sequence_to_graph
 import numpy as np
 
 def visualize_dna_graph(graph, primary_sequence=None, complementary_sequence=None,
-                       figsize=(8, 12), node_size=1000, font_size=10):
+                       figsize=(8, 12), node_size=1000, font_size=10,
+                       ax=None, scale=1.0):
     """
     Visualize a DNA graph with proper labeling and styling.
 
@@ -20,15 +21,49 @@ def visualize_dna_graph(graph, primary_sequence=None, complementary_sequence=Non
         graph: PyTorch Geometric Data object
         primary_sequence: Primary DNA sequence for labeling
         complementary_sequence: Complementary DNA sequence for labeling
-        figsize: Figure size (width, height)
+        figsize: Figure size (width, height). Ignored if ax is given.
         node_size: Size of nodes
-        font_size: Font size for labels
+        font_size: Font size applied to every text element this function
+            draws (base/contact labels, edge coupling labels, title, axis
+            labels, legend). Every text artist obeys this single value.
+        ax: an existing matplotlib Axes to draw into. When given, no new
+            figure is created; the returned fig is ax.figure. Use this to
+            embed the strand graph natively inside a larger composed
+            figure (e.g. a paper/slide panel) instead of rendering it to
+            a standalone PNG and placing that image as a "header" above
+            other panels. The PNG route is a trap for font matching: once
+            rasterized, the effective font size is whatever point size the
+            PNG was rendered at, rescaled by whatever width the image is
+            displayed at in the composed figure -- it silently drifts from
+            the actual point sizes of the surrounding panels and cannot be
+            fixed after the fact by changing font_size. Passing ax= draws
+            real vector text at the axes' native scale, so font_size here
+            is directly comparable, in points, to the rest of the figure.
+        scale: convenience multiplier applied to node_size, font_size, and
+            line widths together, so the whole drawing can be resized
+            coherently with a single number (e.g. scale=0.5 for a
+            thumbnail). Default 1.0 leaves node_size/font_size/line widths
+            unchanged.
     """
+    # scale multiplies size-bearing parameters together; scale=1.0 (default)
+    # is a no-op, keeping node_size/font_size/line widths exactly as passed.
+    node_size = node_size * scale
+    font_size = font_size * scale
+    line_width = 2 * scale
+    legend_line_width = 2 * scale
+
     # Convert to NetworkX graph
     nx_graph = to_networkx(graph, to_undirected=True)
 
-    # Create figure
-    fig, ax = plt.subplots(figsize=figsize)
+    # Create figure, or draw into a caller-supplied Axes (native embedding;
+    # see the ax= docstring note above for why this is preferred over a
+    # PNG for figures that need consistent font sizes across panels).
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+        created_own_figure = True
+    else:
+        fig = ax.figure
+        created_own_figure = False
 
     # Determine node types and positions
     node_labels = {}
@@ -160,36 +195,36 @@ def visualize_dna_graph(graph, primary_sequence=None, complementary_sequence=Non
             labels=node_labels,
             edge_color=edge_colors,
             style=[edge_styles.get(edge, 'solid') for edge in nx_graph.edges()],
-            width=2,
+            width=line_width,
             ax=ax,
             bbox=dict(boxstyle="round,pad=0.3", facecolor='white', edgecolor='gray', alpha=0.8))
 
     # Draw edge labels (coupling strengths)
     edge_labels = nx.draw_networkx_edge_labels(nx_graph, pos=node_positions,
                                               edge_labels=edge_weights,
-                                              font_size=8)
+                                              font_size=font_size)
 
     # Add legend
     legend_elements = [
         mpatches.Patch(color='red', label='Contacts'),
         mpatches.Patch(color='lightblue', label='Primary Strand'),
         mpatches.Patch(color='lightgreen', label='Complementary Strand'),
-        Line2D([0], [0], color='red', linestyle='-', linewidth=2, label='Contact Connections'),
-        Line2D([0], [0], color='black', linestyle='-', linewidth=2, label='Backbone Connections'),
-        Line2D([0], [0], color='blue', linestyle=':', linewidth=2, label='Hydrogen Bonds')
+        Line2D([0], [0], color='red', linestyle='-', linewidth=legend_line_width, label='Contact Connections'),
+        Line2D([0], [0], color='black', linestyle='-', linewidth=legend_line_width, label='Backbone Connections'),
+        Line2D([0], [0], color='blue', linestyle=':', linewidth=legend_line_width, label='Hydrogen Bonds')
     ]
 
-    ax.legend(handles=legend_elements, bbox_to_anchor=(1.15, 1))
+    ax.legend(handles=legend_elements, bbox_to_anchor=(1.15, 1), fontsize=font_size)
 
     # Set title and labels
     if primary_sequence:
         title = f"DNA Graph: {primary_sequence}"
         if complementary_sequence:
             title += f" / {complementary_sequence}"
-        ax.set_title(title, fontsize=14, fontweight='bold')
+        ax.set_title(title, fontsize=font_size, fontweight='bold')
 
-    ax.set_xlabel('Position', fontsize=12)
-    ax.set_ylabel('Strand', fontsize=12)
+    ax.set_xlabel('Position', fontsize=font_size)
+    ax.set_ylabel('Strand', fontsize=font_size)
 
     # Set axis limits
     if primary_sequence:
@@ -201,7 +236,11 @@ def visualize_dna_graph(graph, primary_sequence=None, complementary_sequence=Non
     # Add grid
     ax.grid(True, alpha=0.3)
 
-    plt.tight_layout()
+    # Only adjust layout when this function owns the figure -- when drawing
+    # into a caller-supplied ax, layout is the caller's responsibility (a
+    # composed multi-panel figure typically manages its own layout).
+    if created_own_figure:
+        fig.tight_layout()
     return fig, ax
 
 def create_sample_visualization():
