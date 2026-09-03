@@ -252,7 +252,7 @@ regime). This project's ML decisions must cite from here rather than be invented
     **no base-pair data at all**.
   - Khan, A. "Reorganization, activation and ionization energies for hole transfer reactions
     through IC, ApT, AT, and GC base pairs." *Comput. Theor. Chem.* **1013**, 136-139 (2013).
-    doi:[10.1016/j.comptc.2013.03.007](https://doi.org/10.1016/j.comptc.2013.03.007)
+    doi:[10.1016/j.comptc.2013.03.022](https://doi.org/10.1016/j.comptc.2013.03.022)
     Vertical IEs: GC 7.29, AT 7.88 eV.
 
   Action required before publication: either locate the true source of the six numbers as
