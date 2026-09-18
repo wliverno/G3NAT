@@ -9,6 +9,13 @@ from pathlib import Path
 
 import numpy as np
 
+# The one log10 floor for T and DOS, shared with the G3NAT package (g3nat/floor.py).
+# Applied to T and total DOS at generation and again at conversion. NOT applied to
+# the per-atom DOSAtom decomposition, whose atomic terms can be negative and whose
+# sum must reproduce DOS exactly; the per-residue LDOS the model trains on is
+# floored in the loader.
+LOG_FLOOR = 1e-25
+
 
 def parse_parameters(params_path: Path):
     """Parse Parameters.txt into the same fields readMAT.m's downstream

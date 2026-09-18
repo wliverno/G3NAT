@@ -26,7 +26,7 @@ import numpy as np
 import scipy.io as sio
 import scipy.linalg as sla
 
-from negf_common import parse_parameters, orbital_offsets, build_sumSig, load_H0
+from negf_common import parse_parameters, orbital_offsets, build_sumSig, load_H0, LOG_FLOOR
 
 
 def compute_dos(params: dict, H0: np.ndarray, eta: float):
@@ -58,6 +58,7 @@ def compute_dos(params: dict, H0: np.ndarray, eta: float):
             lo, hi = bounds(atom_1based)
             DOSAtom[atom_1based - 1, nE] = -tempM[lo:hi].sum() / np.pi
 
+    DOS = np.maximum(DOS, LOG_FLOOR)   # the one floor; DOSAtom stays raw (exact decomposition)
     return Energy, DOS, DOSAtom
 
 

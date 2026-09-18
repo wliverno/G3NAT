@@ -1,6 +1,7 @@
 from typing import Dict, Optional
 
 import torch
+from g3nat.floor import LOG10_FLOOR
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GATConv, TransformerConv, global_mean_pool
@@ -172,5 +173,8 @@ class DNATransportGNN(nn.Module):
         # Output projections
         dos_pred = self.dos_proj(x)
         transmission_pred = self.transmission_proj(x)
+        # Same floor as every other log10 in the project (g3nat/floor.py).
+        dos_pred = torch.clamp_min(dos_pred, LOG10_FLOOR)
+        transmission_pred = torch.clamp_min(transmission_pred, LOG10_FLOOR)
 
         return dos_pred, transmission_pred

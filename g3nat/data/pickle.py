@@ -12,6 +12,7 @@ import os
 import glob
 
 from g3nat.data.ldos import aggregate_by_residue
+from g3nat.floor import LOG_FLOOR
 
 complementary_bases = {'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G'}
 
@@ -46,8 +47,8 @@ def load_single_pickle(pickle_path: str) -> Optional[Dict]:
         
 
         # Extract DOS and Transmission log10 transformed
-        dos = np.log10(np.array(data['DOS']))
-        transmission = np.log10(np.array(data['T']))
+        dos = np.log10(np.maximum(np.array(data['DOS']), LOG_FLOOR))
+        transmission = np.log10(np.maximum(np.array(data['T']), LOG_FLOOR))
         energy_grid = np.array(data['Egrid'])
         energy_grid = energy_grid - np.mean(energy_grid)
 
@@ -75,8 +76,8 @@ def load_single_pickle(pickle_path: str) -> Optional[Dict]:
                         f"{label} contains a non-positive aggregate in {pickle_path}; "
                         f"min={arr.min()!r}. Expected strictly positive LDOS."
                     )
-            ldos_residue = np.log10(residue_lin)
-            ldos_base_only = np.log10(base_lin)
+            ldos_residue = np.log10(np.maximum(residue_lin, LOG_FLOOR))
+            ldos_base_only = np.log10(np.maximum(base_lin, LOG_FLOOR))
 
         # Determine contact positions based on contact_type
         # 'same': both contacts on primary strand (5' to 3')

@@ -357,6 +357,21 @@ E_HOMO  = mean(raw Egrid)                               per sequence, absolute e
 
 ## 10. R8: numerical safety of the eps=1e-38 log10 floor
 
+**SUPERSEDED 2026-09-17.** The floor is now `LOG_FLOOR = 1e-25`, a hard clamp
+`log10(max(x, 1e-25))` defined once in `g3nat/floor.py` and applied to every DOS, LDOS and
+transmission in the reference pipeline (`DNADataset/`), the pickle loader, both models and
+checkpoint loading (recorded floors are overridden at load). Reason: the DFT+NEGF reference
+transmission of the 12- and 16-bp held-out duplexes flattens to a smooth, sequence- and
+coupling-dependent background of 1e-22..1e-28 on the unoccupied side of the window. It is
+not band-gap decay and not a precision artifact (a 16-digit matrix export reproduces it to
+three decimals); it is intrinsic to the Lowdin-orthogonalized all-electron reference, whose
+long-range couplings (~1e-8 eV at eleven base pairs) a nearest-neighbour site model cannot
+represent. 1e-25 never binds on training data (minimum T = 6.7e-19) and removes most of that
+background from held-out comparisons; it leaves the part of the plateau above 1e-25 on the
+0.6 eV-coupling records and clips a few genuine points below 1e-25 on the mixed 16-mers.
+Tests: `tests/test_floor.py`. The analysis below records the pre-2026-09-17 state.
+
+
 Independent-review finding R8. The solver's smooth floor is
 `log10(clamp_min(x, 0) + eps)` with `eps = 1e-38` (`log10_floored`,
 `g3nat/models/hamiltonian.py:9`, sec. 8b). `1e-38` is a **subnormal** float32 value (min

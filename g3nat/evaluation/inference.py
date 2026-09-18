@@ -1,10 +1,12 @@
 """Inference utilities for loading and using trained models."""
 import torch
+from g3nat.floor import LOG_FLOOR
 import numpy as np
 from typing import Tuple, Union, List
 from torch_geometric.data import Batch
 
-from g3nat.models import DNATransportGNN, DNATransportHamiltonianGNN
+from g3nat.models import (DNATransportGNN, DNATransportHamiltonianGNN,
+                          DNATransportGNNDeep, DNATransportHamiltonianGNNDeep)
 from g3nat.graph import sequence_to_graph
 
 
@@ -328,6 +330,13 @@ def load_trained_model(model_path: str, device: str = 'auto',
         check_selection_metric_trained(
             _guard_args, checkpoint.get('selection_metric'), source=model_path)
 
+    # The deep-readout probe variants share their parent's state-dict key
+    # names, so key-based detection below cannot tell them apart; the recorded
+    # model_type is the only signal. Detection still picks the FAMILY.
+    deep = args.get('model_type') in ('hamiltonian_deep', 'standard_deep')
+    ham_cls = DNATransportHamiltonianGNNDeep if deep else DNATransportHamiltonianGNN
+    std_cls = DNATransportGNNDeep if deep else DNATransportGNN
+
     # Detect model type from state dict keys
     state_dict = checkpoint['model_state_dict']
     model_type = None
@@ -383,7 +392,7 @@ def load_trained_model(model_path: str, device: str = 'auto',
                   "extends below -16; under 'clamp' every point below 1e-16 reads "
                   "exactly -16. Do not pool tail metrics across the two without "
                   "re-evaluating both under the same floor_mode.")
-        model = DNATransportHamiltonianGNN(
+        model = ham_cls(
             hidden_dim=args.get('hidden_dim', 128),
             num_layers=args.get('num_layers', 4),
             num_heads=args.get('num_heads', 4),
@@ -399,10 +408,10 @@ def load_trained_model(model_path: str, device: str = 'auto',
             # silently invalidated the length curves behind private notes 12a.
             solver_type=args.get('solver_type', 'complex'),
             use_log_outputs=args.get('use_log_outputs', True),
-            log_floor=args.get('log_floor', 1e-16),
+            log_floor=LOG_FLOOR,  # the one floor (g3nat.floor); overrides whatever the checkpoint recorded
             # 'clamp' is the legacy semantics and the constructor default; see
             # the warning above for what its absence from args implies.
-            floor_mode=args.get('floor_mode', 'clamp'),
+            floor_mode='clamp',   # log10(max(x, LOG_FLOOR)) -- see g3nat/floor.py
             complex_eta=args.get('complex_eta', 1e-12),
             conv_type=args.get('conv_type', 'gat'),
             use_geometry=args.get('use_geometry', False),
@@ -411,9 +420,9 @@ def load_trained_model(model_path: str, device: str = 'auto',
         # Old alpha-mix checkpoints carry state this model no longer has.
         state_dict = drop_legacy_alpha_state(state_dict, per_base_onsite)
         checkpoint['model_state_dict'] = state_dict
-        print("DNATransportHamiltonianGNN initialized successfully")
+        print(f"{ham_cls.__name__} initialized successfully")
     else:  # standard
-        model = DNATransportGNN(
+        model = std_cls(
             hidden_dim=args.get('hidden_dim', 128),
             num_layers=args.get('num_layers', 4),
             num_heads=args.get('num_heads', 4),
@@ -437,10 +446,10 @@ def load_trained_model(model_path: str, device: str = 'auto',
             # matching the hamiltonian branch above.
             use_geometry=args.get('use_geometry', False),
         )
-        print("DNATransportGNN initialized successfully")
+        print(f"{std_cls.__name__} initialized successfully")
 
     # Handle legacy Hamiltonian checkpoints that had Dropout layers and hidden_dim//2 intermediate
-    if model_type == 'hamiltonian':
+    if model_type == 'hamiltonian' and not deep:
         has_legacy_proj = any(k.endswith('.3.weight') and ('onsite_proj' in k or 'coupling_proj' in k)
                               for k in state_dict.keys())
         if has_legacy_proj:

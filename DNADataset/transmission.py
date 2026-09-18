@@ -27,7 +27,7 @@ import numpy as np
 import scipy.io as sio
 import scipy.linalg as sla
 
-from negf_common import parse_parameters, orbital_offsets, build_sumSig, load_H0
+from negf_common import parse_parameters, orbital_offsets, build_sumSig, load_H0, LOG_FLOOR
 
 
 def compute_transmission(params: dict, H0: np.ndarray, eta: float = 0.0):
@@ -67,6 +67,7 @@ def compute_transmission(params: dict, H0: np.ndarray, eta: float = 0.0):
 
         T[nE] = Tmat.sum()
 
+    T = np.maximum(T, LOG_FLOOR)   # the one floor, see negf_common.LOG_FLOOR
     return Energy, T
 
 

@@ -1,4 +1,5 @@
 import torch
+from g3nat.floor import LOG_FLOOR
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GATConv, TransformerConv, global_mean_pool
@@ -112,7 +113,7 @@ class DNATransportHamiltonianGNN(nn.Module):
                  enforce_hermiticity: bool = True,
                  solver_type: str = "complex",  # "frobenius" | "complex"
                  use_log_outputs: bool = True,
-                 log_floor: float = 1e-16,
+                 log_floor: float = LOG_FLOOR,
                  floor_mode: str = 'clamp',
                  complex_eta: float = 1e-12,
                  conv_type: str = 'gat',

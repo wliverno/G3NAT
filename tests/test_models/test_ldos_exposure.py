@@ -136,6 +136,7 @@ def test_ldos_byte_identical_complex_solver():
         # ask for it by name. (The difference is exactly the R2 finding:
         # -14.81016 smooth vs -14.83916 clamped at the same point.)
         floor_mode='smooth',
+        log_floor=1e-16,   # the floor these constants were captured under; the project default is now g3nat.floor.LOG_FLOOR
     )
     model.eval()
     g = Batch.from_data_list([sequence_to_graph("ACGT", "ACGT", 0, 3, 0.1, 0.1)])
@@ -183,6 +184,7 @@ def test_ldos_byte_identical_frobenius_solver():
         # ask for it by name. (The difference is exactly the R2 finding:
         # -14.81016 smooth vs -14.83916 clamped at the same point.)
         floor_mode='smooth',
+        log_floor=1e-16,   # the floor these constants were captured under; the project default is now g3nat.floor.LOG_FLOOR
     )
     model.eval()
     g = Batch.from_data_list([sequence_to_graph("ACGT", "ACGT", 0, 3, 0.1, 0.1)])

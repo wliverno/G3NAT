@@ -107,15 +107,16 @@ def test_clamp_and_smooth_modes_differ_below_the_floor():
     assert float(y.grad) != 0.0
 
 
-def test_default_floor_mode_is_the_legacy_clamp():
-    # A checkpoint whose args predate floor_mode must reproduce its old numbers
-    # bit-for-bit, so the CONSTRUCTOR default is 'clamp', not 'smooth'.
+def test_default_floor_is_the_one_floor():
+    # The constructor default is the project-wide floor (g3nat/floor.py):
+    # log10(max(x, 1e-25)), hard clamp. Checkpoints that recorded another
+    # floor are evaluated under this one (see evaluation/inference.py).
     m = DNATransportHamiltonianGNN(hidden_dim=8, num_layers=1, num_heads=2,
                                    energy_grid=np.linspace(-1, 1, 4), n_orb=1)
     assert m.floor_mode == 'clamp'
-    assert m.log_floor == 1e-16
+    assert m.log_floor == 1e-25
     out = m._log10_floored(torch.tensor([1e-25]))
-    assert float(out) == pytest.approx(-16.0, abs=1e-5)
+    assert float(out) == pytest.approx(-25.0, abs=1e-5)
 
 
 def test_invalid_floor_mode_rejected():

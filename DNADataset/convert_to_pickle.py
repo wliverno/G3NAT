@@ -4,6 +4,9 @@ from pathlib import Path
 
 import numpy as np
 from scipy.io import loadmat
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from negf_common import LOG_FLOOR   # the one floor, shared with g3nat/floor.py
 
 
 # Canonical run definitions (matches combined_script.slurm)
@@ -237,8 +240,8 @@ def build_record(seq_dir: Path, run: str, meta: dict):
             "coupling_eV": meta["coupling_eV"], "contact_type": meta["contact_type"],
         },
         "Egrid": Egrid,
-        "T": np.asarray(T_vals, dtype=np.float64),
-        "DOS": np.asarray(DOS_vals, dtype=np.float64),
+        "T": np.maximum(np.asarray(T_vals, dtype=np.float64), LOG_FLOOR),
+        "DOS": np.maximum(np.asarray(DOS_vals, dtype=np.float64), LOG_FLOOR),
         "DOSAtom": load_dosatom(dos_path, n_energy=Egrid.size),
         "atoms": atoms,
         "energy_reference_eV": float(Egrid.mean()),

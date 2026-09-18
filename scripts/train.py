@@ -10,6 +10,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import torch
+from g3nat.floor import LOG_FLOOR
 import numpy as np
 
 import g3nat
@@ -54,7 +55,7 @@ def parse_args():
                              'c*(b*LDOS + (1-b)*DOS). Default 1.0 reproduces every '
                              'run on record exactly; 0.0 is transmission-only '
                              'training, the previously unreachable arm '
-                             '(2026-08-10 -- see TrainingConfig.loss_c).')
+                             '(see TrainingConfig.loss_c).')
     parser.add_argument('--raw_scale_loss', action='store_true',
                        help='Compare DOS/LDOS by absolute magnitude. This is now the '
                             'DEFAULT (the flag is a no-op kept for older scripts/notes '
@@ -75,7 +76,7 @@ def parse_args():
 
     # Model parameters
     parser.add_argument('--model_type', type=str, default='hamiltonian',
-                       choices=['standard', 'hamiltonian'])
+                       choices=['standard', 'hamiltonian', 'standard_deep', 'hamiltonian_deep'])
     parser.add_argument('--hidden_dim', type=int, default=128)
     parser.add_argument('--num_layers', type=int, default=4)
     parser.add_argument('--num_heads', type=int, default=4)
@@ -97,12 +98,11 @@ def parse_args():
     parser.add_argument('--allow_frobenius', action='store_true',
                         help='Escape hatch for legacy comparisons only; the Frobenius path '
                              'is silently wrong at resonances and ignores complex_eta.')
-    parser.add_argument('--log_floor', type=float, default=1e-38,
-                        help='Smoothing eps for log10 of DOS/T: log10(max(x,0)+eps). Pure '
-                             'log10(0) guard -- never binds on physical values (dataset T '
-                             'minimum is 6.7e-19). Recorded in args; must match at train '
-                             'and eval.')
-    parser.add_argument('--floor_mode', choices=['clamp', 'smooth'], default='smooth',
+    parser.add_argument('--log_floor', type=float, default=LOG_FLOOR,
+                        help='The one floor: log10(max(x, LOG_FLOOR)) on DOS, LDOS and T (g3nat/floor.py). '
+                             'Never binds on training data (T minimum 6.7e-19); removes the bulk of the '
+                             'reference background artifact on held-out 12- and 16-mers.')
+    parser.add_argument('--floor_mode', choices=['clamp', 'smooth'], default='clamp',
                         help="Floor SEMANTICS, recorded in args. 'smooth' is "
                              'log10(max(x,0)+eps) -- gradient survives in the deep tail. '
                              "'clamp' is the pre-2026-08-15 hard clamp log10(max(x,eps)); "
@@ -512,8 +512,16 @@ def main():
     val_loader = DataLoader(val_dataset, batch_sampler=val_sampler)
 
     # Create model
-    if args.model_type == 'standard':
-        model = g3nat.DNATransportGNN(
+    # The _deep probe variants take their base family's branch with the Deep class
+    # and EXACTLY the same keyword arguments.
+    _model_cls = {
+        'standard': g3nat.DNATransportGNN,
+        'standard_deep': g3nat.DNATransportGNNDeep,
+        'hamiltonian': g3nat.DNATransportHamiltonianGNN,
+        'hamiltonian_deep': g3nat.DNATransportHamiltonianGNNDeep,
+    }[args.model_type]
+    if args.model_type in ('standard', 'standard_deep'):
+        model = _model_cls(
             hidden_dim=args.hidden_dim,
             num_layers=args.num_layers,
             num_heads=args.num_heads,
@@ -544,7 +552,7 @@ def main():
             print(f"WARNING: --dropout ({args.dropout}) has no effect on the hamiltonian "
                   "model (it has no dropout layers); the flag applies to --model_type "
                   "standard only.")
-        model = g3nat.DNATransportHamiltonianGNN(
+        model = _model_cls(
             hidden_dim=args.hidden_dim,
             num_layers=args.num_layers,
             num_heads=args.num_heads,
