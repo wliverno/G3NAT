@@ -74,3 +74,78 @@ def test_roundtrip_is_lossless(tmp_path):
         assert g.attrs["energy_reference_eV"] == rec["energy_reference_eV"]
 
         assert h.attrs["units_energy"] == "eV"
+
+
+import copy
+import pytest
+
+
+def _fixture_rec():
+    cp = _mod("convert_to_pickle")
+    return cp.build_record(FIXTURE, "run1", {"coupling_eV": 0.1, "contact_type": "same"})
+
+
+def _as_run(rec, run, ex):
+    r = copy.deepcopy(rec)
+    cpl, ct = ex.RUN_MAP[run]
+    r["contacts"]["coupling_eV"] = cpl
+    r["contacts"]["contact_type"] = ct
+    L = len(r["sequence"])
+    want = L if ct == "same" else L + 1
+    r["contacts"]["right_atoms"] = [i + 1 for i, x in enumerate(r["atoms"]["resseq"]) if x == want]
+    return r
+
+
+def _write(pdir, name, rec):
+    pdir.mkdir(exist_ok=True)
+    with open(pdir / name, "wb") as f:
+        pickle.dump(rec, f)
+
+
+def test_export_heldout_split_and_residues(tmp_path):
+    ex = _mod("export_hdf5")
+    rec = _fixture_rec()
+    _write(tmp_path / "train", "aaac_run1.pkl", rec)
+    held = copy.deepcopy(rec); held["sequence"] = "aaaa"   # distinct group name
+    _write(tmp_path / "held", "aaaa_run1.pkl", held)
+    out = tmp_path / "t.h5"
+    assert ex.export(tmp_path / "train", out, {"units_energy": "eV"},
+                     heldout_dirs=[tmp_path / "held"]) == 2
+    L = len(rec["sequence"])
+    with h5py.File(out, "r") as h:
+        assert h["/aaac/run1"].attrs["split"] == "train"
+        assert h["/aaaa/run1"].attrs["split"] == "heldout"
+        assert h["/aaac/run1"].attrs["left_residue"] == 1
+        assert h["/aaac/run1"].attrs["right_residue"] == L        # same: 1 -> L
+
+
+def test_check_contacts_cross(tmp_path):
+    ex = _mod("export_hdf5")
+    rec = _as_run(_fixture_rec(), "run2", ex)
+    L = len(rec["sequence"])
+    assert ex.check_contacts(rec, "run2", "x") == (1, L + 1)
+
+
+@pytest.mark.parametrize("mutate,msg", [
+    (lambda r: r["contacts"]["left_atoms"].pop(), "whole residue"),
+    (lambda r: r["contacts"].__setitem__("coupling_eV", 0.6), "run map"),
+    (lambda r: r["contacts"].__setitem__("contact_type", "cross"), "run map"),
+    (lambda r: r["atoms"]["chain"].__setitem__(0, "A"), "chain"),
+])
+def test_export_rejects_bad_contacts(tmp_path, mutate, msg):
+    ex = _mod("export_hdf5")
+    rec = _fixture_rec()
+    mutate(rec)
+    _write(tmp_path / "p", "aaac_run1.pkl", rec)
+    with pytest.raises(ValueError, match=msg) as e:
+        ex.export(tmp_path / "p", tmp_path / "t.h5", {})
+    assert "aaac_run1.pkl" in str(e.value)
+
+
+def test_root_attrs_are_current():
+    ex = _mod("export_hdf5")
+    a = ex.ROOT_ATTRS
+    assert "NOT included" not in a["limitations"]
+    assert "matrices.h5" in a["limitations"]
+    assert "5' end" in a["run_map"] and "complementary" in a["run_map"]
+    assert a["license"] == "CC-BY-4.0"
