@@ -122,7 +122,7 @@ def parse_args():
                             'data better. See private notes on the analysis campaign.')
     parser.add_argument('--use_geometry', action='store_true',
                        help='Fuse SE(3)-invariant X3DNA edge geometry (hamiltonian model). '
-                            'Requires a geometry cache built via GeomCacheJob.')
+                            'Requires a geometry cache built with g3nat.graph.geometry.build_geometry_cache.')
     parser.add_argument('--geom_cache', type=str, default='geom_cache/geometry_v2.pkl',
                        help='Path to the per-sequence geometry cache (used with --use_geometry). '
                             'Defaults to the v2 cache (520 sequences, matches pickle_files_v2); '

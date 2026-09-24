@@ -441,16 +441,15 @@ per-run assertion instead.**
   tensor-core reduction.
 - `torch.use_deterministic_algorithms(warn_only=True)` is a real, separate question
   (bitwise reproducibility across runs/devices) already tracked as its own decision point
-  in `docs/superpowers/plans/2026-08-16-phase1-characterization.md` Part 3 ("Separately
+  ("Separately
   decide and record whether the campaign sets `use_deterministic_algorithms
   (warn_only=True)`"). It is not a fix for subnormal-flushing and this R8 finding does not
   change that decision either way; keep it as a separate item so the two questions do not
   get conflated.
 - The actual defense against a future accidental introduction of a reduced-precision path
   (someone adds `autocast` for speed, or `torch.compile` fuses a kernel onto an FTZ-mode
-  path on some future driver/arch) is the **per-run subnormal assertion**, now specified in
-  `docs/superpowers/plans/2026-08-16-phase1-characterization.md` under "Carried into the
-  campaign runner": every run probes `log10(0 + eps)` -- with `eps` read from its OWN
+  path on some future driver/arch) is the **per-run subnormal assertion**, now specified
+  for the campaign runner: every run probes `log10(0 + eps)` -- with `eps` read from its OWN
   configured `log_floor` and the target derived as `log10(eps)` -- on its OWN allocated
   device at startup, and ABORTS (not warns) on failure. It raises `RuntimeError` rather
   than using a bare `assert`, which `python -O` strips, failing open. That check is

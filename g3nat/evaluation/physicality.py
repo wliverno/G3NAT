@@ -28,7 +28,7 @@ is kept only as a secondary, auditable companion.
 
 Why the change: `frac_in_window` is a THRESHOLD statistic on a metric, which is the same
 failure shape as clamping a value before a log -- the project's standing rule ("NO
-CLAMPING. NO CUTOFFS. NO DISCARDING DATA.", see the project notes) is
+CLAMPING. NO CUTOFFS. NO DISCARDING DATA.") is
 about exactly this effect, not just about literal clamp() calls. A level at 1.01 eV
 counted as a total failure and one at 0.99 eV as a total success under the old metric,
 and a model that moved every level from 3.0 eV to 1.05 eV scored zero improvement. Both

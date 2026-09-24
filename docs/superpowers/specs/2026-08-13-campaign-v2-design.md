@@ -1,11 +1,7 @@
 # Campaign v2: the clean training factorial -- design spec
 
-Date: 2026-08-13, revised 2026-08-15 after a two-reviewer pass (adversarial +
-constructive) and PI review. Status: decisions final as listed; next step is the
-implementation plan. Review artifacts: private notes tree,
-reviews/2026-08-13-campaign-v2/ (four architecture reviews, two spec reviews, the
-broadening literature pass). Companion history: private analysis notes sec. 14-17,
-the private DOE methods notes.
+Date: 2026-08-13, revised 2026-08-15 after review. Status: decisions final as listed; next
+step is the implementation plan.
 
 ## 1. Why a from-scratch campaign
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=g3nat-regen
-#SBATCH --account=anantram-ckpt
-#SBATCH --partition=ckpt-all
+#SBATCH --account=<your-account>
+#SBATCH --partition=<your-partition>
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=2
 #SBATCH --mem=16GB
@@ -18,6 +18,7 @@
 #   sbatch DNADataset/run_regeneration.sh                  # -> pickle_files_v2/
 #   python DNADataset/export_hdf5.py pickle_files_v2 g3nat_dna_transport.h5
 
+# Edit these two paths (and the #SBATCH account/partition above) for your cluster.
 source /path/to/miniconda3/etc/profile.d/conda.sh
 conda activate g3nat
 cd /path/to/G3NAT
