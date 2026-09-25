@@ -6,9 +6,15 @@ A compact Graph Neural Network project for predicting DNA transport properties (
 
 **Demo:** [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/13gInyEBZVMuL1ma-jB5U1pHU917bT9U8?usp=sharing)
 
-Full DNA DFT dataset: 520 sequences x 4 contact/coupling variants = 2077 records
-(lengths 4-8 bp); the archive is released on Zenodo; see `DNADataset/README.md` for the
-format and conventions.
+Full DNA DFT dataset: 2077 training records (520 duplexes, 4-8 bp) + 32 held-out records
+(8 duplexes, 12 and 16 bp), plus Fock/overlap matrices; released on Zenodo (DOI to be
+added); see `DNADataset/README.md` for the format and conventions.
+
+The paper's analysis (scripts, committed outputs and how to reproduce every reported
+number) is in `analysis/`; see `analysis/README.md`. The two models reported in the paper
+are `trained_models/hamiltonian_ldosonly_n2_L4_nogeom_s3731635825.pth` and
+`trained_models/standard_dos_L2_nogeom_s3731635825.pth`; the other `trained_models/`
+files belong to the demos (synthetic-data models and an earlier DFT-trained model).
 
 ### Core modules
 - `g3nat/models/`: GNN models (standard and Hamiltonian), NEGF projection
@@ -45,7 +51,7 @@ of the seeds used for the published runs.
 
 Outputs (the final model, and `checkpoint_latest.pth` / `checkpoint_best.pth`) are saved under
 `./outputs` and `./checkpoints`. Training itself writes no figures -- plotting is separate
-analysis tooling (private notes), run against a saved checkpoint after training finishes.
+analysis tooling (see `analysis/README.md`), run against a saved checkpoint after training finishes.
 
 To resume training, pass `--resume_from path/to/checkpoint_latest.pth`.
 
