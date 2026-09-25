@@ -1,0 +1,27 @@
+CAPACITY PROBE v5: 3-seed mean [min, max] per arm; delta = probe - base (means)
+baseline seed spread (max - min) is the bar a delta must clear at n=3
+
+arm                           val_transmission                  l12_transmission                  l16_transmission                           l12_dos                           l16_dos
+ham base                  0.356 [0.332, 0.396]              1.790 [1.245, 2.598]              1.845 [1.471, 2.048]              0.173 [0.150, 0.193]              0.175 [0.163, 0.197]
+ham deep                  0.311 [0.287, 0.327]              2.387 [2.166, 2.593]              2.455 [2.312, 2.561]              0.166 [0.153, 0.177]              0.166 [0.154, 0.174]
+ham h512                  0.349 [0.314, 0.383]              2.289 [2.173, 2.420]              2.314 [2.002, 2.565]              0.170 [0.167, 0.173]              0.169 [0.162, 0.177]
+delta deep          -0.045 (base spread 0.064)        +0.597 (base spread 1.353)        +0.609 (base spread 0.577)        -0.007 (base spread 0.043)        -0.009 (base spread 0.034)
+delta h512          -0.008 (base spread 0.064)        +0.499 (base spread 1.353)        +0.469 (base spread 0.577)        -0.003 (base spread 0.043)        -0.006 (base spread 0.034)
+
+arm                           val_transmission                  l12_transmission                  l16_transmission                           l12_dos                           l16_dos
+direct base               0.169 [0.164, 0.173]              2.150 [2.068, 2.286]              3.292 [3.079, 3.578]              0.119 [0.113, 0.129]              0.141 [0.132, 0.155]
+direct deep               0.158 [0.152, 0.163]              2.109 [2.007, 2.169]              2.989 [2.809, 3.100]              0.092 [0.087, 0.100]              0.116 [0.105, 0.122]
+direct h512               0.168 [0.167, 0.170]              2.024 [2.011, 2.041]              3.039 [2.907, 3.163]              0.112 [0.097, 0.126]              0.132 [0.117, 0.141]
+delta deep          -0.011 (base spread 0.009)        -0.041 (base spread 0.218)        -0.302 (base spread 0.499)        -0.027 (base spread 0.017)        -0.025 (base spread 0.023)
+delta h512          -0.001 (base spread 0.009)        -0.126 (base spread 0.218)        -0.252 (base spread 0.499)        -0.008 (base spread 0.017)        -0.009 (base spread 0.023)
+
+PER-DUPLEX transmission loss, 3-seed mean (best seed in parentheses)
+duplex                            ham base            ham deep            ham h512         direct base         direct deep         direct h512
+ACTTGACAGTCA (12)              1.16 (1.10)         1.25 (1.10)         1.16 (0.92)         2.09 (1.99)         1.91 (1.84)         2.01 (1.93)
+ATATATATATAT (12)              1.75 (0.75)         3.05 (2.51)         3.12 (2.48)         1.91 (1.77)         2.30 (2.17)         1.83 (1.72)
+GGGGGGGGGGGG (12)              2.69 (1.35)         3.75 (3.41)         3.42 (2.96)         2.05 (1.91)         1.84 (1.50)         1.85 (1.58)
+GTCAGGATCTGA (12)              1.56 (1.30)         1.50 (1.49)         1.46 (1.31)         2.55 (2.42)         2.38 (2.37)         2.40 (2.31)
+GGATAGGCTTAGAATT (16)          1.13 (1.00)         1.01 (0.98)         1.11 (0.98)         3.49 (3.27)         3.36 (3.15)         3.38 (3.15)
+GGGGGGGGGGGGGGGG (16)          3.55 (2.07)         5.47 (4.85)         5.12 (4.33)         3.00 (2.73)         2.36 (1.99)         2.56 (2.44)
+GTCAGGATCTGACAGT (16)          1.54 (1.49)         1.91 (1.69)         1.68 (1.45)         3.36 (3.14)         3.08 (2.99)         3.09 (2.84)
+TCAGTGCTAAGTCATG (16)          1.15 (1.11)         1.43 (1.32)         1.34 (1.10)         3.32 (3.17)         3.16 (3.10)         3.12 (2.94)

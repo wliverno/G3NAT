@@ -1,0 +1,60 @@
+====================================================================================================
+PER-SEQUENCE HEAD-TO-HEAD (spec 5a.3) + COMPOSITION SPLIT (spec 5a.4)
+====================================================================================================
+FIGURE CELLS, geometry OFF, floor 1e-25 (2026-09-17): ham_ldosonly_n2_L4_nogeom vs blind_dos_L2_nogeom.
+
+Cells scored in this run:
+  ham   : <G3NAT_ROOT>/outputs_v3/ham_ldosonly_n2_L4_nogeom_s{seed} / hamiltonian_pickle_model_best.pth (use_geometry=False)
+  blind : <G3NAT_ROOT>/outputs_v3/blind_dos_L2_nogeom_s{seed} / standard_pickle_model_best.pth (use_geometry=False)
+Default cells (no CLI override) are the v3 DOE pick on l12_transmission (analysis/outputs/doe_v3.out, HEAD-TO-HEAD section): ham=ldosonly_n2_L4_nogeom, blind=tonly_L2_geom.
+Per-sequence values are shown at BOTH lengths (L=12 and L=16), not pooled into one row.
+n=4 sequences per length. NO interval (confidence interval, error bar, etc.) is claimed at this sample size -- wins/losses and the sign-test p-value only.
+Loss = full-curve Huber on log10 T (and, separately, log10 DOS), all 201 energy points, per sequence (mean over its 4 contact variants, then mean over 3 seeds). Lower is better. Both models score DOS regardless of supervision, since forward() always returns a DOS prediction; whether DOS is a trained objective for a given cell is a property of that cell, stated above/by the caller, not of this script.
+
+----------------------------------------------------------------------------------------------------
+PER-SEQUENCE TABLE (T and DOS side by side)
+----------------------------------------------------------------------------------------------------
+sequence             length   composition       ham_T     blind_T  winner_T     ham_DOS   blind_DOS  winner_DOS
+---------------------------------------------------------------------------------------------------------------
+ACTTGACAGTCA             12         mixed     1.15805     2.08604       ham     0.14409     0.06062       blind
+ATATATATATAT             12         (AT)n     1.75041     1.90911       ham     0.20142     0.14981       blind
+GGGGGGGGGGGG             12        poly-G     2.68628     2.04857     blind     0.15695     0.20828         ham
+GTCAGGATCTGA             12         mixed     1.56446     2.55457       ham     0.19006     0.05847       blind
+GGATAGGCTTAGAATT         16         mixed     1.13142     3.49078       ham     0.17549     0.10215       blind
+GGGGGGGGGGGGGGGG         16        poly-G     3.55236     2.99953     blind     0.18472     0.30337         ham
+GTCAGGATCTGACAGT         16         mixed     1.54289     3.35968       ham     0.18822     0.07559       blind
+TCAGTGCTAAGTCATG         16         mixed     1.15492     3.31648       ham     0.15171     0.08183       blind
+
+----------------------------------------------------------------------------------------------------
+WINS / LOSSES
+----------------------------------------------------------------------------------------------------
+[transmission] L=12: ham wins 3, blind wins 1 (n=4)
+[transmission] L=16: ham wins 3, blind wins 1 (n=4)
+[transmission] pooled (L=12 and L=16 together, n=8): ham wins 6, blind wins 2
+[DOS] L=12: ham wins 1, blind wins 3 (n=4)
+[DOS] L=16: ham wins 1, blind wins 3 (n=4)
+[DOS] pooled (L=12 and L=16 together, n=8): ham wins 2, blind wins 6
+
+[transmission] two-sided exact binomial sign test on the pooled n=8 (sequence, length) pairs (scipy.stats.binomtest): k(ham wins)=6, n=8, p=0.2891
+[DOS] two-sided exact binomial sign test on the pooled n=8 (sequence, length) pairs (scipy.stats.binomtest): k(ham wins)=2, n=8, p=0.2891
+
+----------------------------------------------------------------------------------------------------
+COMPOSITION-SPLIT TABLE (winner by composition class, at each length)
+----------------------------------------------------------------------------------------------------
+ length   compositionsequence              winner_T  winner_DOS
+---------------------------------------------------------------
+     12         (AT)nATATATATATAT               ham       blind
+     12         mixedACTTGACAGTCA               ham       blind
+     12         mixedGTCAGGATCTGA               ham       blind
+     12        poly-GGGGGGGGGGGGG             blind         ham
+     16         mixedGGATAGGCTTAGAATT           ham       blind
+     16         mixedGTCAGGATCTGACAGT           ham       blind
+     16         mixedTCAGTGCTAAGTCATG           ham       blind
+     16        poly-GGGGGGGGGGGGGGGGG         blind         ham
+
+Tally by composition class (pooled across both lengths):
+  (AT)n      n=1   T: ham=1   blind=0   DOS: ham=0   blind=1
+  mixed      n=5   T: ham=5   blind=0   DOS: ham=0   blind=5
+  poly-G     n=2   T: ham=0   blind=2   DOS: ham=2   blind=0
+
+No interval is claimed on any composition-class tally at this sample size.

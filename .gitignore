@@ -132,6 +132,8 @@ dmypy.json
 outputs/
 outputs_fray/
 !tests/baseline/outputs/
+!analysis/outputs/
+!analysis/outputs/**
 logs/
 
 # Training run artifacts: every sweep cell writes outputs_<prefix>_<tag>/ (final model)
