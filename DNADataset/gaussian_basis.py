@@ -7,7 +7,13 @@ type_code is Gaussian's own per-function code (1000*l + component index) as prin
 IBfTyp array of the matrix-element file, stored so the labels can be checked independently.
 
 The dump's IBfAtm array is not used: it is corrupt (its early entries duplicate IBfTyp).
-The independent SHELL TO ATOM MAP block is used instead.
+The independent SHELL TO ATOM MAP block is the reference for atom assignment instead.
+
+What is checked where: export_matrices_hdf5.py applies its "verified" label only after
+checking, per sequence, the element order (the dump's atomic numbers against the atoms
+table) and the per-function type codes (derived type_code against the dump's IBfTyp). It
+does not compare against the SHELL TO ATOM MAP; that shell-to-atom agreement is checked by
+the unit test tests/test_dataset/test_gaussian_basis.py on one dump header (atatatatatat).
 """
 import numpy as np
 
