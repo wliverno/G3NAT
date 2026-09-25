@@ -32,7 +32,7 @@ from g3nat_analysis.contact_invariance import (
     SETUPS, SETUP_RUN_KEYS, strand_onsite_drift, strand_coupling_drift,
     frozen_rows)
 
-EXPECTED_RUNS = os.path.join(REPO, 'outputs_v3', 'expected_runs.txt')
+EXPECTED_RUNS = os.path.join(_ANALYSIS, 'expected_runs.txt')
 OUTPUTS_V3 = os.path.join(REPO, 'outputs_v3')
 PICKLE_DIR = os.path.join(REPO, 'pickle_files_v2')
 POSTHOC_REPORT = os.path.join(_ANALYSIS, 'outputs', 'posthoc_v3_report.json')

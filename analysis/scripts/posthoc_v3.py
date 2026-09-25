@@ -26,7 +26,7 @@ from g3nat_analysis import evaluator as EV
 from g3nat_analysis.metrics import eligible_substitution_pairs, select_pairs
 from verify_gates import gate_geometry_reaches_cells
 
-EXPECTED_RUNS = os.path.join(REPO, 'outputs_v3', 'expected_runs.txt')
+EXPECTED_RUNS = os.path.join(_ANALYSIS, 'expected_runs.txt')
 OUTPUTS_V3 = os.path.join(REPO, 'outputs_v3')
 PICKLE_DIR = os.path.join(REPO, 'pickle_files_v2')
 HELDOUT_DIRS = {12: os.path.join(REPO, 'DNADataset', 'validation_L12', 'pickles'),
