@@ -4,7 +4,7 @@ Tools for generating DNA structures, running DFT calculations, and computing ele
 
 ## Published dataset
 
-This section is a datasheet for the dataset released on Zenodo (DOI to be added), structured after
+This section is a datasheet for the dataset released on Zenodo (https://doi.org/10.5281/zenodo.22964053), structured after
 the question set in Gebru et al., "Datasheets for Datasets" (see `docs/references.md`).
 It documents `transport.h5` and `matrices.h5`, the two files that make up the Zenodo
 record; the pipeline used to build them is documented in the rest of this README and in
@@ -217,7 +217,7 @@ numerical broadening the Green's-function calculation itself carries).
 
 ### Distribution
 
-Distributed on Zenodo under CC-BY-4.0 (DOI to be added). The record contains:
+Distributed on Zenodo under CC-BY-4.0 (https://doi.org/10.5281/zenodo.22964053). The record contains:
 - `transport.h5` (about 1.41 GB)
 - `matrices.h5` (about 13.79 GB)
 - `geom_cache.tar`, holding `geom_cache/geometry_v2.pkl` and

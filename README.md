@@ -7,8 +7,8 @@ A compact Graph Neural Network project for predicting DNA transport properties (
 **Demo:** [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/13gInyEBZVMuL1ma-jB5U1pHU917bT9U8?usp=sharing)
 
 Full DNA DFT dataset: 2077 training records (520 duplexes, 4-8 bp) + 32 held-out records
-(8 duplexes, 12 and 16 bp), plus Fock/overlap matrices; released on Zenodo (DOI to be
-added); see `DNADataset/README.md` for the format and conventions.
+(8 duplexes, 12 and 16 bp), plus Fock/overlap matrices; released on Zenodo (https://doi.org/10.5281/zenodo.22964053); see `DNADataset/README.md` for the format and conventions.
+All trained checkpoints behind the paper's results: https://doi.org/10.5281/zenodo.22964131.
 
 The paper's analysis (scripts, committed outputs and how to reproduce every reported
 number) is in `analysis/`; see `analysis/README.md`. The two models reported in the paper
@@ -89,7 +89,7 @@ fig, ax = visualize_dna_graph(G, "ACGTACGT", "ACGTACGT")
 
 ### Training from dataset (pickle format)
 
-For this work, we have generated a dataset of 520 sequences, each with up to 4 contact/coupling variants (2 contact types x 2 couplings), for a total of 2077 data points **(archive released on Zenodo; see `DNADataset/README.md` for the format)**
+For this work, we have generated a dataset of 520 sequences, each with up to 4 contact/coupling variants (2 contact types x 2 couplings), for a total of 2077 data points **(archive released on Zenodo, https://doi.org/10.5281/zenodo.22964053; see `DNADataset/README.md` for the format)**
 
 To use this data set, ensure that all pickle files are in the correct directory, and use the unified training script:
 

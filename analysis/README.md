@@ -50,7 +50,7 @@ needed:**
   (run from `analysis/`; prints `direct 0.2738` and `hamiltonian 0.4550`)
 
 **Needs the companion Zenodo checkpoints record** (extract into the repo root so
-that `outputs_v3/` and `outputs_v5probe/` exist, DOI to be added):
+that `outputs_v3/` and `outputs_v5probe/` exist; https://doi.org/10.5281/zenodo.22964131):
 - `scripts/posthoc_v3.py`, `scripts/contact_invariance_v3.py`,
   `scripts/best_epoch_extract.py`, `scripts/paramcount_v3.py`,
   `scripts/probe_capacity_v5.py`
@@ -65,7 +65,7 @@ PDB structures:
   edge geometry feature over the training and held-out sets; the paper's "0.3 A"
   COM-distance figure is the backbone centroid-distance SD (0.273) rounded)
 
-**Needs the companion Zenodo dataset record** (DOI to be added) restored with
+**Needs the companion Zenodo dataset record** (https://doi.org/10.5281/zenodo.22964053) restored with
 `DNADataset/import_hdf5.py`:
 - training pickles: `python DNADataset/import_hdf5.py transport.h5 pickle_files_v2 --split train`
 - held-out pickles: `import_hdf5.py` writes every record from one call into a single
