@@ -2,6 +2,161 @@
 
 Tools for generating DNA structures, running DFT calculations, and computing electronic transmission properties.
 
+## Published dataset
+
+This section is a datasheet for the archive released with the preprint, structured after
+the question set in Gebru et al., "Datasheets for Datasets" (see `docs/references.md`).
+It documents `transport.h5` and `matrices.h5`, the two files that make up the Zenodo
+record; the pipeline used to build them is documented in the rest of this README and in
+`export_hdf5.py` / `export_matrices_hdf5.py`, whose root attrs this section quotes
+verbatim in places so it cannot silently drift from the shipped files.
+
+### Motivation
+
+Coherent-transport observables for DNA duplexes, computed from all-electron DFT, released
+so that coarse-grained Hamiltonian models (of the kind trained in this repository) can be
+trained and evaluated by others without re-running the DFT/NEGF pipeline. The dataset also
+supports any other use of DFT-derived electronic structure and NEGF transport for short DNA
+duplexes.
+
+### Composition
+
+`transport.h5` has 2109 run groups at path `/<sequence>/<run>`: 2077 training records
+(520 distinct sequences, lengths 4-8 bp, up to 4 contact/coupling variants each) and 32
+held-out records (8 distinct sequences: 4 at 12 bp, 4 at 16 bp, x 4 variants each). Every
+run group carries an attr `split` set to `"train"` or `"heldout"`.
+
+Per run group:
+- `Egrid`: 201 points, eV, the window HOMO +/- 1 eV at 0.01 eV spacing, centred on that
+  record's own `energy_reference_eV` (an absolute energy, not shared across records).
+- `T`, `DOS`, `DOSAtom`: transmission, total density of states, and per-atom-resolved DOS.
+- an `atoms` table (element, name, resname, resseq, xyz) and the `contacts` fields
+  (`left_atoms`, `right_atoms`, `coupling_eV`, `contact_type`).
+
+`matrices.h5` has one group per sequence, `/<sequence>/{fock, overlap, basis}`, for the
+528 sequences that have at least one transport record: 520 training-length sequences and
+the 8 held-out sequences. `fock` and `overlap` are the Gaussian Fock and AO overlap
+matrices in Hartree, in the non-orthogonal atomic-orbital basis (they are NOT the
+orthogonalized Hamiltonian used to compute `T`/`DOS`; see Preprocessing below). `basis` is
+the per-row orbital map: `atom_index` (0-based, into the `atoms` table of the matching
+`transport.h5` sequence), `shell_index`, `shell_type`, `component`, and `type_code`
+(Gaussian's own per-function code, `1000*l + component_index`). Each sequence group also
+carries an attr `label_source`, `"derived"` for the 520 training sequences or `"derived;
+verified against this sequence's Gaussian matrix-element file"` for the 8 held-out
+sequences, whose orbital map was additionally checked against that sequence's own Gaussian
+matrix-element dump.
+
+The held-out sequences are:
+- 12 bp: `acttgacagtca`, `atatatatatat`, `gggggggggggg`, `gtcaggatctga`
+- 16 bp: `ggataggcttagaatt`, `gggggggggggggggg`, `gtcaggatctgacagt`, `tcagtgctaagtcatg`
+
+Three sequences (`atattg`, `cactc`, `tggaa`) have Fock/overlap matrices in the upstream
+pipeline output but no complete transport records, because their upstream transport output
+was incomplete; they are excluded from both files. Two training sequences, `cgtat` and
+`gcctgg`, have fewer than 4 run variants each because three configurations for those two
+sequences were corrupted upstream and dropped rather than shipped.
+
+### Collection process
+
+Geometry: idealized NAB fiber B-DNA (`dnabuilder`, documented below), one geometry per
+duplex, no MD, no per-sequence relaxation. DFT: Gaussian 16, B3LYP/6-31G(d,p), implicit
+water (SCRF continuum), single-point on the idealized geometry, net charge
+`-2*(N_bp - 1)` for an `N_bp`-bp duplex, closed-shell singlet. Transport: NEGF with
+wide-band-limit contacts, per the `contact_model` attr (see Contacts below).
+
+### Preprocessing
+
+- The transport results (`T`, `DOS`, `DOSAtom`) are computed from the Lowdin-orthogonalized
+  Hamiltonian `H0 = S^-1/2 F S^-1/2`, not from the raw Fock matrix. `H0` itself is not
+  stored in either file; `matrices.h5` ships the un-orthogonalized `F` and `S` so a reader
+  can reconstruct `H0` if wanted.
+- The upstream `_eigen.mat` orbital-energy files are in Hartree and unsorted; do not assume
+  ascending order or eV units when working from them directly.
+- `DOSAtom` rows follow PDB atom order, and residue identity is the PDB `resseq` column
+  (strand membership follows from `resseq`; see "3. The energy warning" and "4. Strand
+  identity" below).
+- The 6-31G(d,p) basis is Cartesian (6 `d` functions per shell, not 5 spherical). Per-atom
+  function counts: H 5, C/N/O 15, P 19.
+- Every duplex is built from one idealized Watson-Crick geometry; the geometry does not
+  vary with sequence except at the base atoms. A/T and G/C onsite contributions are
+  therefore confounded with geometry by construction -- this dataset cannot separate a
+  sequence-electronic effect from a sequence-geometric one, because geometry is
+  (by construction) not a free variable here.
+
+### Contacts
+
+Root attr `run_map` from `transport.h5`, quoted verbatim:
+
+> run1=(0.1 eV, same) run2=(0.1 eV, cross) run3=(0.6 eV, same) run4=(0.6 eV, cross). same:
+> left contact = residue 1 (primary strand 5' end), right contact = residue L (primary
+> strand 3' end). cross: left = residue 1, right = residue L+1 (complementary strand 5'
+> end). Each run group also stores left_residue/right_residue (resseq) and
+> left_atoms/right_atoms (1-based).
+
+Root attr `contact_model`, quoted verbatim:
+
+> Sigma_L,R = -i*Gamma/2 * I; wide-band limit, energy-independent, purely imaginary, no
+> real part and no work function. Applied to EVERY atomic orbital of EVERY atom in the
+> terminal RESIDUE (the full nucleotide: base, sugar and phosphate). coupling_eV is used
+> for both leads (gammaL == gammaR). There is therefore no physical Fermi level in this
+> model.
+
+### Uses
+
+Intended use: training and evaluating coarse-grained Hamiltonian or direct (physics-blind)
+predictors of DNA coherent transport, and any other reuse of DFT-derived electronic
+structure and NEGF transport for short DNA duplexes. This is not a model of real,
+fluctuating DNA: the geometry is a single idealized fiber-B-DNA conformation with no
+thermal motion, and the transport regime is coherent, ballistic and zero-bias only (no
+inelastic scattering, no finite bias, no explicit temperature broadening beyond whatever
+numerical broadening the Green's-function calculation itself carries).
+
+### Distribution
+
+Distributed on Zenodo under CC-BY-4.0 (DOI to be added). The record contains:
+- `transport.h5` (about 1.41 GB)
+- `matrices.h5` (about 13.79 GB)
+- `geom_cache/geometry_v2.pkl` and `geom_cache/geometry_heldout_L12_L16.pkl`, the
+  X3DNA-DSSR edge-geometry caches read by `--geom_cache` (see "Edge geometry" above)
+- `SHA256SUMS`, checksums for the files above
+
+### Maintenance
+
+New data, if any, will be released as new versions of the same Zenodo record rather than
+as a separate one.
+
+### Reading the archive
+
+```python
+import h5py
+
+with h5py.File("transport.h5", "r") as h:
+    g = h["aaac/run1"]                  # any (sequence, run) group actually present
+    split = g.attrs["split"]            # "train" or "heldout"
+    Egrid, T, DOS = g["Egrid"][:], g["T"][:], g["DOS"][:]
+
+with h5py.File("matrices.h5", "r") as h:
+    m = h["aaac"]
+    F, S = m["fock"][:], m["overlap"][:]           # Hartree, non-orthogonal AO basis
+    atom_index = m["basis/atom_index"][:]          # 0-based, into transport.h5's atoms table
+```
+
+### Converting back to the pickle format the training code reads
+
+```bash
+# training split
+python DNADataset/import_hdf5.py transport.h5 pickle_files_v2 --split train
+
+# held-out split: import_hdf5.py writes every record from one call into a single
+# directory without separating by duplex length, so import into a scratch directory
+# first, then move the 12- and 16-character-sequence records into place
+python DNADataset/import_hdf5.py transport.h5 <scratch_dir> --split heldout
+# then move the 12 bp records into DNADataset/validation_L12/pickles/
+# and the 16 bp records into DNADataset/validation_L16/pickles/
+```
+
+---
+
 ## Prerequisites
 
 - **NAB** (Nucleic Acid Builder) from Amber Classic: https://github.com/dacase/nabc

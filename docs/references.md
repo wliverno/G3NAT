@@ -646,7 +646,7 @@ that sequence rearrangement at FIXED composition substantially changes conductan
    shows a reversible order-of-magnitude change from a B-to-A conformational transition at
    fixed sequence. **This bears directly on the `geom=off` default.** Our own geometry result
    is null (MR 9), but that is a statement about our IDEALIZED FIBER geometry, which is
-   near-constant across sequences by construction (see `docs/dataset.md`), not about geometry
+   near-constant across sequences by construction (see `DNADataset/README.md`), not about geometry
    being unimportant to DNA conductance. State the distinction ourselves rather than let a
    referee draw it.
 4. **That ML for DNA charge transport is new.** Korol and Segal 2019 and Aggarwal et al. 2021
@@ -889,3 +889,19 @@ were re-obtained from the arXiv record. Recorded because it is exactly the failu
 project's citation rule exists for: a confidently-formatted identifier that resolves to a
 real but entirely unrelated paper. Identifiers must be retrieved and resolved, never
 composed.
+
+## Dataset documentation practice (EVIDENCED, retrieved 2026-09-24)
+
+Reference class for structuring `DNADataset/README.md`'s published-dataset section as a
+datasheet, and for publishing the archive at all.
+
+- Gebru, T., Morgenstern, J., Vecchione, B., Vaughan, J. W., Wallach, H., Daume III, H.,
+  Crawford, K. "Datasheets for Datasets." *Commun. ACM* **64**(12), 86-92 (2021).
+  doi:[10.1145/3458723](https://doi.org/10.1145/3458723). The question set (motivation,
+  composition, collection process, preprocessing, uses, distribution, maintenance) that
+  `DNADataset/README.md`'s "Published dataset" section answers.
+- Wilkinson, M. D. et al. "The FAIR Guiding Principles for scientific data management and
+  stewardship." *Scientific Data* 3, 160018 (2016). doi:10.1038/sdata.2016.18 -- already
+  cited above under "Published-dataset file format"; the dataset-publication rationale
+  (findable, accessible, interoperable, reusable) applies equally to shipping the archive
+  itself on Zenodo with a DOI, not only to choosing HDF5 as the container format.

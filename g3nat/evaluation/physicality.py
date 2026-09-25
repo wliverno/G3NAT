@@ -19,7 +19,8 @@ it), never as a success criterion, and never as evidence that one model is "more
 physical" than another.
 
 See private notes ("The [-1,1] window is the supervision range, not a
-physicality criterion") and `docs/dataset.md` (HOMO centring).
+physicality criterion") and `DNADataset/README.md`, section "3. The energy warning"
+(HOMO centring).
 
 ADDED 2026-08-21: `onsite_metrics` now also returns `abs_mean` / `abs_median`, the
 mean/median of |onsite level|. This is a CONTINUOUS measure and is the PRIMARY way to

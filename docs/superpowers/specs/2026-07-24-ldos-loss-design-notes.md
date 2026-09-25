@@ -16,7 +16,7 @@ a state lives. Per-site LDOS pins eigenvectors site by site, which is the under-
 this project has been circling.
 
 This became the primary direction after 2026-07-24, when the "recover a universal per-base
-onsite table" framing was retired (see `docs/dataset.md`). With absolute per-base values off
+onsite table" framing was retired (see `DNADataset/README.md`). With absolute per-base values off
 the table, "is H interpretable/physical" reduces largely to "does H put spectral weight in
 the right places" -- which is what LDOS measures.
 
@@ -80,7 +80,7 @@ the right places" -- which is what LDOS measures.
 
 ## BLOCKED ON
 
-`docs/dataset.md` -- the dataset must be regenerated to carry LDOS, and it is being published
+`DNADataset/README.md` -- the dataset must be regenerated to carry LDOS, and it is being published
 with the paper, so it needs its own spec first. Section 1 of this design (the data pipeline)
 gets simpler as a result: "load a field from the pickle" instead of a training-time `.mat`
 reader doing residue mapping on the fly, which moves the quiet-failure-prone part into a

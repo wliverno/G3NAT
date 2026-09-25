@@ -8,7 +8,7 @@
 > and the window is the supervision range, not a physicality criterion. The alpha sweep this
 > spec designed also cannot discriminate what it claims, since every alpha < 1 shares one
 > hypothesis class. The implementation and its measurements are sound and are recorded in
-> `private analysis notes`; only the framing is wrong. See `docs/dataset.md`.
+> `private analysis notes`; only the framing is wrong. See `DNADataset/README.md`.
 
 Status: design approved (brainstorm); revised after adversarial review. Pre-implementation.
 Branch: `structured-onsite-head` (off `main`). Date: 2026-07-23.

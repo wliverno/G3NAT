@@ -7,8 +7,8 @@ latter using the PDB resseq column.
 Verified over all 2077 records of pickle_files_v2 on 2026-07-26: resseq runs
 contiguously 1..2L, residues 1..L match the primary sequence and L+1..2L the
 complementary one, and the atom table is grouped by residue in file order.
-See docs/dataset.md, section "Properties verified across the full set", for
-the full per-check results. Combined with the graph node layout, this makes
+See DNADataset/README.md, section "4. Strand identity and complementary_sequence",
+for the per-check results on resseq layout. Combined with the graph node layout, this makes
 H index = resseq - 1.
 
 Units are LINEAR throughout. The log10 transform belongs to the caller, so that

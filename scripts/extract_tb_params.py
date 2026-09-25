@@ -13,7 +13,7 @@ is guaranteed by construction:
    gauge-shift-to-G=0 step below does NOT neutralise this; it bakes it in. A "G highest,
    ordering matches Roche" result is close to guaranteed regardless of what the model learned.
    Measured support: AT-only sequences sit 0.813 eV below GC-only ones at 13.6 sigma with zero
-   overlap (docs/dataset.md).
+   overlap (DNADataset/README.md, section "3. The energy warning").
 
 2. THE TABLE IS ONLY MEANINGFUL AT alpha=1.0. For any alpha < 1 the mixing is a vacuous
    reparametrization of the free model -- the baseline collapses to a near-constant and the

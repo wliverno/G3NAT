@@ -213,7 +213,7 @@ RESOLVED    iff gap_ij > 2 * scatter_ij
 - **This says a gap is larger than run-to-run noise. It does not say the value is physically
   meaningful.** G's position is pinned near 0 by the HOMO-centred energy convention for
   495/515 sequences, so G-vs-X gaps can be "RESOLVED" and still not be a fit result. See
-  `docs/dataset.md`.
+  `DNADataset/README.md`.
 
 ## 5. Per-base structure
 
@@ -297,7 +297,7 @@ val_transmission = Huber(log10 T_pred, log10 T_target)   over ALL energy points
   threshold-restricted companion metric (`val_transmission_appreciable`, cut 2026-08-18)
   existed briefly and discarded every point whose target sat below log10 T = -16. That
   number was the old numerical clamp value, an implementation artifact, not a physical
-  transport threshold -- docs/dataset.md puts the deep-tunnelling region at ~1e-8, eight
+  transport threshold -- DNADataset/README.md puts the deep-tunnelling region at ~1e-8, eight
   orders of magnitude away. The discarded tail is also exactly the region the
   length-extrapolation claim rests on.
 - No replacement threshold, percentile, or weighting is being introduced. If a

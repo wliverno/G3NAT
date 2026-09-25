@@ -128,7 +128,7 @@ sample-weighted epoch averaging or a measured skew statement; expose max_grad_no
 warmup / delta in recorded config; DOS/T positivity guard mirroring LDOS's
 [prophylactic -- the full-set scan shows zero current violations]; fix the two stale
 analysis scripts (reversed stacking key; diag(H) asserts are B14); document v2 coverage
-gaps (CGTAT 3/4, GCCTGG 2/4) and the GAAAC backfill in docs/dataset.md.
+gaps (CGTAT 3/4, GCCTGG 2/4) and the GAAAC backfill in DNADataset/README.md.
 
 ## 4. Responses
 

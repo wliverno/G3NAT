@@ -7,8 +7,8 @@ A compact Graph Neural Network project for predicting DNA transport properties (
 **Demo:** [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/13gInyEBZVMuL1ma-jB5U1pHU917bT9U8?usp=sharing)
 
 Full DNA DFT dataset: 520 sequences x 4 contact/coupling variants = 2077 records
-(lengths 4-8 bp); the archive is released with the preprint. Format and conventions:
-`DNADataset/README.md`.
+(lengths 4-8 bp); the archive is released on Zenodo; see `DNADataset/README.md` for the
+format and conventions.
 
 ### Core modules
 - `g3nat/models/`: GNN models (standard and Hamiltonian), NEGF projection
@@ -83,7 +83,7 @@ fig, ax = visualize_dna_graph(G, "ACGTACGT", "ACGTACGT")
 
 ### Training from dataset (pickle format)
 
-For this work, we have generated a dataset of 520 sequences, each with up to 4 contact/coupling variants (2 contact types x 2 couplings), for a total of 2077 data points **(archive released with the preprint; see `DNADataset/README.md` for the format)**
+For this work, we have generated a dataset of 520 sequences, each with up to 4 contact/coupling variants (2 contact types x 2 couplings), for a total of 2077 data points **(archive released on Zenodo; see `DNADataset/README.md` for the format)**
 
 To use this data set, ensure that all pickle files are in the correct directory, and use the unified training script:
 
