@@ -1,4 +1,4 @@
-"""Contact-invariance numbers for Results 3.4: per-arm and per-depth distributions of the per-run median D_interior_mode, worst-10 strand frequencies, excluded sequences, stub null."""
+"""Contact-invariance numbers for the paper's "ANOVA Results" section (contact drift by supervision arm and GNN depth) and the Discussion: per-arm and per-depth distributions of the per-run median D_interior_mode, worst-10 strand frequencies, excluded sequences, stub null."""
 import os
 _OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'outputs')
 import json, numpy as np, collections

@@ -1,4 +1,4 @@
-"""Contact-invariance numbers for Results 3.4: pooled and per-run percentiles of D_interior_mode, axis split, attached vs interior, 32-cell table, marginal means. NOTE: the identical_input_null count printed here is wrong (it tests a dict against (True, "PASS")); the JSON field itself is passed on 96/96 -- left as in the original run."""
+"""Contact-invariance numbers for the paper's "ANOVA Results" section (contact invariance under Base Orbital Assignment) and the Discussion (median contact fluctuation): pooled and per-run percentiles of D_interior_mode, axis split, attached vs interior, 32-cell table, marginal means."""
 import os
 _OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'outputs')
 import json, numpy as np, itertools, collections
@@ -11,7 +11,7 @@ for k, v in d['provenance'].items():
         print('  %-28s %r' % (k, v))
 
 # ---- harness -------------------------------------------------------------
-ident = sum(1 for r in runs.values() if r['harness']['identical_input_null'] in (True, 'PASS'))
+ident = sum(1 for r in runs.values() if r['harness']['identical_input_null']['passed'] is True)
 froz = [r['harness']['frozen_row_check'] for r in runs.values()]
 print('\nharness: identical_input_null PASS %d/96' % ident)
 print('frozen_row_check example:', json.dumps(froz[0])[:300])
