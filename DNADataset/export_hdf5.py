@@ -124,9 +124,9 @@ ROOT_ATTRS = {
     "orthogonalization": "H0 = S^-1/2 F S^-1/2 (Lowdin symmetric)",
     "atom_index_base": "contacts left_atoms/right_atoms are 1-BASED into atoms/*",
     "geometry": ("Idealized NAB fiber B-DNA template (dnabuilder); no MD, no "
-                 "per-sequence relaxation. Geometry is IDENTICAL across sequences "
-                 "except for base identity, so all transport variation is electronic, "
-                 "not conformational."),
+                 "per-sequence relaxation. Geometry varies only through base identity "
+                 "(e.g. twist SD 1.01 deg, rise SD 0.005 A over the training set), so "
+                 "conformational and electronic effects are not separable in this dataset."),
     "regime": "Coherent, ballistic, zero-bias only.",
     "run_map": ("run1=(0.1 eV, same) run2=(0.1 eV, cross) run3=(0.6 eV, same) "
                 "run4=(0.6 eV, cross). same: left contact = residue 1 (primary strand 5' end), "
