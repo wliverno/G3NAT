@@ -1,0 +1,41 @@
+TRAINING SET: 520 duplexes (pickle_files_v2), cache = geom_cache/geometry_v2.pkl
+backbone (5004 edges)
+feature                      mean           sd
+centroid_distance          3.9069       0.2725
+shift                     -0.0002       0.0332
+slide                     -0.1905       0.0306
+rise                       3.3749       0.0050
+tilt                      -0.0008       0.0306
+roll                      -2.8044       0.0110
+twist                     35.9049       1.0126
+
+pair (hydrogen bond) (3022 edges)
+feature                      mean           sd
+centroid_distance          5.8332       0.2042
+shear                      0.0031       0.1045
+stretch                   -0.1297       0.0400
+stagger                    0.0000       0.0000
+buckle                    -0.0006       0.0207
+propeller                 -1.2399       0.0100
+opening                   -2.1655       0.5229
+
+HELD-OUT SET: 8 duplexes (L=12, L=16), cache = geom_cache/geometry_heldout_L12_L16.pkl
+backbone (208 edges)
+feature                      mean           sd
+centroid_distance          3.8885       0.2585
+shift                      0.0051       0.0327
+slide                     -0.1897       0.0244
+rise                       3.3753       0.0050
+tilt                       0.0184       0.0341
+roll                      -2.8036       0.0087
+twist                     35.9168       0.7517
+
+pair (hydrogen bond) (112 edges)
+feature                      mean           sd
+centroid_distance          5.8169       0.2037
+shear                     -0.0473       0.0980
+stretch                   -0.1329       0.0399
+stagger                    0.0000       0.0000
+buckle                     0.0081       0.0194
+propeller                 -1.2407       0.0100
+opening                   -2.1246       0.5208

@@ -46,6 +46,14 @@ that `outputs_v3/` and `outputs_v5probe/` exist, DOI to be added):
   `scripts/best_epoch_extract.py`, `scripts/paramcount_v3.py`,
   `scripts/probe_capacity_v5.py`
 
+**Needs the `geom_cache/` pickles** (`geometry_v2.pkl` for the training set,
+`geometry_heldout_L12_L16.pkl` for the held-out set; not shipped here, built by
+`build_geometry_cache` from the dataset PDB structures -- see the top-level
+README):
+- `scripts/geometry_spread.py` -> `outputs/geometry_spread.out` (mean/SD of every
+  edge geometry feature over the training and held-out sets; the paper's "0.3 A"
+  COM-distance figure is the backbone centroid-distance SD (0.273) rounded)
+
 **Needs the companion Zenodo dataset record** (DOI to be added) restored with
 `DNADataset/import_hdf5.py`:
 - training pickles: `python DNADataset/import_hdf5.py transport.h5 pickle_files_v2 --split train`
@@ -78,6 +86,7 @@ directory; only the numeric/statistical outputs listed here are.
 | 9 | `ci_agg.py`, `ci_arms.py` | stages 1-2 | stdout | Results 3.4 |
 | 10 | `paramcount_v3.py` | 6 checkpoints | stdout | model parameter counts |
 | -- | `probe_capacity_v5.py` | capacity-probe checkpoints | `outputs/probe_capacity_v5.out`, `outputs/probe_capacity_v5_{runs,perseq,summary}.csv` | appendix capacity probe |
+| -- | `geometry_spread.py` | `geom_cache/geometry_v2.pkl`, `geom_cache/geometry_heldout_L12_L16.pkl` | `outputs/geometry_spread.out` | Results: Geometry paragraph (feature spreads) |
 
 (section numbers as of submission)
 
@@ -103,7 +112,7 @@ python scripts/persequence_v3.py \
 `doe_v3_cells_hamiltonian.csv`, `doe_v3_cells_direct.csv`,
 `persequence_v3_figcells_nogeom.out`, `probe_capacity_v5.out`,
 `probe_capacity_v5_runs.csv`, `probe_capacity_v5_perseq.csv`,
-`probe_capacity_v5_summary.csv`.
+`probe_capacity_v5_summary.csv`, `geometry_spread.out`.
 
 The COMPANION lines in `doe_v3.out` and the companion fields in
 `contact_invariance_v3.json` are context copies of each run's transmission
