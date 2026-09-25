@@ -104,6 +104,20 @@ python scripts/persequence_v3.py \
   --out-suffix figcells_nogeom
 ```
 
+## Figure models
+
+The two checkpoints used to generate the paper's figures are shipped in
+`trained_models/`: `hamiltonian_ldosonly_n2_L4_nogeom_s3731635825.pth` and
+`standard_dos_L2_nogeom_s3731635825.pth`, each with a `.json` copy of its
+`resolved_config.json`. Both happen to use seed 3731635825; the selection rule
+was to pick, independently for each model, the seed with the lowest sum of
+three transmission-loss metrics (validation, 12 bp held-out, 16 bp held-out)
+across the three seeds run for that cell. The summed values were
+3.05 / 3.97 / 4.96 for the Hamiltonian model and 5.32 / 5.49 / 6.03 for the
+direct (blind) model; the lowest sum in each list is seed 3731635825. The two
+models landing on the same seed is a coincidence of the rule, not a shared
+selection.
+
 ## Shipped outputs
 
 `outputs/` contains only the floor-25 results:
