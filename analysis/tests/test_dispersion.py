@@ -182,7 +182,7 @@ def test_a_model_order_too_high_for_the_family_aborts():
 
 
 def test_the_dispersion_response_list_is_the_location_list_minus_descriptives():
-    """Ruling 2026-09-11: the dispersion channel covers exactly the responses
+    """Decision 2026-09-11: the dispersion channel covers exactly the responses
     the LOCATION channel F-tests, so the two lists are kept identical by
     construction rather than by hand, and the descriptive-only responses never
     enter. The three transmission responses stay first so the pre-extension

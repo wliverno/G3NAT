@@ -166,7 +166,7 @@ def onsite_over_sample(model, records, sample, energy_grid, geometry_cache,
 def substitution_response(model, records, pairs, energy_grid, geometry_cache,
                           use_geometry):
     """Huber on the predicted vs DFT CHANGE in log10 T, contact-matched. Not a paper
-    response (removed by ruling 2026-08-26) but still computed so the report carries
+    response (removed by decision 2026-08-26) but still computed so the report carries
     sub_n_comparisons, which doe_v3.validate_structure asserts is identical across runs."""
     import torch
     from g3nat_analysis.metrics import matched_records, substitution_loss

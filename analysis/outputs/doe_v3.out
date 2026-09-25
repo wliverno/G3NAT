@@ -1,12 +1,12 @@
 ====================================================================================================
 CAMPAIGN-V3 DOE
 ====================================================================================================
-CAVEAT: each arm's val_transmission_at_selection is read at that arm's OWN selection optimum -- selection metrics differ by arm by design (spec section 2). The response itself is the uniformly-computed validation transmission loss, compared at each run's own best epoch; that is the designed comparison, not a confound.
+CAVEAT: each arm's val_transmission_at_selection is read at that arm's OWN selection optimum -- selection metrics differ by arm by design. The response itself is the uniformly-computed validation transmission loss, compared at each run's own best epoch; that is the designed comparison, not a confound.
 NO RATE, SLOPE, OR THRESHOLD METRIC APPEARS ANYWHERE IN THIS ANALYSIS. Every length response is a full-curve Huber loss at a fixed length.
 
-RULING (2026-08-26): sub_t (substitution response) REMOVED from the tested/printed response set -- r=+0.95 with in-distribution transmission fit across the 32 v3 Hamiltonian cells, cannot be separated from fitting. Old reports carrying a stray 'sub_t' key are read tolerantly (not an abort); the value is simply not analyzed. (ruling 1, 2026-08-26: r=+0.95 with in-distribution fit, not separable from fitting)
+Decision (2026-08-26): sub_t (substitution response) REMOVED from the tested/printed response set -- r=+0.95 with in-distribution transmission fit across the 32 v3 Hamiltonian cells, cannot be separated from fitting. Old reports carrying a stray 'sub_t' key are read tolerantly (not an abort); the value is simply not analyzed. (decision 1, 2026-08-26: r=+0.95 with in-distribution fit, not separable from fitting)
 
-CI RESPONSE ADDED: ['ci_interior_mode'] (ham-only, ruling 2, 2026-08-26). ham BH family size is now 15 terms x 7 responses = 105 (dropped sub_t, added ci_interior_mode). ['ci_interior_total'] is merged and exported but DESCRIPTIVE ONLY, no F-test (2026-09-01: it is the mode axis plus two small components in quadrature -- a near-copy of the headline that would only pad the family). Companion columns (['onsite_abs_mean', 'onsite_std', 'val_transmission_at_selection', 'l16_transmission']) are printed beside their best/worst cells per spec section 3.3.
+CI RESPONSE ADDED: ['ci_interior_mode'] (ham-only, decision 2, 2026-08-26). ham BH family size is now 15 terms x 7 responses = 105 (dropped sub_t, added ci_interior_mode). ['ci_interior_total'] is merged and exported but DESCRIPTIVE ONLY, no F-test (2026-09-01: it is the mode axis plus two small components in quadrature -- a near-copy of the headline that would only pad the family). Companion columns (['onsite_abs_mean', 'onsite_std', 'val_transmission_at_selection', 'l16_transmission']) are printed beside their best/worst cells.
 
 ====================================================================================================
 FAMILY: HAM
@@ -179,7 +179,7 @@ RESPONSE: ci_interior_mode
   WORST: supervision=dos_n_orb=1_num_layers=4_geometry=0              mean=1.97326  seeds=[2.536848, 2.651192, 0.731754]
     COMPANION @ BEST  cell (supervision=tonly_n_orb=1_num_layers=2_geometry=0): onsite_abs_mean=2.06385  onsite_std=0.700573  val_transmission_at_selection=0.615053  l16_transmission=3.96559
     COMPANION @ WORST cell (supervision=dos_n_orb=1_num_layers=4_geometry=0): onsite_abs_mean=2.99366  onsite_std=3.77767  val_transmission_at_selection=0.393119  l16_transmission=3.58254
-    (never a lone drift number -- spec section 3.3)
+    (never a lone drift number -- always printed beside its companions)
   best/worst ratio = 18.75  (reported even when no term is significant)
 
 BENJAMINI-HOCHBERG (q=0.05) over this family's tests: m=105
@@ -209,9 +209,9 @@ BENJAMINI-HOCHBERG (q=0.05) over this family's tests: m=105
     SURVIVOR  l16_transmission             n_orb:num_layers                         p=0.007783
     SURVIVOR  l16_transmission             supervision:n_orb:num_layers             p=0.008373
 
-DESCRIPTIVE onsite_far (spec section 4: not a spec-defined response, no F-test) -- best cell supervision=tonly_n_orb=1_num_layers=2_geometry=1 mean=1.82823; worst cell supervision=tonly_n_orb=2_num_layers=4_geometry=1 mean=15.3108
+DESCRIPTIVE onsite_far (not one of the designed responses, no F-test) -- best cell supervision=tonly_n_orb=1_num_layers=2_geometry=1 mean=1.82823; worst cell supervision=tonly_n_orb=2_num_layers=4_geometry=1 mean=15.3108
 
-DESCRIPTIVE ci_interior_total (near-copy of ci_interior_mode, ruling 2026-09-01, no F-test) -- best cell supervision=tonly_n_orb=1_num_layers=2_geometry=0 mean=0.105878; worst cell supervision=dos_n_orb=1_num_layers=4_geometry=0 mean=2.0051
+DESCRIPTIVE ci_interior_total (near-copy of ci_interior_mode, decision 2026-09-01, no F-test) -- best cell supervision=tonly_n_orb=1_num_layers=2_geometry=0 mean=0.105878; worst cell supervision=dos_n_orb=1_num_layers=4_geometry=0 mean=2.0051
 
 ====================================================================================================
 FAMILY: BLIND
@@ -310,7 +310,7 @@ BENJAMINI-HOCHBERG (q=0.05) over this family's tests: m=35
 SEED-TO-SEED DISPERSION ANALYSIS (spread = max-min over 3 seeds per cell)
 ====================================================================================================
 CAVEAT: runs are seeded but GPU reductions are nondeterministic, so seed spread includes batch-order and hardware noise, not init variance alone.
-Covers EVERY response this family's location analysis F-tests (owner ruling 2026-09-11, extending the 2026-08-26 transmission-only ruling), plus best_epoch when the epoch cache is available. ci_interior_total is descriptive-only in the location analysis and is therefore not a dispersion response either. Raw scale only -- pooled into its own BH family per model family, separate from the location BH families above (different n, different power: not comparable across analyses).
+Covers EVERY response this family's location analysis F-tests (decision 2026-09-11, extending the 2026-08-26 transmission-only decision), plus best_epoch when the epoch cache is available. ci_interior_total is descriptive-only in the location analysis and is therefore not a dispersion response either. Raw scale only -- pooled into its own BH family per model family, separate from the location BH families above (different n, different power: not comparable across analyses).
 ALWAYS CHECK THIS LINE -- dispersion responses that entered: ham ['val_transmission_at_selection', 'l12_transmission', 'l16_transmission', 'l12_dos', 'l16_dos', 'onsite_near', 'ci_interior_mode', 'best_epoch']; blind ['val_transmission_at_selection', 'l12_transmission', 'l16_transmission', 'l12_dos', 'l16_dos', 'best_epoch']
 
 ====================================================================================================
@@ -667,7 +667,7 @@ MEAN SELECTED EPOCH BY SUPERVISION ARM -- blind (mean over the 4 cells of each a
   tonly               471.2       203.7 -      805.7
 
 ====================================================================================================
-HEAD-TO-HEAD (spec section 5a): SELECT ON L=12, REPORT ON L=16. NEVER BOTH.
+HEAD-TO-HEAD: SELECT ON L=12, REPORT ON L=16. NEVER BOTH.
 ====================================================================================================
 PRIMARY NUMBER -- the family distribution at l16_transmission (lower is better):
   ham cells   (n=32):
@@ -724,5 +724,5 @@ MATCHED SELECTION PRESSURE (10000 seeded draws, analysis RNG seed=20260825):
   blind best (single value, blind has exactly 8 cells -- no resampling needed): 3.17265
   fraction of matched-pressure draws where the blind cell's l16 value is still better (lower) than the resampled ham draw: 0
 
-NOTE: the per-sequence sign test (spec 5a.3) requires per-record data not present in this report and is run as a separate targeted pass (controller ruling).
+NOTE: the per-sequence sign test requires per-record data not present in this report and is run as a separate targeted pass (scripts/persequence_v3.py).
 

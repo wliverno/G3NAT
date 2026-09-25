@@ -1,4 +1,4 @@
-"""Campaign-v3 DOE analysis -> outputs/doe_v3.out (the factorial ANOVA behind Results 3.3-3.5).
+"""Campaign-v3 DOE analysis -> outputs/doe_v3.out (the factorial ANOVA behind the paper's "ANOVA Results" and Appendix "Full Factorial ANOVA", Tables 3-4).
 
 Two independent saturated factorials: the Hamiltonian family (supervision x n_orb x
 num_layers x geometry, 32 cells x 3 seeds = 96 runs) and the blind/direct family
@@ -60,7 +60,7 @@ N_BLIND_RUNS = N_BLIND_CELLS * len(SEEDS)  # 24
 N_TOTAL_RUNS = N_HAM_RUNS + N_BLIND_RUNS  # 120
 
 #: Every response is a loss / distance: LOWER IS BETTER uniformly, so "best cell" is
-#: the minimum seed-averaged value everywhere. sub_t is absent by ruling (2026-08-26):
+#: the minimum seed-averaged value everywhere. sub_t is absent by decision (2026-08-26):
 #: it correlates at r=+0.95 with in-distribution fit. Reports carrying it are read
 #: tolerantly; the value is not analyzed.
 RESPONSES_COMMON: Tuple[str, ...] = (
@@ -72,7 +72,7 @@ HAM_EXTRA_RESPONSE = 'onsite_near'
 #: Contact-invariance responses (ham-only). Each is the per-run MEDIAN OVER STRANDS of
 #: the raw vector in the CI report. Only the MODE (attachment-axis) response is
 #: F-tested; ci_interior_total is the mode axis plus two small components in
-#: quadrature and is descriptive only (ruling 2026-09-01), so it does not pad the BH
+#: quadrature and is descriptive only (decision 2026-09-01), so it does not pad the BH
 #: family.
 CI_INTERIOR_MODE = 'ci_interior_mode'
 CI_INTERIOR_TOTAL = 'ci_interior_total'
@@ -110,12 +110,12 @@ BEST_EPOCH_DESCRIPTIVE_NOTE = (
     "written for is a loss; here read those two words as EARLIEST and LATEST.")
 
 SUB_T_REMOVAL_NOTE = (
-    "RULING (2026-08-26): sub_t (substitution response) REMOVED from "
+    "Decision (2026-08-26): sub_t (substitution response) REMOVED from "
     "the tested/printed response set -- r=+0.95 with in-distribution "
     "transmission fit across the 32 v3 Hamiltonian cells, cannot be separated "
     "from fitting. Old reports carrying a stray 'sub_t' key are read "
     "tolerantly (not an abort); the value is simply not analyzed. "
-    "(ruling 1, 2026-08-26: r=+0.95 with in-distribution fit, not separable from fitting)")
+    "(decision 1, 2026-08-26: r=+0.95 with in-distribution fit, not separable from fitting)")
 
 #: Analysis-time RNG seed for the matched-selection-pressure resampling (not a
 #: training seed), recorded so a rerun reproduces the same draws.
@@ -280,14 +280,14 @@ def merge_ci(runs: Dict[str, dict], ci_report: dict) -> Dict[str, dict]:
         if companion_raw is None:
             raise StructureError(
                 f"FATAL: ham run {name!r} CI entry has no 'companion' object "
-                f"-- spec section 3.3 requires {list(CI_COMPANION_FIELDS)} "
-                f"beside every reported drift number.")
+                f"-- every reported drift number is printed beside "
+                f"{list(CI_COMPANION_FIELDS)}.")
         companion: Dict[str, float] = {}
         for field in CI_COMPANION_FIELDS:
             if field not in companion_raw:
                 raise StructureError(
                     f"FATAL: ham run {name!r} CI entry's companion object is "
-                    f"missing {field!r} (spec section 3.3 requires all of "
+                    f"missing {field!r} (every drift number requires all of "
                     f"{list(CI_COMPANION_FIELDS)})")
             val = companion_raw[field]
             if not np.isfinite(val):
@@ -588,7 +588,7 @@ DISPERSION_CAVEAT = (
     "spread includes batch-order and hardware noise, not init variance alone.")
 
 #: Dispersion responses: every response the location analysis F-tests for the ham
-#: family (ruling 2026-09-11). The three transmission responses stay first, in their
+#: family (decision 2026-09-11). The three transmission responses stay first, in their
 #: original order, so the earlier blocks print in the same order.
 DISPERSION_RESPONSES: Tuple[str, ...] = (
     'val_transmission_at_selection', 'l12_transmission', 'l16_transmission',
@@ -1118,7 +1118,7 @@ def print_family(out, fa: FamilyAnalysis):
             comp_worst = "  ".join(f"{k}={v:.6g}" for k, v in rr.worst_companion.items())
             out(f"    COMPANION @ BEST  cell ({rr.best_cell_name}): {comp_best}")
             out(f"    COMPANION @ WORST cell ({rr.worst_cell_name}): {comp_worst}")
-            out("    (never a lone drift number -- spec section 3.3)")
+            out("    (never a lone drift number -- always printed beside its companions)")
         out(f"  best/worst ratio = {rr.best_worst_ratio:.4g}  "
            f"(reported even when no term is significant)")
         out("")
@@ -1139,7 +1139,7 @@ def print_family(out, fa: FamilyAnalysis):
 
 def print_head_to_head(out, h2h: HeadToHead):
     out("=" * 100)
-    out("HEAD-TO-HEAD (spec section 5a): SELECT ON L=12, REPORT ON L=16. NEVER BOTH.")
+    out("HEAD-TO-HEAD: SELECT ON L=12, REPORT ON L=16. NEVER BOTH.")
     out("=" * 100)
     out("PRIMARY NUMBER -- the family distribution at l16_transmission "
        "(lower is better):")
@@ -1173,16 +1173,16 @@ def print_head_to_head(out, h2h: HeadToHead):
        f"value is still better (lower) than the resampled ham draw: "
        f"{frac_blind_wins:.4g}")
     out("")
-    out("NOTE: the per-sequence sign test (spec 5a.3) requires per-record data "
+    out("NOTE: the per-sequence sign test requires per-record data "
        "not present in this report and is run as a separate targeted pass "
-       "(controller ruling).")
+       "(scripts/persequence_v3.py).")
     out("")
 
 
 CAVEAT_LINE = (
     "CAVEAT: each arm's val_transmission_at_selection is read at that arm's OWN "
-    "selection optimum -- selection metrics differ by arm by design (spec section "
-    "2). The response itself is the uniformly-computed validation transmission "
+    "selection optimum -- selection metrics differ by arm by design. "
+    "The response itself is the uniformly-computed validation transmission "
     "loss, compared at each run's own best epoch; that is the designed "
     "comparison, not a confound.")
 
@@ -1215,7 +1215,7 @@ def run_analysis(report: dict, ci_report: dict, best_epoch_cache: dict,
                          ci_companion_responses=ci_companion_responses)
     n_terms, n_ham_resp, ham_m = family_size_parts(ham)
     out(f"CI RESPONSE ADDED: {list(CI_TESTED_RESPONSES)} (ham-only, "
-       f"ruling 2, 2026-08-26). ham BH family size is now {n_terms} terms x "
+       f"decision 2, 2026-08-26). ham BH family size is now {n_terms} terms x "
        f"{n_ham_resp} responses = {ham_m} "
        f"(dropped sub_t, added ci_interior_mode). "
        f"{list(CI_DESCRIPTIVE_ONLY)} is merged and exported but "
@@ -1223,7 +1223,7 @@ def run_analysis(report: dict, ci_report: dict, best_epoch_cache: dict,
        f"axis plus two small components in quadrature -- a near-copy of "
        f"the headline that would only pad the family). "
        f"Companion columns ({list(CI_COMPANION_FIELDS)}) are printed "
-       f"beside their best/worst cells per spec section 3.3.")
+       f"beside their best/worst cells.")
     out("")
 
     print_family(out, ham)
@@ -1233,9 +1233,9 @@ def run_analysis(report: dict, ci_report: dict, best_epoch_cache: dict,
     for of_name in descriptive:
         best_name, best_mean, worst_name, worst_mean = descriptive_cell_means(
             ham_runs, HAM_FACTORS, HAM_LEVELS, of_name)
-        why = ("spec section 4: not a spec-defined response"
+        why = ("not one of the designed responses"
                if of_name in ONSITE_DESCRIPTIVE_ONLY else
-               "near-copy of ci_interior_mode, ruling 2026-09-01")
+               "near-copy of ci_interior_mode, decision 2026-09-01")
         out(f"DESCRIPTIVE {of_name} ({why}, no F-test) -- best cell "
            f"{best_name} mean={best_mean:.6g}; worst cell {worst_name} "
            f"mean={worst_mean:.6g}")
@@ -1251,8 +1251,8 @@ def run_analysis(report: dict, ci_report: dict, best_epoch_cache: dict,
     out("=" * 100)
     out(DISPERSION_CAVEAT)
     out("Covers EVERY response this family's location analysis F-tests "
-       "(owner ruling 2026-09-11, extending the 2026-08-26 transmission-only "
-       "ruling), plus best_epoch when the epoch cache is available. "
+       "(decision 2026-09-11, extending the 2026-08-26 transmission-only "
+       "decision), plus best_epoch when the epoch cache is available. "
        "ci_interior_total is descriptive-only in the location analysis and is "
        "therefore not a dispersion response either. Raw scale only -- pooled "
        "into its own BH family per model family, separate from the location "

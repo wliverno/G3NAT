@@ -157,7 +157,7 @@ def test_best_epoch_joins_its_own_dispersion_family():
 
 @pytest.mark.xfail(strict=True, reason=(
     "finding 5: best_epoch and log10_best_epoch are one test counted twice "
-    "(m=30 should be 15); owner decision pending"))
+    "(m=30 should be 15); decision pending"))
 def test_best_epoch_and_its_own_log_are_not_pooled_as_two_independent_tests():
     """BEST_EPOCH_RESPONSES pools a quantity and its own base-10 log into a
     single BH family, m = 15 x 2 = 30 for ham. A monotone transform of a
@@ -170,7 +170,7 @@ def test_best_epoch_and_its_own_log_are_not_pooled_as_two_independent_tests():
     they carry the same evidence; the family should be m=15.
 
     Left as a strict xfail: changing it changes a published survivor list and
-    is the owner's decision, not the test suite's.
+    is a design decision, not the test suite's.
     """
     runs = make_runs(seed=99)
     rng = np.random.default_rng(99)

@@ -115,7 +115,7 @@ def test_a_string_valued_response_escapes_as_a_typeerror():
 
 
 def test_a_stray_legacy_sub_t_key_is_read_tolerantly_and_never_analyzed():
-    """Ruling 2026-08-26: old reports carrying sub_t are read tolerantly, even
+    """Decision 2026-08-26: old reports carrying sub_t are read tolerantly, even
     when the stray value is non-finite, and the value is simply not analyzed."""
     runs = make_runs()
     for row in runs.values():

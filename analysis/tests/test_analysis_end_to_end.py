@@ -48,7 +48,7 @@ def test_the_full_pipeline_prints_every_section_with_the_documented_sizes():
                    'NO RATE, SLOPE, OR THRESHOLD METRIC'):
         assert marker in txt, marker
 
-    # the sub_t removal ruling is stated, and sub_t is never a response block
+    # the sub_t removal decision is stated, and sub_t is never a response block
     assert 'sub_t' in txt and 'REMOVED' in txt
     assert 'RESPONSE: sub_t' not in txt
     # ci_interior_total is descriptive only: no RESPONSE block of its own
@@ -58,7 +58,7 @@ def test_the_full_pipeline_prints_every_section_with_the_documented_sizes():
         'runs are seeded but GPU reductions are nondeterministic') == 1
     assert 'Shapiro' not in txt
     assert 'log10' not in txt.lower().replace('log10_best_epoch', '')
-    # every companion field is printed beside its cell (spec section 3.3)
+    # every companion field is printed beside its cell
     comp = [l for l in lines if 'COMPANION @' in l]
     for field in D.CI_COMPANION_FIELDS:
         assert any(field in l for l in comp), field
