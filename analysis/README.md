@@ -3,8 +3,12 @@
 This directory holds the scripts and outputs behind every number and figure-data
 table in the paper: the design-of-experiments (DOE) statistics, the contact-invariance
 metric, the per-sequence and per-duplex breakdowns, the parameter counts, and the
-appendix capacity probe. Section numbers below are as of submission and may drift
-in a later revision.
+appendix capacity probe. Paper section, figure and table names below are as of
+submission and may drift in a later revision.
+
+Run names use short supervision labels; the paper's names are: `dos` = DOS+T,
+`ldos` = LDOS+DOS+T, `ldosonly` = LDOS+T, `tonly` = T-only. `ham_*` runs are the
+Hamiltonian model and `blind_*` runs the direct model.
 
 ## Layout
 
@@ -37,8 +41,13 @@ needed:**
 - `scripts/doe_v3.py` -> `outputs/doe_v3.out` (every p-value, Benjamini-Hochberg
   count, best/worst cell, head-to-head comparison)
 - `scripts/export_doe_runs.py` -> `outputs/doe_v3_{runs,cells}_{hamiltonian,direct}.csv`
-- `scripts/ci_agg.py`, `ci_arms.py` -> stdout
-  (Results 3.4 prose numbers)
+- `scripts/ci_agg.py`, `ci_arms.py` -> stdout (contact-drift numbers in "ANOVA
+  Results", GNN Layers subsection, and the "Discussion"; both read only
+  `outputs/contact_invariance_v3.json`)
+- the in-distribution means quoted in the "Discussion" ("0.27 vs 0.46"), the mean
+  validation transmission loss over all runs of each model:
+  `python -c "import pandas as pd; [print(f, '%.4f' % pd.read_csv(f'outputs/doe_v3_runs_{f}.csv').val_transmission.mean()) for f in ('direct', 'hamiltonian')]"`
+  (run from `analysis/`; prints `direct 0.2738` and `hamiltonian 0.4550`)
 
 **Needs the companion Zenodo checkpoints record** (extract into the repo root so
 that `outputs_v3/` and `outputs_v5probe/` exist, DOI to be added):
@@ -47,9 +56,11 @@ that `outputs_v3/` and `outputs_v5probe/` exist, DOI to be added):
   `scripts/probe_capacity_v5.py`
 
 **Needs the `geom_cache/` pickles** (`geometry_v2.pkl` for the training set,
-`geometry_heldout_L12_L16.pkl` for the held-out set; not shipped here, built by
-`build_geometry_cache` from the dataset PDB structures -- see the top-level
-README):
+`geometry_heldout_L12_L16.pkl` for the held-out set). Both ship in the Zenodo dataset
+record as `geom_cache.tar`; extract it at the repository root
+(`tar -xf geom_cache.tar`) to get `<repo>/geom_cache/`. Alternatively, rebuild them
+with `build_geometry_cache` (see the top-level README), which needs X3DNA-DSSR and the
+PDB structures:
 - `scripts/geometry_spread.py` -> `outputs/geometry_spread.out` (mean/SD of every
   edge geometry feature over the training and held-out sets; the paper's "0.3 A"
   COM-distance figure is the backbone centroid-distance SD (0.273) rounded)
@@ -77,23 +88,26 @@ directory; only the numeric/statistical outputs listed here are.
 | stage | script | reads | writes | paper section |
 |---|---|---|---|---|
 | 0 | `build_heldout_geometry.py` | held-out structures, DSSR | geometry cache for held-out evaluation (not shipped) | -- |
-| 1 | `posthoc_v3.py` | 120 checkpoints, training pickles, held-out pickles, geometry caches | `outputs/posthoc_v3_report.json` | Results 3.3, 3.5 |
-| 2 | `contact_invariance_v3.py` | Hamiltonian checkpoints, training pickles, stage-1 report | `outputs/contact_invariance_v3.json` | Results 3.4 |
-| 3 | `best_epoch_extract.py` | 120 checkpoints | `outputs/best_epoch_cache.json` | training-time section, Discussion |
-| 4 | `doe_v3.py` | stages 1-3 | `outputs/doe_v3.out` | every p-value, BH count, best/worst cell, head-to-head |
-| 5 | `export_doe_runs.py` | stages 1-2 | `outputs/doe_v3_{runs,cells}_{hamiltonian,direct}.csv` | figure-summary data |
-| 6 | `persequence_v3.py` | 2 cells x 3 seeds checkpoints, held-out pickles | `outputs/persequence_v3_figcells_nogeom.out` | Results 3.5 |
-| 9 | `ci_agg.py`, `ci_arms.py` | stages 1-2 | stdout | Results 3.4 |
-| 10 | `paramcount_v3.py` | 6 checkpoints | stdout | model parameter counts |
-| -- | `probe_capacity_v5.py` | capacity-probe checkpoints | `outputs/probe_capacity_v5.out`, `outputs/probe_capacity_v5_{runs,perseq,summary}.csv` | appendix capacity probe |
-| -- | `geometry_spread.py` | `geom_cache/geometry_v2.pkl`, `geom_cache/geometry_heldout_L12_L16.pkl` | `outputs/geometry_spread.out` | Results: Geometry paragraph (feature spreads) |
+| 1 | `posthoc_v3.py` | 120 checkpoints, training pickles, held-out pickles, geometry caches | `outputs/posthoc_v3_report.json` | every response behind "ANOVA Results" (Supervision, Base Orbital Assignment, GNN Layers, Geometry), "Final Model Selection" and Appendix "Full Factorial ANOVA" (Tables 3-4) |
+| 2 | `contact_invariance_v3.py` | Hamiltonian checkpoints, training pickles, stage-1 report | `outputs/contact_invariance_v3.json` | contact drift in "ANOVA Results" (Table 3) and the "Discussion" |
+| 3 | `best_epoch_extract.py` | 120 checkpoints | `outputs/best_epoch_cache.json` | none (feeds the training-time section of `doe_v3.out`, not reported in the paper) |
+| 4 | `doe_v3.py` | stages 1-3 | `outputs/doe_v3.out` | "ANOVA Results" and Appendix "Full Factorial ANOVA" (Tables 3-4): every p-value, BH count, best/worst cell |
+| 5 | `export_doe_runs.py` | stages 1-2 | `outputs/doe_v3_{runs,cells}_{hamiltonian,direct}.csv` | Appendix "Full Factorial ANOVA" summary figure data; "Discussion" in-distribution means |
+| 6 | `persequence_v3.py` | 2 cells x 3 seeds checkpoints, held-out pickles | `outputs/persequence_v3_figcells_nogeom.out` | Figure 4(c,d) |
+| 9 | `ci_agg.py`, `ci_arms.py` | `outputs/contact_invariance_v3.json` only | stdout | "ANOVA Results" (GNN Layers: median contact drift by depth and overall), "Discussion" |
+| 10 | `paramcount_v3.py` | 6 checkpoints | stdout | "Hyperparameter Settings" (Table 1, parameter counts) |
+| -- | `probe_capacity_v5.py` | capacity-probe checkpoints | `outputs/probe_capacity_v5.out`, `outputs/probe_capacity_v5_{runs,perseq,summary}.csv` | Appendix "Capacity probe" (Table 5) |
+| -- | `geometry_spread.py` | `geom_cache/geometry_v2.pkl`, `geom_cache/geometry_heldout_L12_L16.pkl` | `outputs/geometry_spread.out` | "ANOVA Results", Geometry subsection (feature spreads) |
 
-(section numbers as of submission)
+(paper section, figure and table names as of submission)
+
+The dispersion and training-time (best-epoch) sections of `doe_v3.out` are not
+reported in the paper.
 
 ## The figure-pair `persequence_v3.py` invocation
 
-`persequence_v3.py`'s default checkpoint pair is a diagnostic ("protocol")
-pair, not the pair used in the paper's figure. To reproduce the shipped
+`persequence_v3.py`'s default checkpoint pair is the DOE-selected pair (best
+cells on l12_transmission), not the pair used in the paper's Figure 4. To reproduce the shipped
 `outputs/persequence_v3_figcells_nogeom.out`, run:
 
 ```
@@ -117,6 +131,13 @@ across the three seeds run for that cell. The summed values were
 direct (blind) model; the lowest sum in each list is seed 3731635825. The two
 models landing on the same seed is a coincidence of the rule, not a shared
 selection.
+
+The `git_sha` recorded in the `resolved_config.json` files (046bc55 for the 120
+campaign runs and both figure models, 3efcc97 for the capacity probe) predates a
+history rewrite. Their public equivalents are 8c2ec72 and 9b65bf0. Each pair differs
+only in comments, docstrings, one argparse help string, one placeholder path in
+`scripts/reconcile_dataset.py`, two removed job scripts and removed planning
+documents; no model, training or data-loading code differs.
 
 ## Shipped outputs
 
