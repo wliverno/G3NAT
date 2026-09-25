@@ -37,10 +37,8 @@ needed:**
 - `scripts/doe_v3.py` -> `outputs/doe_v3.out` (every p-value, Benjamini-Hochberg
   count, best/worst cell, head-to-head comparison)
 - `scripts/export_doe_runs.py` -> `outputs/doe_v3_{runs,cells}_{hamiltonian,direct}.csv`
-- `scripts/ci_agg.py`, `ci_arms.py`, `ci_hopping.py`, `ci_outlier.py` -> stdout
+- `scripts/ci_agg.py`, `ci_arms.py` -> stdout
   (Results 3.4 prose numbers)
-- `scripts/perseq_all_summary.py` -> reads `outputs/perseq_all_runs.csv`, writes
-  `outputs/perseq_all_summary.out` (the mixed-vs-repeat held-out comparison)
 
 **Needs the companion Zenodo checkpoints record** (extract into the repo root so
 that `outputs_v3/` and `outputs_v5probe/` exist, DOI to be added):
@@ -77,8 +75,7 @@ directory; only the numeric/statistical outputs listed here are.
 | 4 | `doe_v3.py` | stages 1-3 | `outputs/doe_v3.out` | every p-value, BH count, best/worst cell, head-to-head |
 | 5 | `export_doe_runs.py` | stages 1-2 | `outputs/doe_v3_{runs,cells}_{hamiltonian,direct}.csv` | figure-summary data |
 | 6 | `persequence_v3.py` | 2 cells x 3 seeds checkpoints, held-out pickles | `outputs/persequence_v3_figcells_nogeom.out` | Results 3.5 |
-| -- | `perseq_all_runs.py` + `perseq_all_summary.py` | all 120 checkpoints, held-out pickles | `outputs/perseq_all_runs.csv`, `outputs/perseq_all_summary.out` | mixed-vs-repeat held-out comparison |
-| 9 | `ci_agg.py`, `ci_arms.py`, `ci_hopping.py`, `ci_outlier.py` | stages 1-2 | stdout | Results 3.4 |
+| 9 | `ci_agg.py`, `ci_arms.py` | stages 1-2 | stdout | Results 3.4 |
 | 10 | `paramcount_v3.py` | 6 checkpoints | stdout | model parameter counts |
 | -- | `probe_capacity_v5.py` | capacity-probe checkpoints | `outputs/probe_capacity_v5.out`, `outputs/probe_capacity_v5_{runs,perseq,summary}.csv` | appendix capacity probe |
 
@@ -104,9 +101,14 @@ python scripts/persequence_v3.py \
 `posthoc_v3_report.json`, `contact_invariance_v3.json`, `best_epoch_cache.json`,
 `doe_v3.out`, `doe_v3_runs_hamiltonian.csv`, `doe_v3_runs_direct.csv`,
 `doe_v3_cells_hamiltonian.csv`, `doe_v3_cells_direct.csv`,
-`persequence_v3_figcells_nogeom.out`, `perseq_all_runs.csv`,
-`perseq_all_summary.out`, `probe_capacity_v5.out`, `probe_capacity_v5_runs.csv`,
-`probe_capacity_v5_perseq.csv`, `probe_capacity_v5_summary.csv`.
+`persequence_v3_figcells_nogeom.out`, `probe_capacity_v5.out`,
+`probe_capacity_v5_runs.csv`, `probe_capacity_v5_perseq.csv`,
+`probe_capacity_v5_summary.csv`.
+
+The COMPANION lines in `doe_v3.out` and the companion fields in
+`contact_invariance_v3.json` are context copies of each run's transmission
+losses taken before the 1e-25 floor was applied; no number in the paper is
+taken from them.
 
 Other variants that existed during development (alternate floors, the
 protocol-pair per-sequence output, a TransformerConv variant, a loss-probe
