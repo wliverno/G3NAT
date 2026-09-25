@@ -646,7 +646,8 @@ that sequence rearrangement at FIXED composition substantially changes conductan
    shows a reversible order-of-magnitude change from a B-to-A conformational transition at
    fixed sequence. **This bears directly on the `geom=off` default.** Our own geometry result
    is null (MR 9), but that is a statement about our IDEALIZED FIBER geometry, which is
-   near-constant across sequences by construction (see `DNADataset/README.md`), not about geometry
+   near-constant across sequences by construction (see `DNADataset/README.md`, the
+   `geometry` root attr, and section "Preprocessing"), not about geometry
    being unimportant to DNA conductance. State the distinction ourselves rather than let a
    referee draw it.
 4. **That ML for DNA charge transport is new.** Korol and Segal 2019 and Aggarwal et al. 2021

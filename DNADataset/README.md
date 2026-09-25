@@ -4,7 +4,7 @@ Tools for generating DNA structures, running DFT calculations, and computing ele
 
 ## Published dataset
 
-This section is a datasheet for the archive released with the preprint, structured after
+This section is a datasheet for the dataset released on Zenodo (DOI to be added), structured after
 the question set in Gebru et al., "Datasheets for Datasets" (see `docs/references.md`).
 It documents `transport.h5` and `matrices.h5`, the two files that make up the Zenodo
 record; the pipeline used to build them is documented in the rest of this README and in
@@ -22,8 +22,8 @@ duplexes.
 ### Composition
 
 `transport.h5` has 2109 run groups at path `/<sequence>/<run>`: 2077 training records
-(520 distinct sequences, lengths 4-8 bp, up to 4 contact/coupling variants each) and 32
-held-out records (8 distinct sequences: 4 at 12 bp, 4 at 16 bp, x 4 variants each). Every
+(520 duplexes, 4-8 bp, up to 4 contact/coupling variants each) and 32 held-out records
+(8 duplexes: 4 at 12 bp, 4 at 16 bp, x 4 variants each). Every
 run group carries an attr `split` set to `"train"` or `"heldout"`.
 
 Per run group:
@@ -73,8 +73,7 @@ wide-band-limit contacts, per the `contact_model` attr (see Contacts below).
 - The upstream `_eigen.mat` orbital-energy files are in Hartree and unsorted; do not assume
   ascending order or eV units when working from them directly.
 - `DOSAtom` rows follow PDB atom order, and residue identity is the PDB `resseq` column
-  (strand membership follows from `resseq`; see "3. The energy warning" and "4. Strand
-  identity" below).
+  (strand membership follows from `resseq`; see "Strand identity" below).
 - The 6-31G(d,p) basis is Cartesian (6 `d` functions per shell, not 5 spherical). Per-atom
   function counts: H 5, C/N/O 15, P 19.
 - Every duplex is built from one idealized Watson-Crick geometry; the geometry does not
@@ -82,6 +81,31 @@ wide-band-limit contacts, per the `contact_model` attr (see Contacts below).
   therefore confounded with geometry by construction -- this dataset cannot separate a
   sequence-electronic effect from a sequence-geometric one, because geometry is
   (by construction) not a free variable here.
+
+### Energy reference
+
+Root attr `energy_convention` from `transport.h5`, quoted verbatim:
+
+> Egrid is RAW/absolute. Each record's grid is centred on THAT sequence's HOMO, so
+> energy_reference_eV differs per record. WARNING: the reference is a composition proxy
+> (AT-only vs GC-only sequences differ by 0.813 eV, 13.6 sigma, zero overlap), so
+> comparing a fixed RELATIVE energy across sequences reintroduces a base-composition
+> confound.
+
+In words: every record's grid runs from HOMO - 1 eV to HOMO + 1 eV of its own duplex, so
+0 eV relative energy is a different absolute energy in different records. The absolute
+HOMO of a GC-only duplex is 0.81 eV higher than that of an AT-only duplex, yet both sit at
+the 0 eV reference.
+
+### Strand identity
+
+Root attr `strand_identity` from `transport.h5`, quoted verbatim:
+
+> PDB chainID is blank in these structures (the builder does not set it) and is
+> therefore NOT exported. Strand identity comes from resseq: for a duplex of L base
+> pairs, residues 1..L are the primary strand 5'->3' and residues L+1..2L are the
+> complementary strand, also written 5'->3' and therefore antiparallel to the primary.
+> This is why complementary_sequence is the REVERSE complement of sequence.
 
 ### Contacts
 
@@ -118,7 +142,7 @@ Per-run-group fields:
 
 | name | HDF5 kind | dtype | shape | units | meaning |
 |---|---|---|---|---|---|
-| `Egrid` | dataset | float64 | `(n_energy,)` | eV | Absolute (not relative) energy grid; see Preprocessing above before comparing across records. |
+| `Egrid` | dataset | float64 | `(n_energy,)` | eV | Absolute (not relative) energy grid; see Energy reference above before comparing across records. |
 | `DOS` | dataset | float64 | `(n_energy,)` | 1/eV | Total density of states, `DOS = -(1/pi) Im Tr(G^r)`. One spin channel, bare, no `2e^2/h`. |
 | `T` | dataset | float64 | `(n_energy,)` | dimensionless | Transmission, `T = Tr(Gamma_L G^r Gamma_R G^a)`. One spin channel, bare Landauer trace, not a conductance. |
 | `DOSAtom` | dataset | float64 | `(n_atoms, n_energy)` | 1/eV | Per-atom-resolved DOS; row order matches `atoms/*`; summing over atoms reproduces `DOS`. |
@@ -137,7 +161,7 @@ Per-run-group fields:
 | `element` | UTF-8 string array | `(n_atoms,)` | -- | Element symbol, PDB file order. |
 | `name` | UTF-8 string array | `(n_atoms,)` | -- | PDB atom name. |
 | `resname` | UTF-8 string array | `(n_atoms,)` | -- | PDB residue name (base identity). |
-| `resseq` | int32 | `(n_atoms,)` | -- | PDB residue sequence number, 1-based, non-decreasing; determines strand identity (Preprocessing above). |
+| `resseq` | int32 | `(n_atoms,)` | -- | PDB residue sequence number, 1-based, non-decreasing; determines strand identity (Strand identity above). |
 | `xyz` | float64 | `(n_atoms, 3)` | Angstrom | Atomic Cartesian coordinates, PDB file order (also the `DOSAtom` row order). |
 
 `atoms/chain` is deliberately not present (PDB chainID is blank in every source
@@ -151,13 +175,23 @@ Root attrs not already quoted above, verbatim: `units_energy`: `"eV"`;
 trace, no 2e^2/h"`; `spin`: `"Spin-restricted closed-shell Fock (alpha only). DOS and T
 are ONE spin-degenerate channel; double for total-electron DOS or conductance."`;
 `atom_index_base`: `"contacts left_atoms/right_atoms are 1-BASED into atoms/*"`;
+`level_of_theory`: `"B3LYP/6-31G(d,p) in implicit water (SCRF continuum,
+scrf=(solvent=water)); single-point on the idealized geometry, no optimization."`;
+`charge_and_multiplicity`: `"Net charge -2(L-1) for an L-bp duplex (every internal
+phosphodiester phosphate deprotonated, free 5'/3'-OH termini, no counterions);
+closed-shell singlet."`; `orthogonalization`: `"H0 = S^-1/2 F S^-1/2 (Lowdin
+symmetric)"`; `geometry`: `"Idealized NAB fiber B-DNA template (dnabuilder); no MD, no
+per-sequence relaxation. Geometry varies only through base identity (e.g. twist SD 1.01
+deg, rise SD 0.005 A over the training set), so conformational and electronic effects
+are not separable in this dataset."`; `regime`: `"Coherent, ballistic, zero-bias
+only."`;
 `limitations`: `"Fock and overlap matrices, with a per-row orbital map, are in the
 companion file matrices.h5 (same sequence keys); H0 = S^-1/2 F S^-1/2 is not stored. A
 contact's matrix rows are all rows whose basis atom lies in its residue."`;
-`license`: `"CC-BY-4.0"`.
+`split`: `"Each run group has attr split='train' (lengths 4-8, the training set) or
+'heldout' (lengths 12 and 16, never used in training)."`; `license`: `"CC-BY-4.0"`.
 
-Sequence-length distribution of the 2077 training records (520 distinct sequences,
-length 4-8 bp):
+Sequence-length distribution of the 2077 training records (520 duplexes, 4-8 bp):
 
 | sequence length (bases) | distinct sequences | records |
 |---|---|---|
@@ -186,9 +220,11 @@ numerical broadening the Green's-function calculation itself carries).
 Distributed on Zenodo under CC-BY-4.0 (DOI to be added). The record contains:
 - `transport.h5` (about 1.41 GB)
 - `matrices.h5` (about 13.79 GB)
-- `geom_cache/geometry_v2.pkl` and `geom_cache/geometry_heldout_L12_L16.pkl`, the
-  X3DNA-DSSR edge-geometry caches read by `--geom_cache` (see "Edge geometry" above)
-- `SHA256SUMS`, checksums for the files above
+- `geom_cache.tar`, holding `geom_cache/geometry_v2.pkl` and
+  `geom_cache/geometry_heldout_L12_L16.pkl`, the X3DNA-DSSR edge-geometry caches read by
+  `--geom_cache` (see "Edge geometry (X3DNA / DSSR)" in the top-level `README.md`).
+  Extract it at the repository root (`tar -xf geom_cache.tar`) to get `geom_cache/`.
+- `SHA256SUMS`, checksums for the three files above
 
 ### Maintenance
 

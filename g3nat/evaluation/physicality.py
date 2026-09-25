@@ -19,7 +19,7 @@ it), never as a success criterion, and never as evidence that one model is "more
 physical" than another.
 
 See private notes ("The [-1,1] window is the supervision range, not a
-physicality criterion") and `DNADataset/README.md`, section "3. The energy warning"
+physicality criterion") and `DNADataset/README.md`, section "Energy reference"
 (HOMO centring).
 
 ADDED 2026-08-21: `onsite_metrics` now also returns `abs_mean` / `abs_median`, the
