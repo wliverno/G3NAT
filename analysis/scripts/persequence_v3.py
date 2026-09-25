@@ -7,15 +7,13 @@ over the 3 seeds -- the duplex is the unit, its variants are not independent) an
 the two-sided exact binomial sign test on the n=8 (sequence, length) pairs. Same
 construction for log10 T and, separately, log10 DOS.
 
-Default cells are the v3 DOE's pick on l12_transmission (doe_v3.out, HEAD-TO-HEAD):
-ham_ldosonly_n2_L4_nogeom vs blind_tonly_L2_geom. The paper's other invocations:
-  figure pair, geometry off:  --ham-dir-tmpl .../outputs_v3/ham_ldosonly_n2_L4_nogeom_s{seed}
-                              --blind-dir-tmpl .../outputs_v3/blind_dos_L2_nogeom_s{seed}
-                              --blind-geometry false --out-suffix figcells_nogeom
-                              --dump-csv figures/paper/data/fig-perseq_figcells_nogeom_records.csv
-  TransformerConv arm:        same with outputs_v3conv/*_tconv_s{seed}, --out-suffix figcells_nogeom_tconv
-  loss probes:                outputs_v4probe/*_{huber,mse}_s{seed}, --metric {huber,mse},
-                              --out-suffix v4probe_<trained>_in_<scored>
+Default cells are the DOE-selected pair (the v3 DOE's pick on l12_transmission,
+doe_v3.out, HEAD-TO-HEAD): ham_ldosonly_n2_L4_nogeom vs blind_tonly_L2_geom. The paper's
+Figure 4 uses the figure pair instead, which is how outputs/persequence_v3_figcells_nogeom.out
+was produced:
+  --ham-dir-tmpl <REPO>/outputs_v3/ham_ldosonly_n2_L4_nogeom_s{seed}
+  --blind-dir-tmpl <REPO>/outputs_v3/blind_dos_L2_nogeom_s{seed}
+  --blind-geometry false --out-suffix figcells_nogeom
 
 Any load failure or missing record is FATAL; there is no skip list.
 """
