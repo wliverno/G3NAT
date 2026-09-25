@@ -304,7 +304,7 @@ python TransportSetup.py PDB_FILE --mode {same,cross} --gamma VALUE
 ```
 
 **Options:**
-- `--mode`: `same` (5'→3' same strand) or `cross` (5'→5' cross-strand), default: `same`
+- `--mode`: `same` (5'->3' same strand) or `cross` (5'->5' cross-strand), default: `same`
 - `--gamma`: Coupling strength (eV), default: 0.1
 
 **Example:**
@@ -365,7 +365,7 @@ The dataset generation process is fully automated through `combined_script.slurm
 ### 1. Edit the SLURM script (if needed)
 
 Inside `combined_script.slurm`, adjust:
-- DNA sequence length range (4–8 by default)
+- DNA sequence length range (4-8 by default)
 - Number of sequences to generate
 - Contact mode (same / cross)
 - Coupling strengths (gamma values)
@@ -380,31 +380,31 @@ sbatch combined_script.slurm
 After execution, results are organized as: 
 ```
 DNA_SEQUENCE/
-├── run1/
-│   ├── Parameters.txt
-│   ├── Tran_sequence_gammaL_X_gammaR_X.mat
-│   ├── DOS_sequence_gammaL_X_gammaR_X.mat
-│   ├── metadata.txt
-│   └── run_config.txt
-├── run2/
-├── run3/
-├── run4/
-├── Parameters.txt
-├── sequence.mat
-├── sequence_eigen.mat
-├── transmission outputs
-├── DOS outputs
-└── pickle files
+    run1/
+        Parameters.txt
+        Tran_sequence_gammaL_X_gammaR_X.mat
+        DOS_sequence_gammaL_X_gammaR_X.mat
+        metadata.txt
+        run_config.txt
+    run2/
+    run3/
+    run4/
+    Parameters.txt
+    sequence.mat
+    sequence_eigen.mat
+    transmission outputs
+    DOS outputs
+    pickle files
 ```
 
 Original `.pdb` and `.gjf` files remain in the main directory.
 
 ## Common Issues
 
-- Small (~9 KB) `.mat` file → Gaussian matrix output not enabled properly.
-- `g16: command not found` → Load module `chem/g16`.
-- `readmat: Permission denied` → Ensure executable permissions.
-- Missing HOMO-LUMO range → Ensure `.log` and `_eigen.mat` exist.
+- Small (~9 KB) `.mat` file -> Gaussian matrix output not enabled properly.
+- `g16: command not found` -> Load module `chem/g16`.
+- `readmat: Permission denied` -> Ensure executable permissions.
+- Missing HOMO-LUMO range -> Ensure `.log` and `_eigen.mat` exist.
 
 ## Credits
 
@@ -415,6 +415,6 @@ Original `.pdb` and `.gjf` files remain in the main directory.
 
 - NAB installation: Install from https://github.com/dacase/nabc and set `BUILDDIR` in `dnabuilder`
 - PDB files must have TER records separating strands
-- `TransportSetup.py` automatically finds HOMO-LUMO from `.log` and `_eigen.mat` files to set energy range (HOMO±1eV inclusive at 0.01 eV, i.e. 201 points)
+- `TransportSetup.py` automatically finds HOMO-LUMO from `.log` and `_eigen.mat` files to set energy range (HOMO +/- 1 eV inclusive at 0.01 eV, i.e. 201 points)
 - MATLAB functions must be in MATLAB path or same directory as scripts
 
