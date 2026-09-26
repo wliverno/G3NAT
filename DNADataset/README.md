@@ -219,12 +219,14 @@ numerical broadening the Green's-function calculation itself carries).
 
 Distributed on Zenodo under CC-BY-4.0 (https://doi.org/10.5281/zenodo.22964053). The record contains:
 - `transport.h5` (about 1.41 GB)
-- `matrices.h5` (about 13.79 GB)
+- `matrices.h5` (about 13.79 GB), uploaded as ten parts `matrices.h5.part0` ...
+  `matrices.h5.part9` (about 1.38 GB each). Reassemble with
+  `cat matrices.h5.part? > matrices.h5`, then check with `sha256sum -c SHA256SUMS`.
 - `geom_cache.tar`, holding `geom_cache/geometry_v2.pkl` and
   `geom_cache/geometry_heldout_L12_L16.pkl`, the X3DNA-DSSR edge-geometry caches read by
   `--geom_cache` (see "Edge geometry (X3DNA / DSSR)" in the top-level `README.md`).
   Extract it at the repository root (`tar -xf geom_cache.tar`) to get `geom_cache/`.
-- `SHA256SUMS`, checksums for the three files above
+- `SHA256SUMS`, checksums for the reassembled files above and for each `matrices.h5` part
 
 ### Maintenance
 
