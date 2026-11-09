@@ -149,6 +149,21 @@ def parse_args():
                             'campaign; one post-factorial epilogue run turns it on. '
                             'Replaces the removed continuous alpha mix: this flag is the '
                             'old alpha=1, and its absence the old alpha=0.')
+    parser.add_argument('--dna_only_message_passing', action=argparse.BooleanOptionalAction,
+                       default=True,
+                       help='Hamiltonian model only (default on since 2026-11-09): run the '
+                            'GNN layers on the DNA subgraph (bases, backbone and '
+                            'hydrogen-bond edges), with the two contact nodes and the '
+                            'contact edges removed from message passing. GammaL/GammaR are '
+                            'still read from the contact edges, so one learned H serves all '
+                            'four contact configurations of a sequence. '
+                            '--no-dna_only_message_passing keeps the contacts in the graph, '
+                            'as in campaign v3.')
+    parser.add_argument('--readout_pooling', default='mean', choices=['mean', 'sum'],
+                       help='Direct (standard) model only: how node embeddings are pooled '
+                            'before the DOS and T heads. mean (default, campaign v3) does '
+                            'not change with the number of nodes; sum does, so the readout '
+                            'can see duplex length.')
 
     # Training parameters
     parser.add_argument('--num_epochs', type=int, default=100)
@@ -379,6 +394,11 @@ def main():
             "fallback is silently ~98% wrong at resonances and it ignores --complex_eta. "
             "Pass --allow_frobenius only for legacy comparisons.")
 
+    if args.model_type in ('standard', 'standard_deep'):
+        # The direct model has no Hamiltonian GNN to restrict and keeps the contacts
+        # in its graph; record that instead of the Hamiltonian-only default.
+        args.dna_only_message_passing = False
+
     os.makedirs(args.output_dir, exist_ok=True)
     os.makedirs(args.checkpoint_dir, exist_ok=True)
 
@@ -546,8 +566,12 @@ def main():
             # branches whenever a shared flag is added.
             use_geometry=args.use_geometry,
             geom_norm_stats=geom_norm_stats,
+            readout_pooling=args.readout_pooling,
         )
     else:
+        if args.readout_pooling != 'mean':
+            raise SystemExit("--readout_pooling applies to the direct (standard) model only; "
+                             "the Hamiltonian model has no pooled readout.")
         if args.dropout != 0.0:
             print(f"WARNING: --dropout ({args.dropout}) has no effect on the hamiltonian "
                   "model (it has no dropout layers); the flag applies to --model_type "
@@ -568,6 +592,7 @@ def main():
             use_geometry=args.use_geometry,
             geom_norm_stats=geom_norm_stats,
             per_base_onsite=args.per_base_onsite,
+            dna_only_message_passing=args.dna_only_message_passing,
         )
 
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")

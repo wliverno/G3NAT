@@ -4,7 +4,9 @@ import torch
 from g3nat.floor import LOG10_FLOOR
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GATConv, TransformerConv, global_mean_pool
+from torch_geometric.nn import GATConv, TransformerConv, global_add_pool, global_mean_pool
+
+READOUT_POOLING = {'mean': global_mean_pool, 'sum': global_add_pool}
 
 
 class DNATransportGNN(nn.Module):
@@ -22,8 +24,12 @@ class DNATransportGNN(nn.Module):
                  conv_type: str = 'transformer',
                  use_geometry: bool = False,
                  geom_dim: int = 7,
-                 geom_norm_stats: Optional[Dict] = None):
+                 geom_norm_stats: Optional[Dict] = None,
+                 readout_pooling: str = 'mean'):
         super().__init__()
+        if readout_pooling not in READOUT_POOLING:
+            raise ValueError(f"readout_pooling must be one of {sorted(READOUT_POOLING)}, "
+                             f"got {readout_pooling!r}")
         # Use features specified in dataset.py
         node_features = 4  # 4 one-hot features (A, T, G, C)
         edge_features = 5  # 3 one-hot + directionality + coupling
@@ -72,8 +78,12 @@ class DNATransportGNN(nn.Module):
             nn.Linear(hidden_dim // 2, output_dim)
         )
 
-        # Global pooling
-        self.global_pool = global_mean_pool
+        # Global pooling. 'mean' (default, every campaign run) cannot change with the
+        # number of nodes, so the readout cannot see duplex length; 'sum' (added
+        # 2026-11-09 for the review's length baseline) sums the same node embeddings
+        # and does. Pure function choice: no parameters, old checkpoints load.
+        self.readout_pooling = readout_pooling
+        self.global_pool = READOUT_POOLING[readout_pooling]
 
         # Optional SE(3)-invariant geometry channel. Default off = byte-for-byte
         # identical model (no extra params/buffers, existing checkpoints load).

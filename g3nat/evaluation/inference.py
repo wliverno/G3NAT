@@ -416,6 +416,9 @@ def load_trained_model(model_path: str, device: str = 'auto',
             conv_type=args.get('conv_type', 'gat'),
             use_geometry=args.get('use_geometry', False),
             per_base_onsite=per_base_onsite,
+            # Absent from every checkpoint written before 2026-11-06 -> off,
+            # which is the behaviour those checkpoints were trained with.
+            dna_only_message_passing=bool(args.get('dna_only_message_passing', False)),
         )
         # Old alpha-mix checkpoints carry state this model no longer has.
         state_dict = drop_legacy_alpha_state(state_dict, per_base_onsite)
@@ -445,6 +448,9 @@ def load_trained_model(model_path: str, device: str = 'auto',
             # load_state_dict below regardless -- so it is not forwarded here,
             # matching the hamiltonian branch above.
             use_geometry=args.get('use_geometry', False),
+            # Absent from every checkpoint written before 2026-11-09 -> 'mean',
+            # which is the readout those checkpoints were trained with.
+            readout_pooling=args.get('readout_pooling', 'mean'),
         )
         print(f"{std_cls.__name__} initialized successfully")
 

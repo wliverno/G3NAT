@@ -2,9 +2,10 @@
 
 This directory holds the scripts and outputs behind every number and figure-data
 table in the paper: the design-of-experiments (DOE) statistics, the contact-invariance
-metric, the per-sequence and per-duplex breakdowns, the parameter counts, and the
-appendix capacity probe. Paper section, figure and table names below are as of
-submission and may drift in a later revision.
+metric, the per-sequence and per-duplex breakdowns, the parameter counts, the
+appendix capacity probe, and the contact-free variant added during review. Paper
+section, figure and table names below are as of submission and may drift in a later
+revision.
 
 Run names use short supervision labels; the paper's names are: `dos` = DOS+T,
 `ldos` = LDOS+DOS+T, `ldosonly` = LDOS+T, `tonly` = T-only. `ham_*` runs are the
@@ -97,6 +98,7 @@ directory; only the numeric/statistical outputs listed here are.
 | 9 | `ci_agg.py`, `ci_arms.py` | `outputs/contact_invariance_v3.json` only | stdout | "ANOVA Results" (GNN Layers: median contact drift by depth and overall), "Discussion" |
 | 10 | `paramcount_v3.py` | 6 checkpoints | stdout | "Hyperparameter Settings" (Table 1, parameter counts) |
 | -- | `probe_capacity_v5.py` | capacity-probe checkpoints | `outputs/probe_capacity_v5.out`, `outputs/probe_capacity_v5_{runs,perseq,summary}.csv` | Appendix "Capacity probe" (Table 5) |
+| -- | `probe_dnaonly.py` | final-cell checkpoints with and without `--dna_only_message_passing` (3 seeds each), training and held-out pickles | `outputs/probe_dnaonly.out`, `outputs/probe_dnaonly_{runs,perseq}.csv` | contact-free variant (added during review) |
 | -- | `geometry_spread.py` | `geom_cache/geometry_v2.pkl`, `geom_cache/geometry_heldout_L12_L16.pkl` | `outputs/geometry_spread.out` | "ANOVA Results", Geometry subsection (feature spreads) |
 
 (paper section, figure and table names as of submission)
@@ -147,7 +149,31 @@ documents; no model, training or data-loading code differs.
 `doe_v3_cells_hamiltonian.csv`, `doe_v3_cells_direct.csv`,
 `persequence_v3_figcells_nogeom.out`, `probe_capacity_v5.out`,
 `probe_capacity_v5_runs.csv`, `probe_capacity_v5_perseq.csv`,
-`probe_capacity_v5_summary.csv`, `geometry_spread.out`.
+`probe_capacity_v5_summary.csv`, `geometry_spread.out`, `probe_dnaonly.out`,
+`probe_dnaonly_runs.csv`, `probe_dnaonly_perseq.csv`.
+
+## The contact-free variant
+
+The final Hamiltonian cell retrained with the GNN layers restricted to the DNA
+subgraph: the two contact nodes and their edges are removed from message passing,
+while GammaL/GammaR are still read from the contact edges, so one learned H serves
+all four contact configurations of a sequence. Everything else matches the campaign
+cell `ham_ldosonly_n2_L4_nogeom` (same seeds, split seed 42, 10,000 epochs):
+
+```
+python scripts/train.py --data_source pickle --data_dir pickle_files_v2 \
+  --model_type hamiltonian --hidden_dim 256 --num_heads 4 --conv_type gat \
+  --ldos_target residue --optimizer adam --weight_decay 1e-5 --learning_rate 1e-3 \
+  --batch_size 32 --num_epochs 10000 --split_seed 42 --num_layers 4 \
+  --loss_a 1.0 --loss_b 1.0 --loss_c 1.0 --init_seed <seed> \
+  --solver_type complex --log_floor 1e-38 --floor_mode smooth --complex_eta 1e-12 \
+  --use_log_outputs True --enforce_hermiticity True --n_orb 2 \
+  --dna_only_message_passing \
+  --output_dir outputs_dnaonly/ham_ldosonly_n2_L4_nogeom_dnaonly_s<seed>
+```
+
+`scripts/probe_dnaonly.py` expects `outputs_dnaonly/` next to `outputs_v3/` at the
+repository root. The three checkpoints are not yet in the Zenodo checkpoints record.
 
 The COMPANION lines in `doe_v3.out` and the companion fields in
 `contact_invariance_v3.json` are context copies of each run's transmission

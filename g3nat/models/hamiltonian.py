@@ -120,7 +120,8 @@ class DNATransportHamiltonianGNN(nn.Module):
                  use_geometry: bool = False,
                  geom_dim: int = 7,
                  geom_norm_stats: Optional[Dict] = None,
-                 per_base_onsite: bool = False):
+                 per_base_onsite: bool = False,
+                 dna_only_message_passing: bool = True):
         super().__init__()
         # Use features specified in dataset.py
         node_features = 4  # 4 one-hot features (A, T, G, C)
@@ -179,6 +180,16 @@ class DNATransportHamiltonianGNN(nn.Module):
         self.last_neg_frac_ldos = float('nan')
         self.complex_eta = float(complex_eta)
         self.conv_type = conv_type.lower()
+        # Default on (2026-11-09): run the GNN layers on the DNA subgraph only -- the
+        # two contact nodes and the contact edges are removed from message passing,
+        # so the learned H of a sequence cannot depend on where the electrodes attach
+        # or how strongly. GammaL/GammaR are still read from the contact edges by
+        # get_contact_vectors, so the NEGF layer sees the same contacts and one H
+        # serves every contact configuration. False keeps the contacts in the graph
+        # (campaign v3). No parameters or buffers either way, so the same weights load
+        # in both modes; load_trained_model reads the mode from the checkpoint args and
+        # treats a checkpoint without the key as False, which is how it was trained.
+        self.dna_only_message_passing = bool(dna_only_message_passing)
 
         # Size-agnostic: Hamiltonian constructed from graph structure
         # H_size = num_dna_nodes * n_orb (total number of orbitals)
@@ -1027,6 +1038,53 @@ class DNATransportHamiltonianGNN(nn.Module):
 
         return GammaL, GammaR
 
+    def encode(self, data):
+        """Input projections, optional geometry fusion and the GNN layers.
+
+        Returns (node embeddings [N, hidden], projected edge embeddings [E, hidden])
+        indexed exactly like the input graph, so construct_hamiltonian_from_graph
+        and get_contact_vectors are unchanged downstream.
+
+        With dna_only_message_passing the convolutions run on the DNA subgraph
+        (DNA nodes, backbone and hydrogen-bond edges) and the contact nodes' rows
+        of the returned embedding are zero. The edge embeddings are per-edge
+        projections that GATConv does not update, so they are returned for every
+        edge; the Hamiltonian readout only ever consumes DNA-DNA ones.
+        """
+        edge_index = data.edge_index
+        x = self.node_proj(data.x)
+        edge_attr = self.edge_proj(data.edge_attr)
+
+        # Fuse SE(3)-invariant geometry into the edge embedding (no-op when off).
+        # The fusion reads the RAW edge features (edge-type columns), still intact
+        # in data.edge_attr: the projection above made a new tensor.
+        if getattr(self, 'use_geometry', False):
+            edge_attr = self._fuse_geometry(edge_attr, data.edge_attr, data)
+
+        if not getattr(self, 'dna_only_message_passing', False):
+            for i in range(self.num_layers):
+                x = self.convs[i](x, edge_index, edge_attr)
+                x = self.norms[i](x)
+                x = F.relu(x)
+            return x, edge_attr
+
+        # DNA-only message passing: drop the contact nodes (all-zero one-hot) and
+        # every edge touching them, re-index, run the convs, scatter back.
+        dna_mask = ~torch.all(data.x == 0, dim=1)
+        keep = dna_mask[edge_index[0]] & dna_mask[edge_index[1]]
+        remap = torch.full((x.size(0),), -1, dtype=torch.long, device=x.device)
+        remap[dna_mask] = torch.arange(int(dna_mask.sum().item()), device=x.device)
+        sub_index = remap[edge_index[:, keep]]
+        sub_attr = edge_attr[keep]
+        h = x[dna_mask]
+        for i in range(self.num_layers):
+            h = self.convs[i](h, sub_index, sub_attr)
+            h = self.norms[i](h)
+            h = F.relu(h)
+        out = torch.zeros_like(x)
+        out[dna_mask] = h
+        return out, edge_attr
+
     def forward(self, data):
         """
         Forward pass through the GNN.
@@ -1090,19 +1148,7 @@ class DNATransportHamiltonianGNN(nn.Module):
         #             print(f"  WARNING: Gamma mismatch detected!")
         #     print("========================")
 
-        # Project node and edge features
-        x = self.node_proj(x)
-        edge_attr = self.edge_proj(edge_attr)
-
-        # Fuse SE(3)-invariant geometry into the edge embedding (no-op when off)
-        if getattr(self, 'use_geometry', False):
-            edge_attr = self._fuse_geometry(edge_attr, edge_attr_initial, data)
-
-        # Graph convolution layers
-        for i in range(self.num_layers):
-            x = self.convs[i](x, edge_index, edge_attr)
-            x = self.norms[i](x)
-            x = F.relu(x)
+        x, edge_attr = self.encode(data)
 
         # Construct Hamiltonian matrix directly from graph structure
         H_matrix, H_size = self.construct_hamiltonian_from_graph(x, edge_attr, edge_index, batch, x_initial)

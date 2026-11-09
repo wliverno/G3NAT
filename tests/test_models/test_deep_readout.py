@@ -130,6 +130,7 @@ def test_deep_hamiltonian_roundtrips_through_load_trained_model(tmp_path):
     args = {'model_type': 'hamiltonian_deep', 'hidden_dim': HIDDEN,
             'num_layers': 2, 'num_heads': 2, 'n_orb': N_ORB, 'conv_type': 'gat',
             'solver_type': 'complex', 'log_floor': 1e-25, 'floor_mode': 'clamp',
+            'dna_only_message_passing': True,   # recorded by train.py, as in a real run
             'use_log_outputs': True, 'enforce_hermiticity': True,
             'use_geometry': False, 'per_base_onsite': False}
     path = _save(tmp_path, m, args, 'hamiltonian_deep_pickle_model.pth')

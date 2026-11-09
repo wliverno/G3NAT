@@ -129,6 +129,7 @@ def test_ldos_byte_identical_complex_solver():
         hidden_dim=8, num_layers=1, num_heads=1,
         energy_grid=energy_grid, n_orb=1, conv_type='gat',
         solver_type='complex',
+        dna_only_message_passing=False,   # constants captured with contacts in the graph
         # floor_mode passed EXPLICITLY (2026-08-16): the constructor default
         # reverted to 'clamp' so that checkpoints predating the floor_mode arg
         # reproduce their recorded numbers. The expected constants below were
@@ -177,6 +178,7 @@ def test_ldos_byte_identical_frobenius_solver():
         hidden_dim=8, num_layers=1, num_heads=1,
         energy_grid=energy_grid, n_orb=1, conv_type='gat',
         solver_type='frobenius',
+        dna_only_message_passing=False,   # constants captured with contacts in the graph
         # floor_mode passed EXPLICITLY (2026-08-16): the constructor default
         # reverted to 'clamp' so that checkpoints predating the floor_mode arg
         # reproduce their recorded numbers. The expected constants below were

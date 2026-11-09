@@ -45,7 +45,8 @@ def test_capture_hamiltonian_model():
         num_heads=2,
         energy_grid=energy_grid,
         n_orb=1,
-        solver_type='frobenius'
+        solver_type='frobenius',
+        dna_only_message_passing=False,   # baseline captured with contacts in the graph
     )
     model.eval()
 
