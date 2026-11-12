@@ -1,4 +1,4 @@
-"""Untouched 16-bp set report, as fixed by the frozen protocol and amendments 1-6.
+"""Untouched 16-bp set report, as fixed by the scoring plan written before its DFT results existed.
 
 Primary: selected Hamiltonian (ham_dos_n2_L4_nogeom_s2129768291) vs selected direct model
 (blind_tonly_L4_nogeom_sumpool_s3731635825), per duplex T with the margin, one-sided sign test

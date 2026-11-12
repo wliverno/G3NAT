@@ -1,6 +1,6 @@
 """The four arms of probe_sumpool on the untouched 16-bp set: the 7 duplexes completed so far
 (28 records, DNADataset/validation_L16/pickles_newset). Scoring the 7 before the replacement
-lands is allowed by amendment 3 of the frozen test protocol. Report only; nothing here selects
+lands was allowed by the scoring plan, written in advance. Report only; nothing here selects
 a model, a cell or a seed.
 
 Per run: pooled transmission and DOS Huber loss on log10 over all records; per duplex:

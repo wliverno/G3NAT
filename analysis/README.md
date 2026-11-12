@@ -193,8 +193,9 @@ The revised paper uses a retrained campaign:
   a design factor: 16 configurations x 3 seeds.
 - The contact-invariance response is zero by construction for contact-free models
   and is replaced in the ANOVA by the validation per-residue LDOS loss.
-- The untouched 16-bp test set (8 duplexes x 4 contact configurations) and its
-  scoring protocol are published in the second Zenodo version.
+- The untouched 16-bp test set (8 duplexes x 4 contact configurations, 32 records) is
+  published in the second Zenodo version. Its scoring plan was written down before
+  any of its DFT results existed.
 
 ## The contact-free variant
 

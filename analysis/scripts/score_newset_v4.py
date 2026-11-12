@@ -1,9 +1,9 @@
 """Report-only scoring of the retrained families on the UNTOUCHED 16-bp set (8 duplexes x 4 contact
-configurations, DNADataset/validation_L16/pickles_newset; frozen protocol + amendments 1-6).
+configurations, DNADataset/validation_L16/pickles_newset; scoring plan written before any of its DFT results existed).
 Copy of score_heldout_v4.py with the record set swapped. Original docstring:
 
 Report-only held-out scoring of the retrained families (selection is already fixed by
-protocol amendments 5 and 6): 96 contact-free Hamiltonian runs (outputs_v4/ham_*), 24 sum-pooled
+the validation-only selection rule): 96 contact-free Hamiltonian runs (outputs_v4/ham_*), 24 sum-pooled
 direct runs (outputs_v4/blind_*_sumpool_*) and 24 mean-pooled direct runs (outputs_v3/blind_*).
 Per run: pooled 12/16-bp transmission and DOS Huber loss on log10, and per-duplex T and DOS
 (mean over the 4 contact configurations). One JSON per run.
