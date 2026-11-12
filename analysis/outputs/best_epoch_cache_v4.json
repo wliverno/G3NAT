@@ -1,0 +1,1298 @@
+{
+ "blind_dos_L2_geom_s1179027592": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 1179027592,
+  "pooling": "mean",
+  "best_epoch": 517
+ },
+ "blind_dos_L2_geom_s2129768291": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 2129768291,
+  "pooling": "mean",
+  "best_epoch": 504
+ },
+ "blind_dos_L2_geom_s3731635825": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 3731635825,
+  "pooling": "mean",
+  "best_epoch": 389
+ },
+ "blind_dos_L2_geom_sumpool_s1179027592": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 1179027592,
+  "pooling": "sum",
+  "best_epoch": 224
+ },
+ "blind_dos_L2_geom_sumpool_s2129768291": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 2129768291,
+  "pooling": "sum",
+  "best_epoch": 239
+ },
+ "blind_dos_L2_geom_sumpool_s3731635825": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 3731635825,
+  "pooling": "sum",
+  "best_epoch": 167
+ },
+ "blind_dos_L2_nogeom_s1179027592": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 1179027592,
+  "pooling": "mean",
+  "best_epoch": 563
+ },
+ "blind_dos_L2_nogeom_s2129768291": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 2129768291,
+  "pooling": "mean",
+  "best_epoch": 461
+ },
+ "blind_dos_L2_nogeom_s3731635825": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 3731635825,
+  "pooling": "mean",
+  "best_epoch": 728
+ },
+ "blind_dos_L2_nogeom_sumpool_s1179027592": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 1179027592,
+  "pooling": "sum",
+  "best_epoch": 188
+ },
+ "blind_dos_L2_nogeom_sumpool_s2129768291": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 2129768291,
+  "pooling": "sum",
+  "best_epoch": 196
+ },
+ "blind_dos_L2_nogeom_sumpool_s3731635825": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 3731635825,
+  "pooling": "sum",
+  "best_epoch": 192
+ },
+ "blind_dos_L4_geom_s1179027592": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 1179027592,
+  "pooling": "mean",
+  "best_epoch": 211
+ },
+ "blind_dos_L4_geom_s2129768291": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 2129768291,
+  "pooling": "mean",
+  "best_epoch": 443
+ },
+ "blind_dos_L4_geom_s3731635825": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 3731635825,
+  "pooling": "mean",
+  "best_epoch": 263
+ },
+ "blind_dos_L4_geom_sumpool_s1179027592": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 1179027592,
+  "pooling": "sum",
+  "best_epoch": 101
+ },
+ "blind_dos_L4_geom_sumpool_s2129768291": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 2129768291,
+  "pooling": "sum",
+  "best_epoch": 119
+ },
+ "blind_dos_L4_geom_sumpool_s3731635825": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 3731635825,
+  "pooling": "sum",
+  "best_epoch": 85
+ },
+ "blind_dos_L4_nogeom_s1179027592": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 1179027592,
+  "pooling": "mean",
+  "best_epoch": 194
+ },
+ "blind_dos_L4_nogeom_s2129768291": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 2129768291,
+  "pooling": "mean",
+  "best_epoch": 199
+ },
+ "blind_dos_L4_nogeom_s3731635825": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 3731635825,
+  "pooling": "mean",
+  "best_epoch": 244
+ },
+ "blind_dos_L4_nogeom_sumpool_s1179027592": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 1179027592,
+  "pooling": "sum",
+  "best_epoch": 99
+ },
+ "blind_dos_L4_nogeom_sumpool_s2129768291": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 2129768291,
+  "pooling": "sum",
+  "best_epoch": 120
+ },
+ "blind_dos_L4_nogeom_sumpool_s3731635825": {
+  "family": "blind",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 3731635825,
+  "pooling": "sum",
+  "best_epoch": 117
+ },
+ "blind_tonly_L2_geom_s1179027592": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 1179027592,
+  "pooling": "mean",
+  "best_epoch": 660
+ },
+ "blind_tonly_L2_geom_s2129768291": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 2129768291,
+  "pooling": "mean",
+  "best_epoch": 448
+ },
+ "blind_tonly_L2_geom_s3731635825": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 3731635825,
+  "pooling": "mean",
+  "best_epoch": 483
+ },
+ "blind_tonly_L2_geom_sumpool_s1179027592": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 1179027592,
+  "pooling": "sum",
+  "best_epoch": 224
+ },
+ "blind_tonly_L2_geom_sumpool_s2129768291": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 2129768291,
+  "pooling": "sum",
+  "best_epoch": 213
+ },
+ "blind_tonly_L2_geom_sumpool_s3731635825": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 3731635825,
+  "pooling": "sum",
+  "best_epoch": 164
+ },
+ "blind_tonly_L2_nogeom_s1179027592": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 1179027592,
+  "pooling": "mean",
+  "best_epoch": 880
+ },
+ "blind_tonly_L2_nogeom_s2129768291": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 2129768291,
+  "pooling": "mean",
+  "best_epoch": 673
+ },
+ "blind_tonly_L2_nogeom_s3731635825": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 3731635825,
+  "pooling": "mean",
+  "best_epoch": 864
+ },
+ "blind_tonly_L2_nogeom_sumpool_s1179027592": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 1179027592,
+  "pooling": "sum",
+  "best_epoch": 227
+ },
+ "blind_tonly_L2_nogeom_sumpool_s2129768291": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 2129768291,
+  "pooling": "sum",
+  "best_epoch": 239
+ },
+ "blind_tonly_L2_nogeom_sumpool_s3731635825": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 3731635825,
+  "pooling": "sum",
+  "best_epoch": 167
+ },
+ "blind_tonly_L4_geom_s1179027592": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 1179027592,
+  "pooling": "mean",
+  "best_epoch": 284
+ },
+ "blind_tonly_L4_geom_s2129768291": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 2129768291,
+  "pooling": "mean",
+  "best_epoch": 314
+ },
+ "blind_tonly_L4_geom_s3731635825": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 3731635825,
+  "pooling": "mean",
+  "best_epoch": 438
+ },
+ "blind_tonly_L4_geom_sumpool_s1179027592": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 1179027592,
+  "pooling": "sum",
+  "best_epoch": 101
+ },
+ "blind_tonly_L4_geom_sumpool_s2129768291": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 2129768291,
+  "pooling": "sum",
+  "best_epoch": 107
+ },
+ "blind_tonly_L4_geom_sumpool_s3731635825": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 3731635825,
+  "pooling": "sum",
+  "best_epoch": 101
+ },
+ "blind_tonly_L4_nogeom_s1179027592": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 1179027592,
+  "pooling": "mean",
+  "best_epoch": 346
+ },
+ "blind_tonly_L4_nogeom_s2129768291": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 2129768291,
+  "pooling": "mean",
+  "best_epoch": 212
+ },
+ "blind_tonly_L4_nogeom_s3731635825": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 3731635825,
+  "pooling": "mean",
+  "best_epoch": 53
+ },
+ "blind_tonly_L4_nogeom_sumpool_s1179027592": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 1179027592,
+  "pooling": "sum",
+  "best_epoch": 98
+ },
+ "blind_tonly_L4_nogeom_sumpool_s2129768291": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 2129768291,
+  "pooling": "sum",
+  "best_epoch": 100
+ },
+ "blind_tonly_L4_nogeom_sumpool_s3731635825": {
+  "family": "blind",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 3731635825,
+  "pooling": "sum",
+  "best_epoch": 109
+ },
+ "ham_dos_n1_L2_geom_s1179027592": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 1179027592,
+  "n_orb": 1,
+  "best_epoch": 9319
+ },
+ "ham_dos_n1_L2_geom_s2129768291": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 2129768291,
+  "n_orb": 1,
+  "best_epoch": 8922
+ },
+ "ham_dos_n1_L2_geom_s3731635825": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 3731635825,
+  "n_orb": 1,
+  "best_epoch": 6592
+ },
+ "ham_dos_n1_L2_nogeom_s1179027592": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 1179027592,
+  "n_orb": 1,
+  "best_epoch": 4947
+ },
+ "ham_dos_n1_L2_nogeom_s2129768291": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 2129768291,
+  "n_orb": 1,
+  "best_epoch": 9085
+ },
+ "ham_dos_n1_L2_nogeom_s3731635825": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 3731635825,
+  "n_orb": 1,
+  "best_epoch": 4981
+ },
+ "ham_dos_n1_L4_geom_s1179027592": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 1179027592,
+  "n_orb": 1,
+  "best_epoch": 373
+ },
+ "ham_dos_n1_L4_geom_s2129768291": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 2129768291,
+  "n_orb": 1,
+  "best_epoch": 5515
+ },
+ "ham_dos_n1_L4_geom_s3731635825": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 3731635825,
+  "n_orb": 1,
+  "best_epoch": 5273
+ },
+ "ham_dos_n1_L4_nogeom_s1179027592": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 1179027592,
+  "n_orb": 1,
+  "best_epoch": 8307
+ },
+ "ham_dos_n1_L4_nogeom_s2129768291": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 2129768291,
+  "n_orb": 1,
+  "best_epoch": 7802
+ },
+ "ham_dos_n1_L4_nogeom_s3731635825": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 3731635825,
+  "n_orb": 1,
+  "best_epoch": 9290
+ },
+ "ham_dos_n2_L2_geom_s1179027592": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 1179027592,
+  "n_orb": 2,
+  "best_epoch": 2873
+ },
+ "ham_dos_n2_L2_geom_s2129768291": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 2129768291,
+  "n_orb": 2,
+  "best_epoch": 3398
+ },
+ "ham_dos_n2_L2_geom_s3731635825": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 3731635825,
+  "n_orb": 2,
+  "best_epoch": 1872
+ },
+ "ham_dos_n2_L2_nogeom_s1179027592": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 1179027592,
+  "n_orb": 2,
+  "best_epoch": 1387
+ },
+ "ham_dos_n2_L2_nogeom_s2129768291": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 2129768291,
+  "n_orb": 2,
+  "best_epoch": 859
+ },
+ "ham_dos_n2_L2_nogeom_s3731635825": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 3731635825,
+  "n_orb": 2,
+  "best_epoch": 645
+ },
+ "ham_dos_n2_L4_geom_s1179027592": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 1179027592,
+  "n_orb": 2,
+  "best_epoch": 2880
+ },
+ "ham_dos_n2_L4_geom_s2129768291": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 2129768291,
+  "n_orb": 2,
+  "best_epoch": 3348
+ },
+ "ham_dos_n2_L4_geom_s3731635825": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 3731635825,
+  "n_orb": 2,
+  "best_epoch": 2448
+ },
+ "ham_dos_n2_L4_nogeom_s1179027592": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 1179027592,
+  "n_orb": 2,
+  "best_epoch": 742
+ },
+ "ham_dos_n2_L4_nogeom_s2129768291": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 2129768291,
+  "n_orb": 2,
+  "best_epoch": 1846
+ },
+ "ham_dos_n2_L4_nogeom_s3731635825": {
+  "family": "ham",
+  "supervision": "dos",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 3731635825,
+  "n_orb": 2,
+  "best_epoch": 150
+ },
+ "ham_ldos_n1_L2_geom_s1179027592": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 1179027592,
+  "n_orb": 1,
+  "best_epoch": 7139
+ },
+ "ham_ldos_n1_L2_geom_s2129768291": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 2129768291,
+  "n_orb": 1,
+  "best_epoch": 5613
+ },
+ "ham_ldos_n1_L2_geom_s3731635825": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 3731635825,
+  "n_orb": 1,
+  "best_epoch": 7890
+ },
+ "ham_ldos_n1_L2_nogeom_s1179027592": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 1179027592,
+  "n_orb": 1,
+  "best_epoch": 1748
+ },
+ "ham_ldos_n1_L2_nogeom_s2129768291": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 2129768291,
+  "n_orb": 1,
+  "best_epoch": 3254
+ },
+ "ham_ldos_n1_L2_nogeom_s3731635825": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 3731635825,
+  "n_orb": 1,
+  "best_epoch": 4575
+ },
+ "ham_ldos_n1_L4_geom_s1179027592": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 1179027592,
+  "n_orb": 1,
+  "best_epoch": 9941
+ },
+ "ham_ldos_n1_L4_geom_s2129768291": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 2129768291,
+  "n_orb": 1,
+  "best_epoch": 8123
+ },
+ "ham_ldos_n1_L4_geom_s3731635825": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 3731635825,
+  "n_orb": 1,
+  "best_epoch": 9591
+ },
+ "ham_ldos_n1_L4_nogeom_s1179027592": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 1179027592,
+  "n_orb": 1,
+  "best_epoch": 9901
+ },
+ "ham_ldos_n1_L4_nogeom_s2129768291": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 2129768291,
+  "n_orb": 1,
+  "best_epoch": 7220
+ },
+ "ham_ldos_n1_L4_nogeom_s3731635825": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 3731635825,
+  "n_orb": 1,
+  "best_epoch": 9666
+ },
+ "ham_ldos_n2_L2_geom_s1179027592": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 1179027592,
+  "n_orb": 2,
+  "best_epoch": 1102
+ },
+ "ham_ldos_n2_L2_geom_s2129768291": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 2129768291,
+  "n_orb": 2,
+  "best_epoch": 3145
+ },
+ "ham_ldos_n2_L2_geom_s3731635825": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 3731635825,
+  "n_orb": 2,
+  "best_epoch": 7593
+ },
+ "ham_ldos_n2_L2_nogeom_s1179027592": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 1179027592,
+  "n_orb": 2,
+  "best_epoch": 4883
+ },
+ "ham_ldos_n2_L2_nogeom_s2129768291": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 2129768291,
+  "n_orb": 2,
+  "best_epoch": 370
+ },
+ "ham_ldos_n2_L2_nogeom_s3731635825": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 3731635825,
+  "n_orb": 2,
+  "best_epoch": 1645
+ },
+ "ham_ldos_n2_L4_geom_s1179027592": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 1179027592,
+  "n_orb": 2,
+  "best_epoch": 2822
+ },
+ "ham_ldos_n2_L4_geom_s2129768291": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 2129768291,
+  "n_orb": 2,
+  "best_epoch": 9896
+ },
+ "ham_ldos_n2_L4_geom_s3731635825": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 3731635825,
+  "n_orb": 2,
+  "best_epoch": 4660
+ },
+ "ham_ldos_n2_L4_nogeom_s1179027592": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 1179027592,
+  "n_orb": 2,
+  "best_epoch": 544
+ },
+ "ham_ldos_n2_L4_nogeom_s2129768291": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 2129768291,
+  "n_orb": 2,
+  "best_epoch": 3133
+ },
+ "ham_ldos_n2_L4_nogeom_s3731635825": {
+  "family": "ham",
+  "supervision": "ldos",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 3731635825,
+  "n_orb": 2,
+  "best_epoch": 1613
+ },
+ "ham_ldosonly_n1_L2_geom_s1179027592": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 1179027592,
+  "n_orb": 1,
+  "best_epoch": 2077
+ },
+ "ham_ldosonly_n1_L2_geom_s2129768291": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 2129768291,
+  "n_orb": 1,
+  "best_epoch": 1122
+ },
+ "ham_ldosonly_n1_L2_geom_s3731635825": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 3731635825,
+  "n_orb": 1,
+  "best_epoch": 442
+ },
+ "ham_ldosonly_n1_L2_nogeom_s1179027592": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 1179027592,
+  "n_orb": 1,
+  "best_epoch": 631
+ },
+ "ham_ldosonly_n1_L2_nogeom_s2129768291": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 2129768291,
+  "n_orb": 1,
+  "best_epoch": 280
+ },
+ "ham_ldosonly_n1_L2_nogeom_s3731635825": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 3731635825,
+  "n_orb": 1,
+  "best_epoch": 237
+ },
+ "ham_ldosonly_n1_L4_geom_s1179027592": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 1179027592,
+  "n_orb": 1,
+  "best_epoch": 3043
+ },
+ "ham_ldosonly_n1_L4_geom_s2129768291": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 2129768291,
+  "n_orb": 1,
+  "best_epoch": 1318
+ },
+ "ham_ldosonly_n1_L4_geom_s3731635825": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 3731635825,
+  "n_orb": 1,
+  "best_epoch": 4773
+ },
+ "ham_ldosonly_n1_L4_nogeom_s1179027592": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 1179027592,
+  "n_orb": 1,
+  "best_epoch": 2582
+ },
+ "ham_ldosonly_n1_L4_nogeom_s2129768291": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 2129768291,
+  "n_orb": 1,
+  "best_epoch": 910
+ },
+ "ham_ldosonly_n1_L4_nogeom_s3731635825": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 3731635825,
+  "n_orb": 1,
+  "best_epoch": 9067
+ },
+ "ham_ldosonly_n2_L2_geom_s1179027592": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 1179027592,
+  "n_orb": 2,
+  "best_epoch": 3395
+ },
+ "ham_ldosonly_n2_L2_geom_s2129768291": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 2129768291,
+  "n_orb": 2,
+  "best_epoch": 3407
+ },
+ "ham_ldosonly_n2_L2_geom_s3731635825": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 3731635825,
+  "n_orb": 2,
+  "best_epoch": 1276
+ },
+ "ham_ldosonly_n2_L2_nogeom_s1179027592": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 1179027592,
+  "n_orb": 2,
+  "best_epoch": 2723
+ },
+ "ham_ldosonly_n2_L2_nogeom_s2129768291": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 2129768291,
+  "n_orb": 2,
+  "best_epoch": 2918
+ },
+ "ham_ldosonly_n2_L2_nogeom_s3731635825": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 3731635825,
+  "n_orb": 2,
+  "best_epoch": 443
+ },
+ "ham_ldosonly_n2_L4_geom_s1179027592": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 1179027592,
+  "n_orb": 2,
+  "best_epoch": 1229
+ },
+ "ham_ldosonly_n2_L4_geom_s2129768291": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 2129768291,
+  "n_orb": 2,
+  "best_epoch": 6858
+ },
+ "ham_ldosonly_n2_L4_geom_s3731635825": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 3731635825,
+  "n_orb": 2,
+  "best_epoch": 900
+ },
+ "ham_ldosonly_n2_L4_nogeom_s1179027592": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 1179027592,
+  "n_orb": 2,
+  "best_epoch": 3710
+ },
+ "ham_ldosonly_n2_L4_nogeom_s2129768291": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 2129768291,
+  "n_orb": 2,
+  "best_epoch": 7512
+ },
+ "ham_ldosonly_n2_L4_nogeom_s3731635825": {
+  "family": "ham",
+  "supervision": "ldosonly",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 3731635825,
+  "n_orb": 2,
+  "best_epoch": 1076
+ },
+ "ham_tonly_n1_L2_geom_s1179027592": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 1179027592,
+  "n_orb": 1,
+  "best_epoch": 827
+ },
+ "ham_tonly_n1_L2_geom_s2129768291": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 2129768291,
+  "n_orb": 1,
+  "best_epoch": 1663
+ },
+ "ham_tonly_n1_L2_geom_s3731635825": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 3731635825,
+  "n_orb": 1,
+  "best_epoch": 7542
+ },
+ "ham_tonly_n1_L2_nogeom_s1179027592": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 1179027592,
+  "n_orb": 1,
+  "best_epoch": 757
+ },
+ "ham_tonly_n1_L2_nogeom_s2129768291": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 2129768291,
+  "n_orb": 1,
+  "best_epoch": 1525
+ },
+ "ham_tonly_n1_L2_nogeom_s3731635825": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 3731635825,
+  "n_orb": 1,
+  "best_epoch": 314
+ },
+ "ham_tonly_n1_L4_geom_s1179027592": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 1179027592,
+  "n_orb": 1,
+  "best_epoch": 674
+ },
+ "ham_tonly_n1_L4_geom_s2129768291": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 2129768291,
+  "n_orb": 1,
+  "best_epoch": 7386
+ },
+ "ham_tonly_n1_L4_geom_s3731635825": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 3731635825,
+  "n_orb": 1,
+  "best_epoch": 57
+ },
+ "ham_tonly_n1_L4_nogeom_s1179027592": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 1179027592,
+  "n_orb": 1,
+  "best_epoch": 1587
+ },
+ "ham_tonly_n1_L4_nogeom_s2129768291": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 2129768291,
+  "n_orb": 1,
+  "best_epoch": 1375
+ },
+ "ham_tonly_n1_L4_nogeom_s3731635825": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 3731635825,
+  "n_orb": 1,
+  "best_epoch": 972
+ },
+ "ham_tonly_n2_L2_geom_s1179027592": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 1179027592,
+  "n_orb": 2,
+  "best_epoch": 795
+ },
+ "ham_tonly_n2_L2_geom_s2129768291": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 2129768291,
+  "n_orb": 2,
+  "best_epoch": 945
+ },
+ "ham_tonly_n2_L2_geom_s3731635825": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 1,
+  "seed": 3731635825,
+  "n_orb": 2,
+  "best_epoch": 341
+ },
+ "ham_tonly_n2_L2_nogeom_s1179027592": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 1179027592,
+  "n_orb": 2,
+  "best_epoch": 427
+ },
+ "ham_tonly_n2_L2_nogeom_s2129768291": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 2129768291,
+  "n_orb": 2,
+  "best_epoch": 390
+ },
+ "ham_tonly_n2_L2_nogeom_s3731635825": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 2,
+  "geometry": 0,
+  "seed": 3731635825,
+  "n_orb": 2,
+  "best_epoch": 393
+ },
+ "ham_tonly_n2_L4_geom_s1179027592": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 1179027592,
+  "n_orb": 2,
+  "best_epoch": 794
+ },
+ "ham_tonly_n2_L4_geom_s2129768291": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 2129768291,
+  "n_orb": 2,
+  "best_epoch": 503
+ },
+ "ham_tonly_n2_L4_geom_s3731635825": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 1,
+  "seed": 3731635825,
+  "n_orb": 2,
+  "best_epoch": 6086
+ },
+ "ham_tonly_n2_L4_nogeom_s1179027592": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 1179027592,
+  "n_orb": 2,
+  "best_epoch": 466
+ },
+ "ham_tonly_n2_L4_nogeom_s2129768291": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 2129768291,
+  "n_orb": 2,
+  "best_epoch": 486
+ },
+ "ham_tonly_n2_L4_nogeom_s3731635825": {
+  "family": "ham",
+  "supervision": "tonly",
+  "num_layers": 4,
+  "geometry": 0,
+  "seed": 3731635825,
+  "n_orb": 2,
+  "best_epoch": 875
+ }
+}

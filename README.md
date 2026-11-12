@@ -11,10 +11,13 @@ Full DNA DFT dataset: 2077 training records (520 duplexes, 4-8 bp) + 32 held-out
 All trained checkpoints behind the paper's results: https://doi.org/10.5281/zenodo.22964131.
 
 The paper's analysis (scripts, committed outputs and how to reproduce every reported
-number) is in `analysis/`; see `analysis/README.md`. The two models reported in the paper
-are `trained_models/hamiltonian_ldosonly_n2_L4_nogeom_s3731635825.pth` and
-`trained_models/standard_dos_L2_nogeom_s3731635825.pth`; the other `trained_models/`
-files belong to the demos (synthetic-data models and an earlier DFT-trained model).
+number) is in `analysis/`; see `analysis/README.md`. The models reported in the revised
+paper are `trained_models/hamiltonian_dos_n2_L4_nogeom_s2129768291.pth` (contact-free
+Hamiltonian model), `trained_models/standard_tonly_L4_nogeom_sumpool_s3731635825.pth`
+(direct model) and `trained_models/standard_dos_L2_nogeom_sumpool_s2129768291.pth`
+(direct model with DOS supervision, for DOS comparisons); the two models of the
+submitted version are in the checkpoints record. The other `trained_models/` files
+belong to the demos (synthetic-data models and an earlier DFT-trained model).
 
 ### Core modules
 - `g3nat/models/`: GNN models (standard and Hamiltonian), NEGF projection

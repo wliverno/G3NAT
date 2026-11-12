@@ -1,0 +1,55 @@
+% HAM threshold 0.0066667
+\textbf{in-distribution $T$} & \textbf{$n_{\mathrm{orb}}$} & \textbf{77.2} & \textbf{$1.3\times10^{-12}$} & \textbf{$n_{\mathrm{orb}}=2$ (0.565 / 0.457)} \\
+ & \textbf{supervision} & \textbf{19.4} & \textbf{$4.6\times10^{-9}$} & \textbf{LDOS+DOS+T (0.468 / 0.465 / 0.532 / 0.578)} \\
+\addlinespace
+\textbf{12-bp $T$} & \textbf{supervision} & \textbf{11.8} & \textbf{$3.1\times10^{-6}$} & \textbf{LDOS+DOS+T (1.75 / 1.57 / 2.18 / 2.45)} \\
+ & $n_{\mathrm{orb}}$ & 6.9 & $1.1\times10^{-2}$ & $n_{\mathrm{orb}}=2$ (2.14 / 1.84) \\
+ & layers $\times$ geometry & 4.4 & $3.9\times10^{-2}$ & 2 layers, geometry on (1.86) \\
+\addlinespace
+\textbf{12-bp DOS} & \textbf{supervision} & \textbf{128.2} & \textbf{$5.2\times10^{-27}$} & \textbf{DOS+T (0.217 / 0.234 / 0.298 / 0.731)} \\
+ & \textbf{supervision $\times$ $n_{\mathrm{orb}}$} & \textbf{14.9} & \textbf{$1.9\times10^{-7}$} & \textbf{DOS+T, $n_{\mathrm{orb}}=2$ (0.168)} \\
+\addlinespace
+\textbf{16-bp $T$} & \textbf{supervision} & \textbf{17.5} & \textbf{$2.1\times10^{-8}$} & \textbf{LDOS+DOS+T (1.62 / 1.49 / 2.12 / 2.4)} \\
+ & $n_{\mathrm{orb}}$ & 6.1 & $1.6\times10^{-2}$ & $n_{\mathrm{orb}}=2$ (2.03 / 1.78) \\
+ & geometry & 4.9 & $3.0\times10^{-2}$ & geometry on (2.02 / 1.79) \\
+ & $n_{\mathrm{orb}}$ $\times$ geometry & 4.4 & $3.9\times10^{-2}$ & $n_{\mathrm{orb}}=2$, geometry on (1.78) \\
+ & supervision $\times$ $n_{\mathrm{orb}}$ & 2.8 & $4.8\times10^{-2}$ & DOS+T, $n_{\mathrm{orb}}=2$ (1.27) \\
+\addlinespace
+\textbf{16-bp DOS} & \textbf{supervision} & \textbf{133.3} & \textbf{$1.8\times10^{-27}$} & \textbf{DOS+T (0.19 / 0.215 / 0.279 / 0.732)} \\
+ & \textbf{supervision $\times$ $n_{\mathrm{orb}}$} & \textbf{10.5} & \textbf{$1.0\times10^{-5}$} & \textbf{DOS+T, $n_{\mathrm{orb}}=2$ (0.158)} \\
+\addlinespace
+\textbf{onsite distance} & \textbf{supervision} & \textbf{18.0} & \textbf{$1.4\times10^{-8}$} & \textbf{LDOS+DOS+T (1.32 / 1.09 / 1.72 / 2.19)} \\
+ & \textbf{supervision $\times$ $n_{\mathrm{orb}}$} & \textbf{15.4} & \textbf{$1.2\times10^{-7}$} & \textbf{DOS+T, $n_{\mathrm{orb}}=2$ (0.583)} \\
+ & \textbf{$n_{\mathrm{orb}}$} & \textbf{24.5} & \textbf{$5.7\times10^{-6}$} & \textbf{$n_{\mathrm{orb}}=2$ (1.86 / 1.3)} \\
+ & geometry & 4.0 & $4.9\times10^{-2}$ & geometry on (1.69 / 1.47) \\
+\addlinespace
+\textbf{per-residue LDOS} & \textbf{supervision} & \textbf{349.9} & \textbf{$1.3\times10^{-39}$} & \textbf{LDOS+T (0.576 / 0.364 / 0.326 / 0.735)} \\
+ & \textbf{$n_{\mathrm{orb}}$} & \textbf{285.0} & \textbf{$2.9\times10^{-25}$} & \textbf{$n_{\mathrm{orb}}=2$ (0.586 / 0.414)} \\
+ & \textbf{supervision $\times$ $n_{\mathrm{orb}}$} & \textbf{7.3} & \textbf{$2.8\times10^{-4}$} & \textbf{LDOS+T, $n_{\mathrm{orb}}=2$ (0.254)} \\
+ & supervision $\times$ $n_{\mathrm{orb}}$ $\times$ layers & 3.3 & $2.6\times10^{-2}$ & LDOS+T, $n_{\mathrm{orb}}=2$, 2 layers (0.251) \\
+% DIRECT threshold 0.012
+in-distribution $T$ & \textit{none with $p<0.05$} & -- & -- & -- \\
+\addlinespace
+\textbf{12-bp $T$} & \textbf{pooling} & \textbf{48.8} & \textbf{$6.5\times10^{-8}$} & \textbf{sum pooling (2.8 / 0.939)} \\
+ & \textbf{layers $\times$ pooling} & \textbf{8.7} & \textbf{$5.8\times10^{-3}$} & \textbf{4 layers, sum pooling (0.871)} \\
+ & layers & 6.0 & $2.0\times10^{-2}$ & 2 layers (1.54 / 2.19) \\
+\addlinespace
+\textbf{12-bp DOS} & \textbf{supervision} & \textbf{749.8} & \textbf{$8.9\times10^{-24}$} & \textbf{DOS+T (0.141 / 1.07)} \\
+ & \textbf{pooling} & \textbf{520.4} & \textbf{$2.3\times10^{-21}$} & \textbf{mean pooling (0.219 / 0.991)} \\
+ & \textbf{supervision $\times$ pooling} & \textbf{443.1} & \textbf{$2.6\times10^{-20}$} & \textbf{DOS+T, mean pooling (0.112)} \\
+ & \textbf{supervision $\times$ layers} & \textbf{51.4} & \textbf{$3.8\times10^{-8}$} & \textbf{DOS+T, 4 layers (0.114)} \\
+ & \textbf{supervision $\times$ layers $\times$ pooling} & \textbf{45.6} & \textbf{$1.3\times10^{-7}$} & \textbf{DOS+T, 4 layers, mean pooling (0.101)} \\
+ & \textbf{layers $\times$ pooling} & \textbf{33.5} & \textbf{$2.0\times10^{-6}$} & \textbf{4 layers, mean pooling (0.215)} \\
+ & \textbf{layers} & \textbf{31.1} & \textbf{$3.7\times10^{-6}$} & \textbf{2 layers (0.511 / 0.699)} \\
+\addlinespace
+\textbf{16-bp $T$} & \textbf{pooling} & \textbf{71.7} & \textbf{$1.1\times10^{-9}$} & \textbf{sum pooling (4.23 / 1.13)} \\
+ & \textbf{layers $\times$ pooling} & \textbf{8.9} & \textbf{$5.5\times10^{-3}$} & \textbf{4 layers, sum pooling (1.07)} \\
+ & layers & 6.9 & $1.3\times10^{-2}$ & 2 layers (2.2 / 3.16) \\
+\addlinespace
+\textbf{16-bp DOS} & \textbf{supervision} & \textbf{566.5} & \textbf{$6.4\times10^{-22}$} & \textbf{DOS+T (0.181 / 1.4)} \\
+ & \textbf{pooling} & \textbf{499.4} & \textbf{$4.3\times10^{-21}$} & \textbf{mean pooling (0.219 / 1.37)} \\
+ & \textbf{supervision $\times$ pooling} & \textbf{423.6} & \textbf{$5.1\times10^{-20}$} & \textbf{DOS+T, mean pooling (0.136)} \\
+ & \textbf{supervision $\times$ layers} & \textbf{53.7} & \textbf{$2.5\times10^{-8}$} & \textbf{DOS+T, 4 layers (0.151)} \\
+ & \textbf{supervision $\times$ layers $\times$ pooling} & \textbf{49.5} & \textbf{$5.7\times10^{-8}$} & \textbf{DOS+T, 4 layers, mean pooling (0.126)} \\
+ & \textbf{layers $\times$ pooling} & \textbf{39.2} & \textbf{$5.1\times10^{-7}$} & \textbf{4 layers, mean pooling (0.216)} \\
+ & \textbf{layers} & \textbf{38.0} & \textbf{$6.7\times10^{-7}$} & \textbf{2 layers (0.634 / 0.95)} \\

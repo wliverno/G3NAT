@@ -1,0 +1,37 @@
+UNTOUCHED 16-bp SET (8 duplexes x 4 contact configurations), protocol + amendments 1-6.
+Huber on log10, floor 1e-25, mean over the 4 contact configurations per duplex. Lower is better.
+
+Selected Hamiltonian: ham_dos_n2_L4_nogeom_s2129768291   selected direct: blind_tonly_L4_nogeom_sumpool_s3731635825   DOS comparison: blind_dos_L2_nogeom_sumpool_s2129768291
+
+duplex               T ham   T dir  margin   DOS ham DOS dir   T LDOS+T
+ttttctacgtggggga     1.271   0.792  -0.479     0.215   0.072      1.507
+aatgagcgggatccga     1.364   0.505  -0.860     0.149   0.107      1.624
+gtttatcgtctacaga     1.699   0.936  -0.763     0.182   0.083      1.549
+aaggaggcgctgcctg     1.126   1.069  -0.057     0.149   0.105      1.457
+tattgttcagcccgga     1.421   1.224  -0.198     0.166   0.080      1.621
+accggtctatcttctc     1.697   1.297  -0.400     0.136   0.070      1.530
+ctacctcgcatatccc     0.875   0.486  -0.389     0.174   0.095      1.395
+tcaagaataaaggata     1.436   0.910  -0.526     0.132   0.038      1.429
+margin = direct - Hamiltonian (positive = Hamiltonian lower)
+
+primary (8): Hamiltonian lower on T in 0/8 duplexes, one-sided sign test p = 1.0000; mean T 1.361 vs 0.902; DOS lower in 0/8 (mean 0.163 vs 0.081)
+7 original completers: Hamiltonian lower on T in 0/7 duplexes, one-sided sign test p = 1.0000; mean T 1.351 vs 0.901; DOS lower in 0/7 (mean 0.167 vs 0.087)
+strict k = 5: Hamiltonian lower on T in 0/5 duplexes, one-sided sign test p = 1.0000; mean T 1.376 vs 0.905; DOS lower in 0/5 (mean 0.172 vs 0.089)
+
+FAMILY: per duplex, fraction of (Hamiltonian cell, direct cell) pairs with the Hamiltonian lower on T (3-run means)
+duplex              vs sum (32x8)  vs mean (32x8)  best ham cell / best sum / best mean
+ttttctacgtggggga             0.00            1.00  1.020 / 0.455 / 3.313
+aatgagcgggatccga             0.00            1.00  1.231 / 0.532 / 3.275
+gtttatcgtctacaga             0.00            1.00  1.365 / 0.736 / 3.341
+aaggaggcgctgcctg             0.00            1.00  1.178 / 0.865 / 3.323
+tattgttcagcccgga             0.02            1.00  1.108 / 0.664 / 3.730
+accggtctatcttctc             0.00            1.00  1.357 / 0.739 / 4.067
+ctacctcgcatatccc             0.00            1.00  0.796 / 0.453 / 3.282
+tcaagaataaaggata             0.00            1.00  1.104 / 0.871 / 3.512
+
+Per-run pooled T over the 8 duplexes, selected cells (s1179027592 / s2129768291 / s3731635825):
+  ham_dos_n2_L4_nogeom             T 1.314 / 1.361 / 1.572  (mean 1.416)   DOS 0.174 / 0.163 / 0.171
+  ham_ldosonly_n2_L4_nogeom        T 1.822 / 1.514 / 1.826  (mean 1.721)   DOS 0.211 / 0.196 / 0.190
+  blind_tonly_L4_nogeom_sumpool    T 0.897 / 0.954 / 0.902  (mean 0.918)   DOS 2.972 / 3.495 / 3.275
+  blind_dos_L2_nogeom_sumpool      T 0.769 / 0.665 / 0.760  (mean 0.732)   DOS 0.111 / 0.081 / 0.110
+  blind_dos_L2_nogeom              T 4.009 / 3.603 / 3.528  (mean 3.713)   DOS 0.079 / 0.079 / 0.094

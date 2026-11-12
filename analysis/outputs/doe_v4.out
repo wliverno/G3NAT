@@ -1,0 +1,805 @@
+====================================================================================================
+REVISION DOE (contact-free Hamiltonian; direct family with pooling factor)
+====================================================================================================
+CAVEAT: each arm's val_transmission_at_selection is read at that arm's OWN selection optimum -- selection metrics differ by arm by design. The response itself is the uniformly-computed validation transmission loss, compared at each run's own best epoch; that is the designed comparison, not a confound.
+NO RATE, SLOPE, OR THRESHOLD METRIC APPEARS ANYWHERE IN THIS ANALYSIS. Every length response is a full-curve Huber loss at a fixed length.
+
+Decision (2026-08-26): sub_t (substitution response) REMOVED from the tested/printed response set -- r=+0.95 with in-distribution transmission fit across the 32 v3 Hamiltonian cells, cannot be separated from fitting. Old reports carrying a stray 'sub_t' key are read tolerantly (not an abort); the value is simply not analyzed. (decision 1, 2026-08-26: r=+0.95 with in-distribution fit, not separable from fitting)
+
+REVISION: contact-invariance response REMOVED (contact-free Hamiltonian: one H per sequence, drift zero by construction); val_ldos_residue ADDED (ham-only, validation per-residue LDOS loss vs DFT; circular for the ldos/ldosonly supervision levels). ham BH family size 15 terms x 7 responses = 105. onsite responses are means over all 2077 records.
+
+====================================================================================================
+FAMILY: HAM
+====================================================================================================
+ALWAYS CHECK THIS LINE -- levels that entered the fit:
+  entered supervision : ['dos', 'ldos', 'ldosonly', 'tonly']  (design: ['dos', 'ldos', 'ldosonly', 'tonly'])
+  entered n_orb       : [1, 2]  (design: [1, 2])
+  entered num_layers  : [2, 4]  (design: [2, 4])
+  entered geometry    : [0, 1]  (design: [0, 1])
+  seeds (fixed)       : [1179027592, 2129768291, 3731635825]
+
+----------------------------------------------------------------------------------------------------
+RESPONSE: val_transmission_at_selection
+  residual SD (seed noise floor) = 0.0603734
+  term                                          df           SS          F            p
+  n_orb                                          1      0.28125     77.161    1.349e-12
+  supervision                                    3      0.21221     19.407    4.627e-09
+  supervision:n_orb:num_layers                   3     0.027723      2.535      0.06457
+  supervision:n_orb:geometry                     3     0.021852      1.998       0.1231
+  supervision:num_layers:geometry                3     0.020205      1.848       0.1474
+  geometry                                       1    0.0077672      2.131       0.1492
+  supervision:n_orb                              3     0.019878      1.818       0.1528
+  num_layers:geometry                            1    0.0055317      1.518       0.2225
+  num_layers                                     1    0.0052413      1.438       0.2349
+  supervision:geometry                           3    0.0089096      0.815       0.4904
+  n_orb:num_layers:geometry                      1    0.0016479      0.452       0.5038
+  n_orb:geometry                                 1    0.0014683      0.403       0.5279
+  supervision:n_orb:num_layers:geometry          3    0.0037658      0.344       0.7933
+  n_orb:num_layers                               1   0.00023845      0.065       0.7989
+  supervision:num_layers                         3    0.0032085      0.293         0.83
+  BEST : supervision=dos_n_orb=2_num_layers=4_geometry=0              mean=0.361349  seeds=[0.358423, 0.32297, 0.402656]
+  WORST: supervision=dos_n_orb=1_num_layers=4_geometry=1              mean=0.659863  seeds=[0.726497, 0.789248, 0.463844]
+  best/worst ratio = 1.826  (reported even when no term is significant)
+
+----------------------------------------------------------------------------------------------------
+RESPONSE: l12_transmission
+  residual SD (seed noise floor) = 0.574101
+  term                                          df           SS          F            p
+  supervision                                    3       11.644     11.776     3.08e-06
+  n_orb                                          1        2.276      6.905      0.01074
+  num_layers:geometry                            1       1.4623      4.437       0.0391
+  n_orb:geometry                                 1       1.2985      3.940      0.05145
+  n_orb:num_layers:geometry                      1      0.79926      2.425       0.1243
+  supervision:geometry                           3        1.776      1.796       0.1568
+  supervision:n_orb                              3       1.4214      1.438       0.2401
+  supervision:n_orb:geometry                     3      0.96438      0.975         0.41
+  supervision:num_layers:geometry                3      0.74034      0.749       0.5271
+  geometry                                       1      0.13329      0.404       0.5271
+  num_layers                                     1      0.12104      0.367       0.5467
+  supervision:n_orb:num_layers                   3      0.57766      0.584       0.6275
+  n_orb:num_layers                               1      0.06826      0.207       0.6506
+  supervision:n_orb:num_layers:geometry          3      0.24091      0.244       0.8656
+  supervision:num_layers                         3      0.14683      0.148       0.9303
+  BEST : supervision=dos_n_orb=2_num_layers=4_geometry=0              mean=1.15486  seeds=[1.235263, 1.022178, 1.207128]
+  WORST: supervision=tonly_n_orb=1_num_layers=2_geometry=0            mean=2.95525  seeds=[3.07175, 3.173731, 2.620283]
+  best/worst ratio = 2.559  (reported even when no term is significant)
+
+----------------------------------------------------------------------------------------------------
+RESPONSE: l12_dos
+  residual SD (seed noise floor) = 0.105145
+  term                                          df           SS          F            p
+  supervision                                    3       4.2523    128.211    5.188e-27
+  supervision:n_orb                              3      0.49274     14.857     1.91e-07
+  n_orb:num_layers:geometry                      1     0.012427      1.124        0.293
+  supervision:num_layers                         3     0.033401      1.007       0.3955
+  n_orb                                          1    0.0069561      0.629       0.4306
+  supervision:n_orb:num_layers:geometry          3     0.020654      0.623       0.6029
+  geometry                                       1    0.0025768      0.233       0.6309
+  num_layers                                     1    0.0019697      0.178       0.6744
+  num_layers:geometry                            1    0.0018079      0.164       0.6873
+  supervision:n_orb:num_layers                   3     0.014644      0.442       0.7241
+  n_orb:geometry                                 1    0.0011466      0.104       0.7485
+  supervision:geometry                           3     0.011048      0.333       0.8014
+  supervision:n_orb:geometry                     3    0.0073601      0.222       0.8808
+  supervision:num_layers:geometry                3    0.0028818      0.087        0.967
+  n_orb:num_layers                               1   1.5749e-05      0.001         0.97
+  BEST : supervision=dos_n_orb=2_num_layers=2_geometry=1              mean=0.159709  seeds=[0.159576, 0.157389, 0.162161]
+  WORST: supervision=tonly_n_orb=2_num_layers=2_geometry=1            mean=0.958573  seeds=[1.07614, 0.797376, 1.002204]
+  best/worst ratio = 6.002  (reported even when no term is significant)
+
+----------------------------------------------------------------------------------------------------
+RESPONSE: l16_transmission
+  residual SD (seed noise floor) = 0.499418
+  term                                          df           SS          F            p
+  supervision                                    3       13.098     17.505    2.082e-08
+  n_orb                                          1       1.5195      6.092      0.01626
+  geometry                                       1       1.2215      4.897      0.03047
+  n_orb:geometry                                 1       1.1085      4.444      0.03894
+  supervision:n_orb                              3       2.0771      2.776      0.04836
+  num_layers                                     1      0.53854      2.159       0.1466
+  n_orb:num_layers                               1      0.16467      0.660       0.4195
+  num_layers:geometry                            1      0.15341      0.615       0.4358
+  supervision:geometry                           3      0.63054      0.843       0.4755
+  supervision:n_orb:num_layers                   3      0.47389      0.633       0.5962
+  supervision:n_orb:geometry                     3      0.44116      0.590       0.6241
+  supervision:n_orb:num_layers:geometry          3      0.41777      0.558       0.6445
+  n_orb:num_layers:geometry                      1    0.0061805      0.025       0.8754
+  supervision:num_layers:geometry                3      0.16534      0.221       0.8815
+  supervision:num_layers                         3     0.017386      0.023       0.9952
+  BEST : supervision=dos_n_orb=2_num_layers=4_geometry=0              mean=1.14436  seeds=[1.120785, 0.98845, 1.323851]
+  WORST: supervision=tonly_n_orb=2_num_layers=4_geometry=1            mean=2.71723  seeds=[2.270968, 2.234932, 3.645799]
+  best/worst ratio = 2.374  (reported even when no term is significant)
+
+----------------------------------------------------------------------------------------------------
+RESPONSE: l16_dos
+  residual SD (seed noise floor) = 0.108173
+  term                                          df           SS          F            p
+  supervision                                    3        4.681    133.346    1.766e-27
+  supervision:n_orb                              3      0.36868     10.502    1.044e-05
+  n_orb:num_layers                               1     0.010433      0.892       0.3486
+  n_orb:geometry                                 1    0.0059205      0.506       0.4795
+  n_orb:num_layers:geometry                      1    0.0040356      0.345       0.5591
+  num_layers:geometry                            1     0.003762      0.321       0.5727
+  geometry                                       1    0.0036567      0.312       0.5781
+  supervision:n_orb:num_layers:geometry          3     0.021024      0.599       0.6181
+  num_layers                                     1    0.0027583      0.236        0.629
+  supervision:n_orb:num_layers                   3      0.01898      0.541       0.6562
+  supervision:num_layers:geometry                3     0.011224      0.320       0.8111
+  supervision:n_orb:geometry                     3    0.0093764      0.267       0.8489
+  supervision:num_layers                         3    0.0051839      0.148       0.9308
+  n_orb                                          1   6.0603e-05      0.005       0.9429
+  supervision:geometry                           3    0.0042973      0.122       0.9466
+  BEST : supervision=dos_n_orb=2_num_layers=2_geometry=1              mean=0.148827  seeds=[0.143527, 0.158936, 0.144016]
+  WORST: supervision=tonly_n_orb=2_num_layers=2_geometry=1            mean=0.944939  seeds=[0.938251, 0.779757, 1.116808]
+  best/worst ratio = 6.349  (reported even when no term is significant)
+
+----------------------------------------------------------------------------------------------------
+RESPONSE: onsite_near
+  residual SD (seed noise floor) = 0.556327
+  term                                          df           SS          F            p
+  supervision                                    3        16.74     18.029    1.366e-08
+  supervision:n_orb                              3       14.319     15.421    1.176e-07
+  n_orb                                          1       7.5794     24.489    5.723e-06
+  geometry                                       1       1.2521      4.045      0.04851
+  num_layers:geometry                            1       1.1651      3.765      0.05676
+  supervision:n_orb:geometry                     3        2.175      2.342      0.08142
+  n_orb:num_layers                               1       0.6043      1.953       0.1671
+  supervision:geometry                           3       1.5919      1.714       0.1729
+  n_orb:num_layers:geometry                      1      0.46635      1.507       0.2241
+  supervision:n_orb:num_layers:geometry          3       1.3232      1.425       0.2436
+  supervision:num_layers                         3       1.2339      1.329       0.2728
+  n_orb:geometry                                 1      0.18276      0.590       0.4451
+  supervision:num_layers:geometry                3       0.6059      0.653       0.5843
+  supervision:n_orb:num_layers                   3      0.14273      0.154       0.9269
+  num_layers                                     1    0.0010094      0.003       0.9546
+  BEST : supervision=dos_n_orb=2_num_layers=2_geometry=1              mean=0.52238  seeds=[0.526837, 0.522119, 0.518184]
+  WORST: supervision=dos_n_orb=1_num_layers=4_geometry=0              mean=3.28451  seeds=[2.269704, 1.960429, 5.623388]
+  best/worst ratio = 6.288  (reported even when no term is significant)
+
+----------------------------------------------------------------------------------------------------
+RESPONSE: val_ldos_residue
+  residual SD (seed noise floor) = 0.0500461
+  term                                          df           SS          F            p
+  supervision                                    3       2.6288    349.865    1.259e-39
+  n_orb                                          1      0.71374    284.970    2.939e-25
+  supervision:n_orb                              3       0.0547      7.280    0.0002823
+  supervision:n_orb:num_layers                   3     0.024842      3.306      0.02565
+  geometry                                       1    0.0082204      3.282      0.07473
+  supervision:num_layers:geometry                3     0.011505      1.531       0.2149
+  n_orb:num_layers:geometry                      1    0.0033986      1.357       0.2484
+  n_orb:geometry                                 1    0.0029435      1.175       0.2824
+  supervision:num_layers                         3    0.0088502      1.178       0.3252
+  supervision:n_orb:geometry                     3    0.0062179      0.828       0.4836
+  n_orb:num_layers                               1    0.0011614      0.464       0.4984
+  supervision:geometry                           3    0.0054736      0.728       0.5388
+  supervision:n_orb:num_layers:geometry          3    0.0048052      0.640       0.5924
+  num_layers:geometry                            1   0.00014917      0.060        0.808
+  num_layers                                     1   7.9984e-05      0.032       0.8587
+  BEST : supervision=ldosonly_n_orb=2_num_layers=2_geometry=0         mean=0.244623  seeds=[0.243209, 0.198608, 0.292051]
+  WORST: supervision=tonly_n_orb=1_num_layers=4_geometry=1            mean=0.832109  seeds=[0.727589, 0.968067, 0.800672]
+  best/worst ratio = 3.402  (reported even when no term is significant)
+
+BENJAMINI-HOCHBERG (q=0.05) over this family's tests: m=105
+  Kept as insurance, not load-bearing: BH controls the false-discovery fraction across the pooled family, and is applied whether or not any term sits near the boundary.
+  survivors: 14 of 105   threshold=0.0066667
+  tests clearing nothing (not a BH survivor): 91
+    SURVIVOR  val_ldos_residue             supervision                              p=1.259e-39
+    SURVIVOR  l16_dos                      supervision                              p=1.766e-27
+    SURVIVOR  l12_dos                      supervision                              p=5.188e-27
+    SURVIVOR  val_ldos_residue             n_orb                                    p=2.939e-25
+    SURVIVOR  val_transmission_at_selection n_orb                                    p=1.349e-12
+    SURVIVOR  val_transmission_at_selection supervision                              p=4.627e-09
+    SURVIVOR  onsite_near                  supervision                              p=1.366e-08
+    SURVIVOR  l16_transmission             supervision                              p=2.082e-08
+    SURVIVOR  onsite_near                  supervision:n_orb                        p=1.176e-07
+    SURVIVOR  l12_dos                      supervision:n_orb                        p=1.91e-07
+    SURVIVOR  l12_transmission             supervision                              p=3.08e-06
+    SURVIVOR  onsite_near                  n_orb                                    p=5.723e-06
+    SURVIVOR  l16_dos                      supervision:n_orb                        p=1.044e-05
+    SURVIVOR  val_ldos_residue             supervision:n_orb                        p=0.0002823
+
+DESCRIPTIVE onsite_far (not one of the designed responses, no F-test) -- best cell supervision=dos_n_orb=1_num_layers=4_geometry=1 mean=1.13939; worst cell supervision=tonly_n_orb=2_num_layers=2_geometry=1 mean=12.2267
+
+====================================================================================================
+FAMILY: BLIND
+====================================================================================================
+ALWAYS CHECK THIS LINE -- levels that entered the fit:
+  entered supervision : ['dos', 'tonly']  (design: ['dos', 'tonly'])
+  entered num_layers  : [2, 4]  (design: [2, 4])
+  entered geometry    : [0, 1]  (design: [0, 1])
+  entered pooling     : ['mean', 'sum']  (design: ['mean', 'sum'])
+  seeds (fixed)       : [1179027592, 2129768291, 3731635825]
+
+----------------------------------------------------------------------------------------------------
+RESPONSE: val_transmission_at_selection
+  residual SD (seed noise floor) = 0.254296
+  term                                          df           SS          F            p
+  pooling                                        1      0.16479      2.548       0.1202
+  num_layers:pooling                             1       0.1252      1.936       0.1737
+  num_layers                                     1      0.12071      1.867       0.1814
+  supervision:pooling                            1     0.061329      0.948       0.3374
+  supervision:num_layers:pooling                 1     0.059661      0.923        0.344
+  supervision                                    1     0.059445      0.919       0.3449
+  supervision:num_layers                         1     0.058484      0.904       0.3487
+  supervision:num_layers:geometry:pooling        1     0.051529      0.797       0.3787
+  supervision:num_layers:geometry                1     0.049828      0.771       0.3866
+  supervision:geometry:pooling                   1     0.047976      0.742       0.3955
+  supervision:geometry                           1     0.047477      0.734       0.3979
+  num_layers:geometry                            1     0.044456      0.687       0.4132
+  num_layers:geometry:pooling                    1     0.042148      0.652       0.4254
+  geometry:pooling                               1     0.038656      0.598       0.4451
+  geometry                                       1     0.035401      0.547       0.4648
+  BEST : supervision=tonly_num_layers=4_geometry=0_pooling=sum        mean=0.153627  seeds=[0.152134, 0.157169, 0.151579]
+  WORST: supervision=tonly_num_layers=4_geometry=0_pooling=mean       mean=0.759737  seeds=[0.176264, 0.18497, 1.917975]
+  best/worst ratio = 4.945  (reported even when no term is significant)
+
+----------------------------------------------------------------------------------------------------
+RESPONSE: l12_transmission
+  residual SD (seed noise floor) = 0.922271
+  term                                          df           SS          F            p
+  pooling                                        1       41.488     48.776    6.507e-08
+  num_layers:pooling                             1       7.4354      8.741     0.005801
+  num_layers                                     1       5.0939      5.989      0.02007
+  supervision:num_layers:geometry                1      0.63615      0.748       0.3936
+  supervision:num_layers:geometry:pooling        1      0.62819      0.739       0.3965
+  supervision:geometry                           1      0.58329      0.686       0.4137
+  num_layers:geometry:pooling                    1      0.54672      0.643       0.4286
+  geometry:pooling                               1      0.53526      0.629       0.4335
+  geometry                                       1      0.52917      0.622       0.4361
+  supervision:geometry:pooling                   1      0.50293      0.591       0.4476
+  num_layers:geometry                            1      0.27605      0.325       0.5729
+  supervision:pooling                            1     0.060347      0.071       0.7917
+  supervision                                    1      0.02187      0.026       0.8736
+  supervision:num_layers:pooling                 1     0.018637      0.022       0.8833
+  supervision:num_layers                         1    0.0065743      0.008       0.9305
+  BEST : supervision=dos_num_layers=4_geometry=0_pooling=sum          mean=0.809162  seeds=[0.745419, 0.830567, 0.851501]
+  WORST: supervision=tonly_num_layers=4_geometry=0_pooling=mean       mean=4.26497  seeds=[2.239564, 2.486429, 8.068913]
+  best/worst ratio = 5.271  (reported even when no term is significant)
+
+----------------------------------------------------------------------------------------------------
+RESPONSE: l12_dos
+  residual SD (seed noise floor) = 0.117275
+  term                                          df           SS          F            p
+  supervision                                    1       10.313    749.841    8.851e-24
+  pooling                                        1       7.1576    520.417    2.314e-21
+  supervision:pooling                            1       6.0939    443.077    2.596e-20
+  supervision:num_layers                         1      0.70758     51.447     3.83e-08
+  supervision:num_layers:pooling                 1      0.62699     45.587    1.255e-07
+  num_layers:pooling                             1       0.4606     33.490    2.012e-06
+  num_layers                                     1      0.42718     31.060    3.748e-06
+  supervision:num_layers:geometry:pooling        1    0.0045356      0.330       0.5698
+  supervision:num_layers:geometry                1    0.0037488      0.273       0.6052
+  num_layers:geometry                            1       0.0024      0.175       0.6789
+  num_layers:geometry:pooling                    1    0.0012274      0.089       0.7671
+  supervision:geometry                           1    0.0010176      0.074       0.7874
+  supervision:geometry:pooling                   1   0.00088334      0.064       0.8016
+  geometry:pooling                               1   8.5964e-05      0.006       0.9375
+  geometry                                       1   5.8842e-05      0.004       0.9483
+  BEST : supervision=dos_num_layers=4_geometry=1_pooling=mean         mean=0.0979732  seeds=[0.109251, 0.090762, 0.093906]
+  WORST: supervision=tonly_num_layers=4_geometry=0_pooling=sum        mean=2.27602  seeds=[1.983666, 2.411221, 2.433186]
+  best/worst ratio = 23.23  (reported even when no term is significant)
+
+----------------------------------------------------------------------------------------------------
+RESPONSE: l16_transmission
+  residual SD (seed noise floor) = 1.26672
+  term                                          df           SS          F            p
+  pooling                                        1       115.11     71.739    1.116e-09
+  num_layers:pooling                             1       14.203      8.852     0.005534
+  num_layers                                     1       11.002      6.856      0.01338
+  supervision:num_layers:geometry:pooling        1        1.638      1.021       0.3199
+  geometry:pooling                               1       1.5289      0.953       0.3363
+  geometry                                       1       1.4197      0.885       0.3539
+  num_layers:geometry:pooling                    1       1.3547      0.844       0.3651
+  supervision:geometry                           1       1.2584      0.784       0.3825
+  supervision:num_layers:geometry                1       1.0611      0.661       0.4221
+  supervision:geometry:pooling                   1       1.0122      0.631       0.4329
+  num_layers:geometry                            1      0.64308      0.401       0.5312
+  supervision:pooling                            1     0.036253      0.023       0.8815
+  supervision:num_layers:pooling                 1     0.025727      0.016          0.9
+  supervision:num_layers                         1    0.0022628      0.001       0.9703
+  supervision                                    1    0.0010569      0.001       0.9797
+  BEST : supervision=dos_num_layers=4_geometry=0_pooling=sum          mean=0.978312  seeds=[0.972881, 0.914044, 1.048011]
+  WORST: supervision=tonly_num_layers=4_geometry=0_pooling=mean       mean=6.47322  seeds=[3.57438, 4.029191, 11.816099]
+  best/worst ratio = 6.617  (reported even when no term is significant)
+
+----------------------------------------------------------------------------------------------------
+RESPONSE: l16_dos
+  residual SD (seed noise floor) = 0.177758
+  term                                          df           SS          F            p
+  supervision                                    1       17.901    566.528    6.401e-22
+  pooling                                        1       15.779    499.358    4.314e-21
+  supervision:pooling                            1       13.386    423.645    5.072e-20
+  supervision:num_layers                         1       1.6982     53.745    2.461e-08
+  supervision:num_layers:pooling                 1       1.5629     49.463    5.668e-08
+  num_layers:pooling                             1       1.2378     39.174     5.14e-07
+  num_layers                                     1        1.201     38.007    6.738e-07
+  supervision:num_layers:geometry:pooling        1     0.010871      0.344       0.5616
+  supervision:geometry                           1     0.010035      0.318        0.577
+  supervision:geometry:pooling                   1    0.0092588      0.293        0.592
+  supervision:num_layers:geometry                1    0.0083252      0.263       0.6113
+  num_layers:geometry                            1    0.0080189      0.254       0.6179
+  num_layers:geometry:pooling                    1    0.0051343      0.162       0.6896
+  geometry:pooling                               1   0.00066306      0.021       0.8857
+  geometry                                       1   0.00056656      0.018       0.8943
+  BEST : supervision=dos_num_layers=4_geometry=1_pooling=mean         mean=0.122325  seeds=[0.135618, 0.117462, 0.113894]
+  WORST: supervision=tonly_num_layers=4_geometry=0_pooling=sum        mean=3.27835  seeds=[2.888578, 3.536311, 3.410149]
+  best/worst ratio = 26.8  (reported even when no term is significant)
+
+BENJAMINI-HOCHBERG (q=0.05) over this family's tests: m=75
+  Kept as insurance, not load-bearing: BH controls the false-discovery fraction across the pooled family, and is applied whether or not any term sits near the boundary.
+  survivors: 18 of 75   threshold=0.012
+  tests clearing nothing (not a BH survivor): 57
+    SURVIVOR  l12_dos                      supervision                              p=8.851e-24
+    SURVIVOR  l16_dos                      supervision                              p=6.401e-22
+    SURVIVOR  l12_dos                      pooling                                  p=2.314e-21
+    SURVIVOR  l16_dos                      pooling                                  p=4.314e-21
+    SURVIVOR  l12_dos                      supervision:pooling                      p=2.596e-20
+    SURVIVOR  l16_dos                      supervision:pooling                      p=5.072e-20
+    SURVIVOR  l16_transmission             pooling                                  p=1.116e-09
+    SURVIVOR  l16_dos                      supervision:num_layers                   p=2.461e-08
+    SURVIVOR  l12_dos                      supervision:num_layers                   p=3.83e-08
+    SURVIVOR  l16_dos                      supervision:num_layers:pooling           p=5.668e-08
+    SURVIVOR  l12_transmission             pooling                                  p=6.507e-08
+    SURVIVOR  l12_dos                      supervision:num_layers:pooling           p=1.255e-07
+    SURVIVOR  l16_dos                      num_layers:pooling                       p=5.14e-07
+    SURVIVOR  l16_dos                      num_layers                               p=6.738e-07
+    SURVIVOR  l12_dos                      num_layers:pooling                       p=2.012e-06
+    SURVIVOR  l12_dos                      num_layers                               p=3.748e-06
+    SURVIVOR  l16_transmission             num_layers:pooling                       p=0.005534
+    SURVIVOR  l12_transmission             num_layers:pooling                       p=0.005801
+
+====================================================================================================
+SEED-TO-SEED DISPERSION ANALYSIS (spread = max-min over 3 seeds per cell)
+====================================================================================================
+CAVEAT: runs are seeded but GPU reductions are nondeterministic, so seed spread includes batch-order and hardware noise, not init variance alone.
+Covers EVERY response this family's location analysis F-tests (decision 2026-09-11, extending the 2026-08-26 transmission-only decision), plus best_epoch when the epoch cache is available. ci_interior_total is descriptive-only in the location analysis and is therefore not a dispersion response either. Raw scale only -- pooled into its own BH family per model family, separate from the location BH families above (different n, different power: not comparable across analyses).
+ALWAYS CHECK THIS LINE -- dispersion responses that entered: ham ['val_transmission_at_selection', 'l12_transmission', 'l16_transmission', 'l12_dos', 'l16_dos', 'onsite_near', 'val_ldos_residue', 'best_epoch']; blind ['val_transmission_at_selection', 'l12_transmission', 'l16_transmission', 'l12_dos', 'l16_dos', 'best_epoch']
+
+====================================================================================================
+DISPERSION -- FAMILY: HAM   n=32 cells (one observation per cell = max-min over 3 seeds)   df_res=13   terms=10   max_order=2
+====================================================================================================
+NOTE: dispersion p-values are NOT comparable to location p-values above -- different n, different power (n/df printed on every row).
+
+----------------------------------------------------------------------------------------------------
+DISPERSION RESPONSE: val_transmission_at_selection   n=32   df_res=13
+  term                            df            p
+  supervision:n_orb                3       0.0243
+  n_orb:num_layers                 1      0.08535
+  num_layers:geometry              1      0.09702
+  n_orb:geometry                   1       0.1131
+  geometry                         1       0.3408
+  supervision:num_layers           3       0.3872
+  supervision:geometry             3       0.4174
+  n_orb                            1       0.5376
+  num_layers                       1       0.8328
+  supervision                      3       0.8328
+  MOST STABLE  cell: supervision=ldosonly_n_orb=1_num_layers=2_geometry=0         spread=0.00764702
+  LEAST STABLE cell: supervision=dos_n_orb=1_num_layers=4_geometry=1              spread=0.325404
+  MEAN SPREAD BY SUPERVISION ARM (mean over the 8 cells of each arm): dos=0.107466  ldos=0.080948  ldosonly=0.0960839  tonly=0.0938387
+
+----------------------------------------------------------------------------------------------------
+DISPERSION RESPONSE: l12_transmission   n=32   df_res=13
+  term                            df            p
+  num_layers:geometry              1       0.0119
+  supervision:geometry             3      0.01215
+  supervision                      3      0.03894
+  geometry                         1      0.04667
+  num_layers                       1       0.1029
+  n_orb:geometry                   1       0.1673
+  n_orb:num_layers                 1       0.2986
+  supervision:num_layers           3       0.3584
+  supervision:n_orb                3       0.4158
+  n_orb                            1       0.5885
+  MOST STABLE  cell: supervision=dos_n_orb=1_num_layers=2_geometry=1              spread=0.0615383
+  LEAST STABLE cell: supervision=tonly_n_orb=1_num_layers=4_geometry=1            spread=2.48899
+  MEAN SPREAD BY SUPERVISION ARM (mean over the 8 cells of each arm): dos=0.627883  ldos=0.756406  ldosonly=1.25072  tonly=1.0729
+
+----------------------------------------------------------------------------------------------------
+DISPERSION RESPONSE: l16_transmission   n=32   df_res=13
+  term                            df            p
+  supervision                      3      0.01069
+  supervision:geometry             3      0.01692
+  num_layers                       1      0.02033
+  n_orb:num_layers                 1       0.0319
+  n_orb:geometry                   1      0.04158
+  geometry                         1       0.0698
+  num_layers:geometry              1       0.2857
+  supervision:num_layers           3       0.4939
+  n_orb                            1       0.5408
+  supervision:n_orb                3       0.6561
+  MOST STABLE  cell: supervision=ldosonly_n_orb=1_num_layers=2_geometry=0         spread=0.0156505
+  LEAST STABLE cell: supervision=ldosonly_n_orb=1_num_layers=4_geometry=1         spread=1.6769
+  MEAN SPREAD BY SUPERVISION ARM (mean over the 8 cells of each arm): dos=0.389541  ldos=0.93872  ldosonly=1.02762  tonly=0.667051
+
+----------------------------------------------------------------------------------------------------
+DISPERSION RESPONSE: l12_dos   n=32   df_res=13
+  term                            df            p
+  supervision                      3    1.932e-06
+  num_layers:geometry              1      0.06214
+  supervision:geometry             3      0.08509
+  geometry                         1       0.1748
+  num_layers                       1       0.3958
+  n_orb:geometry                   1       0.4258
+  supervision:num_layers           3       0.5184
+  n_orb                            1       0.5931
+  supervision:n_orb                3       0.7559
+  n_orb:num_layers                 1       0.9214
+  MOST STABLE  cell: supervision=dos_n_orb=2_num_layers=2_geometry=1              spread=0.00477173
+  LEAST STABLE cell: supervision=tonly_n_orb=1_num_layers=4_geometry=1            spread=0.603991
+  MEAN SPREAD BY SUPERVISION ARM (mean over the 8 cells of each arm): dos=0.0468265  ldos=0.0539783  ldosonly=0.0839927  tonly=0.362485
+
+----------------------------------------------------------------------------------------------------
+DISPERSION RESPONSE: l16_dos   n=32   df_res=13
+  term                            df            p
+  supervision                      3      6.4e-07
+  num_layers:geometry              1       0.1462
+  n_orb:num_layers                 1       0.3008
+  geometry                         1       0.3939
+  n_orb                            1       0.4434
+  num_layers                       1       0.5709
+  supervision:geometry             3        0.598
+  supervision:n_orb                3       0.6187
+  supervision:num_layers           3       0.8865
+  n_orb:geometry                   1       0.9176
+  MOST STABLE  cell: supervision=dos_n_orb=1_num_layers=2_geometry=1              spread=0.00847374
+  LEAST STABLE cell: supervision=tonly_n_orb=1_num_layers=4_geometry=1            spread=0.61699
+  MEAN SPREAD BY SUPERVISION ARM (mean over the 8 cells of each arm): dos=0.0394536  ldos=0.0487471  ldosonly=0.0813786  tonly=0.380063
+
+----------------------------------------------------------------------------------------------------
+DISPERSION RESPONSE: onsite_near   n=32   df_res=13
+  term                            df            p
+  supervision:n_orb                3       0.1129
+  n_orb                            1       0.2085
+  num_layers:geometry              1       0.3181
+  supervision                      3       0.4992
+  supervision:num_layers           3       0.6831
+  geometry                         1       0.7098
+  supervision:geometry             3       0.7365
+  n_orb:geometry                   1       0.8107
+  n_orb:num_layers                 1       0.9257
+  num_layers                       1       0.9772
+  MOST STABLE  cell: supervision=dos_n_orb=2_num_layers=2_geometry=1              spread=0.00865363
+  LEAST STABLE cell: supervision=dos_n_orb=1_num_layers=4_geometry=0              spread=3.66296
+  MEAN SPREAD BY SUPERVISION ARM (mean over the 8 cells of each arm): dos=1.07046  ldos=0.485369  ldosonly=0.724706  tonly=0.586043
+
+----------------------------------------------------------------------------------------------------
+DISPERSION RESPONSE: val_ldos_residue   n=32   df_res=13
+  term                            df            p
+  n_orb:geometry                   1      0.02643
+  supervision:num_layers           3      0.07859
+  supervision                      3       0.1235
+  geometry                         1       0.1944
+  n_orb                            1        0.315
+  num_layers:geometry              1       0.5005
+  num_layers                       1       0.5352
+  supervision:geometry             3       0.5906
+  supervision:n_orb                3       0.6636
+  n_orb:num_layers                 1       0.9238
+  MOST STABLE  cell: supervision=ldosonly_n_orb=1_num_layers=2_geometry=0         spread=0.00475298
+  LEAST STABLE cell: supervision=tonly_n_orb=1_num_layers=4_geometry=1            spread=0.240478
+  MEAN SPREAD BY SUPERVISION ARM (mean over the 8 cells of each arm): dos=0.101501  ldos=0.0652989  ldosonly=0.0599435  tonly=0.104095
+
+----------------------------------------------------------------------------------------------------
+DISPERSION RESPONSE: best_epoch   n=32   df_res=13
+  term                            df            p
+  supervision:n_orb                3      0.03447
+  supervision:geometry             3      0.04622
+  geometry                         1       0.0555
+  num_layers                       1      0.05621
+  supervision:num_layers           3      0.06789
+  supervision                      3       0.2697
+  num_layers:geometry              1       0.5958
+  n_orb                            1       0.7351
+  n_orb:num_layers                 1        0.741
+  n_orb:geometry                   1       0.8607
+  MOST STABLE  cell: supervision=tonly_n_orb=2_num_layers=2_geometry=0            spread=37
+  LEAST STABLE cell: supervision=ldosonly_n_orb=1_num_layers=4_geometry=0         spread=8157
+  MEAN SPREAD BY SUPERVISION ARM (mean over the 8 cells of each arm): dos=2294.88  ldos=3783.75  ldosonly=3830.12  tonly=2812.88
+
+DISPERSION BENJAMINI-HOCHBERG (q=0.05) over ham dispersion family (own family, separate from the location BH family above): m=80
+  survivors: 2 of 80   threshold=0.00125
+    SURVIVOR  l16_dos                      supervision                    p=6.4e-07
+    SURVIVOR  l12_dos                      supervision                    p=1.932e-06
+
+====================================================================================================
+DISPERSION -- FAMILY: BLIND   n=16 cells (one observation per cell = max-min over 3 seeds)   df_res=11   terms=4   max_order=1
+====================================================================================================
+NOTE: dispersion p-values are NOT comparable to location p-values above -- different n, different power (n/df printed on every row).
+WHY main-effects-only: saturated dispersion model on 8 cells leaves 0 residual df; main effects only
+
+----------------------------------------------------------------------------------------------------
+DISPERSION RESPONSE: val_transmission_at_selection   n=16   df_res=11
+  term                            df            p
+  pooling                          1       0.1963
+  num_layers                       1       0.2109
+  supervision                      1        0.308
+  geometry                         1       0.3997
+  MOST STABLE  cell: supervision=dos_num_layers=4_geometry=1_pooling=sum          spread=0.00393315
+  LEAST STABLE cell: supervision=tonly_num_layers=4_geometry=0_pooling=mean       spread=1.74171
+  MEAN SPREAD BY SUPERVISION ARM (mean over the 8 cells of each arm): dos=0.0383127  tonly=0.257275
+
+----------------------------------------------------------------------------------------------------
+DISPERSION RESPONSE: l12_transmission   n=16   df_res=11
+  term                            df            p
+  pooling                          1      0.08054
+  num_layers                       1      0.08989
+  geometry                         1       0.3356
+  supervision                      1        0.773
+  MOST STABLE  cell: supervision=tonly_num_layers=2_geometry=0_pooling=sum        spread=0.0616726
+  LEAST STABLE cell: supervision=tonly_num_layers=4_geometry=0_pooling=mean       spread=5.82935
+  MEAN SPREAD BY SUPERVISION ARM (mean over the 8 cells of each arm): dos=0.689041  tonly=0.88689
+
+----------------------------------------------------------------------------------------------------
+DISPERSION RESPONSE: l16_transmission   n=16   df_res=11
+  term                            df            p
+  pooling                          1      0.07205
+  num_layers                       1       0.1096
+  geometry                         1       0.2815
+  supervision                      1       0.6317
+  MOST STABLE  cell: supervision=tonly_num_layers=2_geometry=0_pooling=sum        spread=0.0740399
+  LEAST STABLE cell: supervision=tonly_num_layers=4_geometry=0_pooling=mean       spread=8.24172
+  MEAN SPREAD BY SUPERVISION ARM (mean over the 8 cells of each arm): dos=0.866261  tonly=1.31705
+
+----------------------------------------------------------------------------------------------------
+DISPERSION RESPONSE: l12_dos   n=16   df_res=11
+  term                            df            p
+  pooling                          1     0.004732
+  supervision                      1      0.02167
+  num_layers                       1       0.4531
+  geometry                         1       0.6031
+  MOST STABLE  cell: supervision=tonly_num_layers=4_geometry=1_pooling=mean       spread=0.00333059
+  LEAST STABLE cell: supervision=tonly_num_layers=2_geometry=0_pooling=sum        spread=0.497133
+  MEAN SPREAD BY SUPERVISION ARM (mean over the 8 cells of each arm): dos=0.0403011  tonly=0.209525
+
+----------------------------------------------------------------------------------------------------
+DISPERSION RESPONSE: l16_dos   n=16   df_res=11
+  term                            df            p
+  pooling                          1     0.004683
+  supervision                      1      0.01341
+  num_layers                       1       0.6998
+  geometry                         1       0.7178
+  MOST STABLE  cell: supervision=tonly_num_layers=4_geometry=1_pooling=mean       spread=0.00260317
+  LEAST STABLE cell: supervision=tonly_num_layers=2_geometry=0_pooling=sum        spread=0.798322
+  MEAN SPREAD BY SUPERVISION ARM (mean over the 8 cells of each arm): dos=0.04629  tonly=0.333077
+
+----------------------------------------------------------------------------------------------------
+DISPERSION RESPONSE: best_epoch   n=16   df_res=11
+  term                            df            p
+  pooling                          1    0.0004048
+  num_layers                       1        0.391
+  supervision                      1       0.4375
+  geometry                         1       0.9043
+  MOST STABLE  cell: supervision=tonly_num_layers=4_geometry=1_pooling=sum        spread=6
+  LEAST STABLE cell: supervision=tonly_num_layers=4_geometry=0_pooling=mean       spread=293
+  MEAN SPREAD BY SUPERVISION ARM (mean over the 8 cells of each arm): dos=101.5  tonly=126.875
+
+DISPERSION BENJAMINI-HOCHBERG (q=0.05) over blind dispersion family (own family, separate from the location BH family above): m=24
+  survivors: 3 of 24   threshold=0.00625
+    SURVIVOR  best_epoch                   pooling                        p=0.0004048
+    SURVIVOR  l16_dos                      pooling                        p=0.004683
+    SURVIVOR  l12_dos                      pooling                        p=0.004732
+
+====================================================================================================
+TRAINING TIME: BEST-CHECKPOINT EPOCH (own BH family)
+====================================================================================================
+Response: saved_at_epoch of each run's PUBLISHED best checkpoint (outputs_v3/<run>/*_model_best.pth), read from the cache written by analysis/scripts/best_epoch_extract.py, cross-checked factor-by-factor against this report's own rows before any fit.
+DESCRIPTIVE RESPONSE -- DIRECTION CARRIES NO QUALITY JUDGEMENT. Peaking earlier is not better and peaking later is not better (analysis/outputs/best_epoch_doe.md). print_family labels the minimum-mean cell BEST and the maximum-mean cell WORST because every response it was written for is a loss; here read those two words as EARLIEST and LATEST.
+MULTIPLE TESTING: OWN BH FAMILY per model family, separate from the location families and from the dispersion families above. The published thresholds are untouched; m is printed on each family's own BENJAMINI-HOCHBERG line below.
+Model: the same saturated model, sum-to-zero deviation coding and Type III drop-one F used for every other location response (analyze_family) -- 15 terms x 2 responses = 30 for ham, 15 x 2 = 30 for blind.
+
+====================================================================================================
+FAMILY: HAM
+====================================================================================================
+ALWAYS CHECK THIS LINE -- levels that entered the fit:
+  entered supervision : ['dos', 'ldos', 'ldosonly', 'tonly']  (design: ['dos', 'ldos', 'ldosonly', 'tonly'])
+  entered n_orb       : [1, 2]  (design: [1, 2])
+  entered num_layers  : [2, 4]  (design: [2, 4])
+  entered geometry    : [0, 1]  (design: [0, 1])
+  seeds (fixed)       : [1179027592, 2129768291, 3731635825]
+
+----------------------------------------------------------------------------------------------------
+RESPONSE: best_epoch
+  residual SD (seed noise floor) = 2123.97
+  term                                          df           SS          F            p
+  supervision                                    3   1.9952e+08     14.742    2.109e-07
+  n_orb                                          1   1.1359e+08     25.180    4.422e-06
+  supervision:n_orb                              3   1.1386e+08      8.413    8.545e-05
+  num_layers                                     1   2.6687e+07      5.916      0.01781
+  geometry                                       1   2.3534e+07      5.217       0.0257
+  n_orb:num_layers:geometry                      1   2.2657e+07      5.022       0.0285
+  supervision:num_layers                         3   3.3568e+07      2.480      0.06898
+  num_layers:geometry                            1    1.081e+07      2.396       0.1266
+  supervision:geometry                           3   2.5518e+07      1.886       0.1409
+  supervision:n_orb:num_layers                   3   2.2714e+07      1.678       0.1805
+  n_orb:geometry                                 1   3.8113e+06      0.845       0.3615
+  supervision:n_orb:geometry                     3    1.442e+07      1.066         0.37
+  n_orb:num_layers                               1   2.6374e+06      0.585       0.4473
+  supervision:num_layers:geometry                3   1.0548e+07      0.779       0.5098
+  supervision:n_orb:num_layers:geometry          3   1.0446e+07      0.772        0.514
+  BEST : supervision=ldosonly_n_orb=1_num_layers=2_geometry=0         mean=382.667  seeds=[631.0, 280.0, 237.0]
+  WORST: supervision=ldos_n_orb=1_num_layers=4_geometry=1             mean=9218.33  seeds=[9941.0, 8123.0, 9591.0]
+  best/worst ratio = 24.09  (reported even when no term is significant)
+
+----------------------------------------------------------------------------------------------------
+RESPONSE: log10_best_epoch
+  residual SD (seed noise floor) = 0.382781
+  term                                          df           SS          F            p
+  supervision                                    3       5.9744     13.592    5.816e-07
+  n_orb                                          1        1.472     10.047     0.002342
+  supervision:n_orb                              3        2.319      5.276     0.002584
+  geometry                                       1      0.93455      6.378      0.01404
+  n_orb:num_layers:geometry                      1      0.60554      4.133      0.04621
+  num_layers:geometry                            1      0.40653      2.775       0.1007
+  n_orb:geometry                                 1       0.3825      2.611       0.1111
+  supervision:num_layers                         3      0.90975      2.070        0.113
+  num_layers                                     1       0.3772      2.574       0.1135
+  supervision:n_orb:geometry                     3      0.78933      1.796       0.1569
+  supervision:n_orb:num_layers                   3      0.73675      1.676        0.181
+  n_orb:num_layers                               1     0.021038      0.144        0.706
+  supervision:n_orb:num_layers:geometry          3      0.18947      0.431       0.7315
+  supervision:geometry                           3       0.1257      0.286       0.8353
+  supervision:num_layers:geometry                3      0.11919      0.271        0.846
+  BEST : supervision=ldosonly_n_orb=1_num_layers=2_geometry=0         mean=2.54065  seeds=[2.800029, 2.447158, 2.374748]
+  WORST: supervision=ldos_n_orb=1_num_layers=4_geometry=1             mean=3.963  seeds=[3.99743, 3.909716, 3.981864]
+  best/worst ratio = 1.56  (reported even when no term is significant)
+
+BENJAMINI-HOCHBERG (q=0.05) over this family's tests: m=30
+  Kept as insurance, not load-bearing: BH controls the false-discovery fraction across the pooled family, and is applied whether or not any term sits near the boundary.
+  survivors: 6 of 30   threshold=0.01
+  tests clearing nothing (not a BH survivor): 24
+    SURVIVOR  best_epoch                   supervision                              p=2.109e-07
+    SURVIVOR  log10_best_epoch             supervision                              p=5.816e-07
+    SURVIVOR  best_epoch                   n_orb                                    p=4.422e-06
+    SURVIVOR  best_epoch                   supervision:n_orb                        p=8.545e-05
+    SURVIVOR  log10_best_epoch             n_orb                                    p=0.002342
+    SURVIVOR  log10_best_epoch             supervision:n_orb                        p=0.002584
+
+MEAN SELECTED EPOCH BY SUPERVISION ARM -- ham (mean over the 8 cells of each arm; range = min-max of those cell means). Descriptive: earlier is not better.
+  arm            mean epoch          cell-mean range
+  dos                4285.6       912.7 -     8466.3
+  ldos               5252.8      1763.3 -     9218.3
+  ldosonly           2580.4       382.7 -     4186.3
+  tonly              1549.2       403.3 -     3344.0
+
+====================================================================================================
+FAMILY: BLIND
+====================================================================================================
+ALWAYS CHECK THIS LINE -- levels that entered the fit:
+  entered supervision : ['dos', 'tonly']  (design: ['dos', 'tonly'])
+  entered num_layers  : [2, 4]  (design: [2, 4])
+  entered geometry    : [0, 1]  (design: [0, 1])
+  entered pooling     : ['mean', 'sum']  (design: ['mean', 'sum'])
+  seeds (fixed)       : [1179027592, 2129768291, 3731635825]
+
+----------------------------------------------------------------------------------------------------
+RESPONSE: best_epoch
+  residual SD (seed noise floor) = 78.0577
+  term                                          df           SS          F            p
+  pooling                                        1   9.2796e+05    152.300    1.044e-13
+  num_layers                                     1   5.5298e+05     90.757    7.325e-11
+  num_layers:pooling                             1    1.617e+05     26.539    1.278e-05
+  num_layers:geometry:pooling                    1        77120     12.657     0.001191
+  num_layers:geometry                            1        69160     11.351      0.00198
+  supervision                                    1        18487      3.034      0.09114
+  supervision:pooling                            1        18252      2.996      0.09313
+  supervision:num_layers                         1        13534      2.221       0.1459
+  supervision:num_layers:geometry                1        11656      1.913       0.1762
+  supervision:num_layers:pooling                 1        10208      1.675       0.2048
+  supervision:num_layers:geometry:pooling        1       5418.8      0.889       0.3527
+  geometry                                       1       4602.1      0.755       0.3913
+  geometry:pooling                               1         4332      0.711       0.4054
+  supervision:geometry                           1       3201.3      0.525       0.4738
+  supervision:geometry:pooling                   1       1704.1      0.280       0.6006
+  BEST : supervision=dos_num_layers=4_geometry=1_pooling=sum          mean=101.667  seeds=[101.0, 119.0, 85.0]
+  WORST: supervision=tonly_num_layers=2_geometry=0_pooling=mean       mean=805.667  seeds=[880.0, 673.0, 864.0]
+  best/worst ratio = 7.925  (reported even when no term is significant)
+
+----------------------------------------------------------------------------------------------------
+RESPONSE: log10_best_epoch
+  residual SD (seed noise floor) = 0.130613
+  term                                          df           SS          F            p
+  pooling                                        1       2.0096    117.797    2.945e-12
+  num_layers                                     1       1.3442     78.795    3.846e-10
+  num_layers:geometry:pooling                    1      0.12057      7.067      0.01215
+  num_layers:geometry                            1     0.090222      5.289      0.02814
+  supervision:num_layers:geometry                1     0.028891      1.694       0.2024
+  num_layers:pooling                             1     0.028381      1.664       0.2064
+  supervision:num_layers                         1     0.016875      0.989       0.3274
+  geometry:pooling                               1    0.0096413      0.565       0.4577
+  supervision:num_layers:pooling                 1    0.0082609      0.484       0.4915
+  supervision:num_layers:geometry:pooling        1    0.0065521      0.384       0.5398
+  geometry                                       1     0.005367      0.315       0.5788
+  supervision:pooling                            1    0.0039308      0.230       0.6345
+  supervision                                    1    0.0027333      0.160       0.6916
+  supervision:geometry:pooling                   1    0.0021855      0.128       0.7227
+  supervision:geometry                           1    0.0016268      0.095       0.7595
+  BEST : supervision=dos_num_layers=4_geometry=1_pooling=sum          mean=2.0031  seeds=[2.004321, 2.075547, 1.929419]
+  WORST: supervision=tonly_num_layers=2_geometry=0_pooling=mean       mean=2.903  seeds=[2.944483, 2.828015, 2.936514]
+  best/worst ratio = 1.449  (reported even when no term is significant)
+
+BENJAMINI-HOCHBERG (q=0.05) over this family's tests: m=30
+  Kept as insurance, not load-bearing: BH controls the false-discovery fraction across the pooled family, and is applied whether or not any term sits near the boundary.
+  survivors: 8 of 30   threshold=0.013333
+  tests clearing nothing (not a BH survivor): 22
+    SURVIVOR  best_epoch                   pooling                                  p=1.044e-13
+    SURVIVOR  log10_best_epoch             pooling                                  p=2.945e-12
+    SURVIVOR  best_epoch                   num_layers                               p=7.325e-11
+    SURVIVOR  log10_best_epoch             num_layers                               p=3.846e-10
+    SURVIVOR  best_epoch                   num_layers:pooling                       p=1.278e-05
+    SURVIVOR  best_epoch                   num_layers:geometry:pooling              p=0.001191
+    SURVIVOR  best_epoch                   num_layers:geometry                      p=0.00198
+    SURVIVOR  log10_best_epoch             num_layers:geometry:pooling              p=0.01215
+
+MEAN SELECTED EPOCH BY SUPERVISION ARM -- blind (mean over the 8 cells of each arm; range = min-max of those cell means). Descriptive: earlier is not better.
+  arm            mean epoch          cell-mean range
+  dos                 273.5       101.7 -      584.0
+  tonly               312.7       102.3 -      805.7
+
+====================================================================================================
+HEAD-TO-HEAD: SELECT ON L=12, REPORT ON L=16. NEVER BOTH.
+====================================================================================================
+PRIMARY NUMBER -- the family distribution at l16_transmission (lower is better):
+  ham cells   (n=32):
+    supervision=dos_n_orb=2_num_layers=4_geometry=0              1.14436
+    supervision=dos_n_orb=2_num_layers=2_geometry=1              1.17161
+    supervision=dos_n_orb=2_num_layers=4_geometry=1              1.24633
+    supervision=ldos_n_orb=1_num_layers=2_geometry=1             1.28975
+    supervision=dos_n_orb=1_num_layers=2_geometry=1              1.30122
+    supervision=ldos_n_orb=1_num_layers=2_geometry=0             1.3255
+    supervision=ldos_n_orb=2_num_layers=4_geometry=1             1.4474
+    supervision=ldos_n_orb=2_num_layers=2_geometry=1             1.48534
+    supervision=ldos_n_orb=2_num_layers=2_geometry=0             1.48937
+    supervision=dos_n_orb=2_num_layers=2_geometry=0              1.51203
+    supervision=ldos_n_orb=2_num_layers=4_geometry=0             1.56897
+    supervision=ldos_n_orb=1_num_layers=4_geometry=1             1.64265
+    supervision=ldos_n_orb=1_num_layers=4_geometry=0             1.66268
+    supervision=ldosonly_n_orb=1_num_layers=2_geometry=1         1.77366
+    supervision=ldosonly_n_orb=2_num_layers=2_geometry=0         1.8292
+    supervision=ldosonly_n_orb=2_num_layers=2_geometry=1         1.8833
+    supervision=dos_n_orb=1_num_layers=4_geometry=1              1.8895
+    supervision=ldosonly_n_orb=2_num_layers=4_geometry=1         1.95282
+    supervision=ldosonly_n_orb=2_num_layers=4_geometry=0         2.15325
+    supervision=tonly_n_orb=1_num_layers=4_geometry=1            2.16995
+    supervision=ldosonly_n_orb=1_num_layers=4_geometry=1         2.20404
+    supervision=tonly_n_orb=1_num_layers=2_geometry=1            2.227
+    supervision=dos_n_orb=1_num_layers=2_geometry=0              2.23792
+    supervision=tonly_n_orb=2_num_layers=4_geometry=0            2.28434
+    supervision=tonly_n_orb=2_num_layers=2_geometry=1            2.30007
+    supervision=tonly_n_orb=2_num_layers=2_geometry=0            2.30809
+    supervision=dos_n_orb=1_num_layers=4_geometry=0              2.44304
+    supervision=ldosonly_n_orb=1_num_layers=4_geometry=0         2.511
+    supervision=tonly_n_orb=1_num_layers=2_geometry=0            2.51768
+    supervision=ldosonly_n_orb=1_num_layers=2_geometry=0         2.65657
+    supervision=tonly_n_orb=1_num_layers=4_geometry=0            2.66748
+    supervision=tonly_n_orb=2_num_layers=4_geometry=1            2.71723
+  blind cells (n=16):
+    supervision=dos_num_layers=4_geometry=0_pooling=sum          0.978312
+    supervision=tonly_num_layers=4_geometry=0_pooling=sum        1.03652
+    supervision=dos_num_layers=4_geometry=1_pooling=sum          1.05708
+    supervision=tonly_num_layers=2_geometry=1_pooling=sum        1.11398
+    supervision=dos_num_layers=2_geometry=0_pooling=sum          1.17371
+    supervision=dos_num_layers=2_geometry=1_pooling=sum          1.1877
+    supervision=tonly_num_layers=4_geometry=1_pooling=sum        1.19271
+    supervision=tonly_num_layers=2_geometry=0_pooling=sum        1.31099
+    supervision=dos_num_layers=2_geometry=1_pooling=mean         3.10564
+    supervision=tonly_num_layers=2_geometry=1_pooling=mean       3.17265
+    supervision=tonly_num_layers=2_geometry=0_pooling=mean       3.25351
+    supervision=dos_num_layers=2_geometry=0_pooling=mean         3.29162
+    supervision=tonly_num_layers=4_geometry=1_pooling=mean       3.92375
+    supervision=dos_num_layers=4_geometry=0_pooling=mean         5.29776
+    supervision=dos_num_layers=4_geometry=1_pooling=mean         5.31045
+    supervision=tonly_num_layers=4_geometry=0_pooling=mean       6.47322
+
+SECONDARY, and labelled as such -- best-cell vs best-cell:
+  best ham cell on l12_transmission   : supervision=dos_n_orb=2_num_layers=4_geometry=0  -> l16_transmission = 1.14436
+  best blind cell on l12_transmission : supervision=dos_num_layers=4_geometry=0_pooling=sum  -> l16_transmission = 0.978312
+  margin (blind_best - ham_best on l16) = -0.16605
+
+MATCHED SELECTION PRESSURE (10000 seeded draws, analysis RNG seed=20260825):
+  each draw subsamples the ham family to 8 cells (matching the blind family's size), selects THAT draw's own best-on-l12 cell, and reports its l16_transmission.
+  distribution: mean=1.24664 median=1.17161 sd=0.122123 min=1.14436 max=1.66268
+  blind best (single value, blind has exactly 8 cells -- no resampling needed): 0.978312
+  fraction of matched-pressure draws where the blind cell's l16 value is still better (lower) than the resampled ham draw: 1
+
+NOTE: the per-sequence sign test requires per-record data not present in this report and is run as a separate targeted pass (scripts/persequence_v3.py).
+

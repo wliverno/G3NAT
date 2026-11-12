@@ -4,8 +4,9 @@ This directory holds the scripts and outputs behind every number and figure-data
 table in the paper: the design-of-experiments (DOE) statistics, the contact-invariance
 metric, the per-sequence and per-duplex breakdowns, the parameter counts, the
 appendix capacity probe, and the contact-free variant added during review. Paper
-section, figure and table names below are as of submission and may drift in a later
-revision.
+section, figure and table names below are as of submission unless marked
+"revision"; the section "Revision (2026-11)" below covers the retrained campaign
+behind the revised paper.
 
 Run names use short supervision labels; the paper's names are: `dos` = DOS+T,
 `ldos` = LDOS+DOS+T, `ldosonly` = LDOS+T, `tonly` = T-only. `ham_*` runs are the
@@ -99,6 +100,15 @@ directory; only the numeric/statistical outputs listed here are.
 | 10 | `paramcount_v3.py` | 6 checkpoints | stdout | "Hyperparameter Settings" (Table 1, parameter counts) |
 | -- | `probe_capacity_v5.py` | capacity-probe checkpoints | `outputs/probe_capacity_v5.out`, `outputs/probe_capacity_v5_{runs,perseq,summary}.csv` | Appendix "Capacity probe" (Table 5) |
 | -- | `probe_dnaonly.py` | final-cell checkpoints with and without `--dna_only_message_passing` (3 seeds each), training and held-out pickles | `outputs/probe_dnaonly.out`, `outputs/probe_dnaonly_{runs,perseq}.csv` | contact-free variant (added during review) |
+| R1 | `select_v4_val.py` | 96 contact-free Hamiltonian checkpoints (`outputs_v4/ham_*`), training pickles | `outputs/select_v4_val/<run>.json` | revision: validation T, DOS, per-residue LDOS and onsite distance (model selection, Table 3) |
+| R2 | `score_heldout_v4.py` | 144 checkpoints (96 Hamiltonian, 24 sum-pooled and 24 mean-pooled direct), held-out pickles | `outputs/heldout_v4/<run>.json` | revision: held-out 12/16-bp T and DOS, per duplex (report only) |
+| R3 | `score_newset_v4.py` | the same 144 checkpoints, untouched 16-bp pickles | `outputs/newset_v4/<run>.json` | revision: untouched test set (report only) |
+| R4 | `build_report_v4.py` | stages R1-R2 | `outputs/posthoc_v4_report.json`, `outputs/best_epoch_cache_v4.json` | revision: inputs to stage R5 |
+| R5 | `doe_v4.py` | stage R4 | `outputs/doe_v4.out` | revision: "ANOVA Results" and Appendix "Full Factorial ANOVA" |
+| R6 | `anova_tables_v4.py` | stages R4-R5 | `outputs/anova_tables_v4.tex`, `outputs/new_tables_v4.tex` | revision: Tables 3-4 and the held-out/untouched tables |
+| R7 | `newset_report_v4.py` | stage R3 | `outputs/newset_report_v4.out` | revision: untouched test set (per duplex, sign test, family fractions) |
+| -- | `probe_capacity_v6.py` | capacity-probe checkpoints (`outputs_v6cap/`) and the selected cells (`outputs_v4/`) | `outputs/probe_capacity_v6.out`, `outputs/probe_capacity_v6_{runs,perseq}.csv` | revision: Appendix "Capacity probe" (Table 5) |
+| -- | `probe_sumpool.py`, `probe_newset.py` | the first three sum-pooled direct runs | `outputs/probe_sumpool*`, `outputs/probe_newset*` | revision: early sum-pooling probe, disclosed in the selection record; not used for selection |
 | -- | `geometry_spread.py` | `geom_cache/geometry_v2.pkl`, `geom_cache/geometry_heldout_L12_L16.pkl` | `outputs/geometry_spread.out` | "ANOVA Results", Geometry subsection (feature spreads) |
 
 (paper section, figure and table names as of submission)
@@ -122,17 +132,27 @@ python scripts/persequence_v3.py \
 
 ## Figure models
 
-The two checkpoints used to generate the paper's figures are shipped in
-`trained_models/`: `hamiltonian_ldosonly_n2_L4_nogeom_s3731635825.pth` and
-`standard_dos_L2_nogeom_s3731635825.pth`, each with a `.json` copy of its
-`resolved_config.json`. Both happen to use seed 3731635825; the selection rule
-was to pick, independently for each model, the seed with the lowest sum of
-three transmission-loss metrics (validation, 12 bp held-out, 16 bp held-out)
-across the three seeds run for that cell. The summed values were
-3.05 / 3.97 / 4.96 for the Hamiltonian model and 5.32 / 5.49 / 6.03 for the
-direct (blind) model; the lowest sum in each list is seed 3731635825. The two
-models landing on the same seed is a coincidence of the rule, not a shared
-selection.
+Revision. The models behind the revised paper's figures and tables are shipped in
+`trained_models/`, each with a `.json` copy of its `resolved_config.json`:
+
+- `hamiltonian_dos_n2_L4_nogeom_s2129768291` -- contact-free Hamiltonian model,
+  DOS+T supervision, two orbitals per base, four GNN layers, no geometry;
+- `standard_tonly_L4_nogeom_sumpool_s3731635825` -- direct model, T-only
+  supervision, four layers, no geometry, sum pooling;
+- `standard_dos_L2_nogeom_sumpool_s2129768291` -- direct model, DOS+T, two layers,
+  no geometry, sum pooling; reported beside the T-only model wherever DOS is
+  compared.
+
+Selection used validation data only, the same rule for both families: the
+configuration with the lowest 3-seed-mean validation transmission loss, then the
+seed with the lowest validation transmission loss within it. The held-out 12/16-bp
+duplexes and the untouched 16-bp set were never used for selection.
+
+As submitted. The submitted paper used
+`hamiltonian_ldosonly_n2_L4_nogeom_s3731635825` and
+`standard_dos_L2_nogeom_s3731635825`, chosen by the lowest sum of validation, 12-bp
+and 16-bp transmission losses (3.05 / 3.97 / 4.96 Hamiltonian, 5.32 / 5.49 / 6.03
+direct). Both are in the first Zenodo checkpoints version.
 
 The `git_sha` recorded in the `resolved_config.json` files (046bc55 for the 120
 campaign runs and both figure models, 3efcc97 for the capacity probe) predates a
@@ -152,9 +172,34 @@ documents; no model, training or data-loading code differs.
 `probe_capacity_v5_summary.csv`, `geometry_spread.out`, `probe_dnaonly.out`,
 `probe_dnaonly_runs.csv`, `probe_dnaonly_perseq.csv`.
 
+Revision: `select_v4_val/`, `heldout_v4/`, `newset_v4/` (one JSON per run),
+`posthoc_v4_report.json`, `best_epoch_cache_v4.json`, `doe_v4.out`,
+`anova_tables_v4.tex`, `new_tables_v4.tex`, `newset_report_v4.out`,
+`probe_capacity_v6.out`, `probe_capacity_v6_runs.csv`, `probe_capacity_v6_perseq.csv`,
+`probe_sumpool.out`, `probe_sumpool_runs.csv`, `probe_sumpool_perseq.csv`,
+`probe_newset.out`, `probe_newset_runs.csv`, `probe_newset_perseq.csv`.
+
+## Revision (2026-11)
+
+The revised paper uses a retrained campaign:
+
+- Hamiltonian family: all 32 configurations (supervision x orbitals x layers x
+  geometry) x 3 seeds = 96 runs, retrained contact-free
+  (`--dna_only_message_passing`, now the default), in `outputs_v4/ham_*`. Same recipe as
+  below, with the supervision weights, `--n_orb`, `--num_layers` and the geometry
+  flag set per configuration.
+- Direct family: the 24 submitted mean-pooled runs (`outputs_v3/blind_*`) plus 24
+  new runs with `--readout_pooling sum` (`outputs_v4/blind_*_sumpool_*`), so pooling is
+  a design factor: 16 configurations x 3 seeds.
+- The contact-invariance response is zero by construction for contact-free models
+  and is replaced in the ANOVA by the validation per-residue LDOS loss.
+- The untouched 16-bp test set (8 duplexes x 4 contact configurations) and its
+  scoring protocol are published in the second Zenodo version.
+
 ## The contact-free variant
 
-The final Hamiltonian cell retrained with the GNN layers restricted to the DNA
+(As first run during review, on the submitted final cell; the revision retrains the
+whole Hamiltonian family this way.) The final Hamiltonian cell retrained with the GNN layers restricted to the DNA
 subgraph: the two contact nodes and their edges are removed from message passing,
 while GammaL/GammaR are still read from the contact edges, so one learned H serves
 all four contact configurations of a sequence. Everything else matches the campaign

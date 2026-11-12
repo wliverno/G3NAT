@@ -124,6 +124,27 @@ regime). This project's ML decisions must cite from here rather than be invented
   **This makes the planned LDOS loss EVIDENCED by close analogy rather than our own idea**, and
   independently motivates the `b` weighting.
 
+- **Westermayr, J., Maurer, R. J. "Physically inspired deep learning of molecular excitations
+  and photoemission spectra." *Chem. Sci.* **12**(32), 10755-10764 (2021).**
+  doi:[10.1039/D1SC01542G](https://doi.org/10.1039/D1SC01542G)
+  (EVIDENCED, checked against the PDF 2026-11-12.) SchNet+H: a network outputs a latent
+  symmetric matrix from atomic coordinates and is trained only on its eigenvalues (orbital
+  energies) of isolated molecules. The matrix size is fixed by the number of levels and its
+  elements have no direct physical correspondence. The nearest learned-Hamiltonian precedent
+  for G3NAT's indirect supervision; G3NAT differs in fixing the matrix to sequence sites and in
+  supervising through open-system transport observables (DOS, T) rather than eigenvalues.
+
+- **Cignoni, E., Suman, D., Nigam, J., Cupellini, L., Mennucci, B., Ceriotti, M. "Electronic
+  Excited States from Physically Constrained Machine Learning." *ACS Cent. Sci.* **10**(3),
+  637-648 (2024).** doi:[10.1021/acscentsci.3c01480](https://doi.org/10.1021/acscentsci.3c01480)
+  (EVIDENCED, checked against the PDF 2026-11-12.) An equivariant, atom-centred minimal-basis
+  Hamiltonian predicted from coordinates, trained on large-basis orbital energies plus Loewdin
+  charges of isolated molecules; extrapolates from small hydrocarbons to polyenes,
+  beta-carotene and C60. Precedent for adding a local target (charges; here per-residue LDOS)
+  to a global one (energies; here DOS and T). Also the source for not training against a
+  projected Hamiltonian: they write that a reduced or projected Hamiltonian target "introduces
+  a nonphysical training target, as there is no unique definition of the reduced matrix".
+
 - **Zhouyin, Z., Chen, X., Zhang, P., Wang, J., Wang, L. "Automatic differentiable
   nonequilibrium Green's function formalism: An end-to-end differentiable quantum transport
   simulator." *Phys. Rev. B* **108**, 195143 (2023).**
