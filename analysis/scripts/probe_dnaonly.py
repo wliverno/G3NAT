@@ -41,7 +41,7 @@ WEIGHTS = 'hamiltonian_pickle_model_best.pth'
 ARMS = {
     # arm -> (dir template, expected dna_only_message_passing)
     'contacts in graph': ('outputs_v3/ham_ldosonly_n2_L4_nogeom_s{seed}', False),
-    'contact-free':      ('outputs_dnaonly/ham_ldosonly_n2_L4_nogeom_dnaonly_s{seed}', True),
+    'contact-free':      ('exploratory/ham_ldosonly_n2_L4_nogeom_dnaonly_s{seed}', True),
 }
 OUT_DIR = os.path.join(_ANALYSIS, 'outputs')
 OUT_TXT = os.path.join(OUT_DIR, 'probe_dnaonly.out')

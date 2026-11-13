@@ -1,6 +1,6 @@
 """Report-only held-out scoring of the retrained families (selection is already fixed by
-the validation-only selection rule): 96 contact-free Hamiltonian runs (outputs_v4/ham_*), 24 sum-pooled
-direct runs (outputs_v4/blind_*_sumpool_*) and 24 mean-pooled direct runs (outputs_v3/blind_*).
+the validation-only selection rule): 96 contact-free Hamiltonian runs (campaign/ham_*), 24 sum-pooled
+direct runs (campaign/blind_*_sumpool_*) and 24 mean-pooled direct runs (campaign/blind_*).
 Per run: pooled 12/16-bp transmission and DOS Huber loss on log10, and per-duplex T and DOS
 (mean over the 4 contact configurations). One JSON per run.
 
@@ -27,9 +27,10 @@ from persequence_v3 import load_heldout_indexed, classify_composition
 
 
 def runs():
-    ham = sorted(glob.glob(os.path.join(REPO, 'outputs_v4', 'ham_*', 'hamiltonian_pickle_model_best.pth')))
-    dsum = sorted(glob.glob(os.path.join(REPO, 'outputs_v4', 'blind_*_sumpool_s*', 'standard_pickle_model_best.pth')))
-    dmean = sorted(glob.glob(os.path.join(REPO, 'outputs_v3', 'blind_*', 'standard_pickle_model_best.pth')))
+    ham = sorted(glob.glob(os.path.join(REPO, 'campaign', 'ham_*', 'hamiltonian_pickle_model_best.pth')))
+    dsum = sorted(glob.glob(os.path.join(REPO, 'campaign', 'blind_*_sumpool_s*', 'standard_pickle_model_best.pth')))
+    dmean = sorted(p for p in glob.glob(os.path.join(REPO, 'campaign', 'blind_*_s*', 'standard_pickle_model_best.pth'))
+                   if '_sumpool_' not in p)
     if (len(ham), len(dsum), len(dmean)) != (96, 24, 24):
         raise SystemExit(f'FATAL: run counts {len(ham)}, {len(dsum)}, {len(dmean)}')
     return ham + dsum + dmean

@@ -28,13 +28,13 @@ from persequence_v3 import load_heldout_indexed, classify_composition
 SEEDS = (1179027592, 2129768291, 3731635825)
 ARMS = {
     # arm -> (dir template, weights file, attribute, expected value)
-    'direct mean':  ('outputs_v3/blind_dos_L2_nogeom_s{seed}', 'standard_pickle_model_best.pth',
+    'direct mean':  ('campaign/blind_dos_L2_nogeom_s{seed}', 'standard_pickle_model_best.pth',
                      'readout_pooling', 'mean'),
-    'direct sum':   ('outputs_v4/blind_dos_L2_nogeom_sumpool_s{seed}', 'standard_pickle_model_best.pth',
+    'direct sum':   ('campaign/blind_dos_L2_nogeom_sumpool_s{seed}', 'standard_pickle_model_best.pth',
                      'readout_pooling', 'sum'),
     'ham contacts': ('outputs_v3/ham_ldosonly_n2_L4_nogeom_s{seed}',
                      'hamiltonian_pickle_model_best.pth', 'dna_only_message_passing', False),
-    'ham contact-free': ('outputs_dnaonly/ham_ldosonly_n2_L4_nogeom_dnaonly_s{seed}',
+    'ham contact-free': ('exploratory/ham_ldosonly_n2_L4_nogeom_dnaonly_s{seed}',
                          'hamiltonian_pickle_model_best.pth', 'dna_only_message_passing', True),
 }
 OUT_DIR = os.path.join(_ANALYSIS, 'outputs')

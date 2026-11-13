@@ -1,8 +1,8 @@
 """Revision DOE analysis -> outputs/doe_v4.out. A copy of doe_v3.py (the submitted paper's ANOVA)
 with exactly four changes, everything else verbatim:
   1. inputs: the retrained campaign (outputs/posthoc_v4_report.json, outputs/best_epoch_cache_v4.json,
-     written by build_report_v4.py): contact-free Hamiltonian runs (outputs_v4/ham_*), 24 mean-pooled
-     (outputs_v3/blind_*) and 24 sum-pooled (outputs_v4/blind_*_sumpool_*) direct runs;
+     written by build_report_v4.py): contact-free Hamiltonian runs (campaign/ham_*), 24 mean-pooled
+     (campaign/blind_*) and 24 sum-pooled (campaign/blind_*_sumpool_*) direct runs;
   2. the direct family gains a pooling factor (mean, sum): 16 cells x 3 seeds = 48 runs;
   3. the contact-invariance response is removed (zero by construction for contact-free runs) and
      replaced by val_ldos_residue (validation per-residue LDOS loss), Hamiltonian only;

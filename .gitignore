@@ -245,3 +245,8 @@ DNADataset/validation_L16/
 
 # Local scratch demo notebook, never part of the package
 EvaluationDemo.ipynb
+
+# Zenodo checkpoint archives extracted at the repository root
+/campaign/
+/capacity_probe/
+/exploratory/

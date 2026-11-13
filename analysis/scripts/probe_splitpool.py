@@ -25,15 +25,15 @@ from persequence_v3 import load_heldout_indexed, classify_composition
 SEEDS = (1179027592, 2129768291, 3731635825)
 ARMS = {
     # arm -> (dir template, weights file, attribute, expected value)
-    'direct DOS+T mean':  ('outputs_v3/blind_dos_L2_nogeom_s{seed}', 'standard_pickle_model_best.pth',
+    'direct DOS+T mean':  ('campaign/blind_dos_L2_nogeom_s{seed}', 'standard_pickle_model_best.pth',
                            'readout_pooling', 'mean'),
-    'direct DOS+T sum':   ('outputs_v4/blind_dos_L2_nogeom_sumpool_s{seed}', 'standard_pickle_model_best.pth',
+    'direct DOS+T sum':   ('campaign/blind_dos_L2_nogeom_sumpool_s{seed}', 'standard_pickle_model_best.pth',
                            'readout_pooling', 'sum'),
-    'direct DOS+T split': ('outputs_v4/blind_dos_L2_nogeom_splitpool_s{seed}', 'standard_pickle_model_best.pth',
+    'direct DOS+T split': ('exploratory/blind_dos_L2_nogeom_splitpool_s{seed}', 'standard_pickle_model_best.pth',
                            'readout_pooling', 'split'),
-    'direct T-only sum (selected)': ('outputs_v4/blind_tonly_L4_nogeom_sumpool_s{seed}',
+    'direct T-only sum (selected)': ('campaign/blind_tonly_L4_nogeom_sumpool_s{seed}',
                                      'standard_pickle_model_best.pth', 'readout_pooling', 'sum'),
-    'ham DOS+T (selected)': ('outputs_v4/ham_dos_n2_L4_nogeom_s{seed}',
+    'ham DOS+T (selected)': ('campaign/ham_dos_n2_L4_nogeom_s{seed}',
                              'hamiltonian_pickle_model_best.pth', 'dna_only_message_passing', True),
 }
 OUT_DIR = os.path.join(_ANALYSIS, 'outputs')

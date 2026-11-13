@@ -1,7 +1,7 @@
 """Capacity probe (v6, revision): deeper readout MLP and wider GNN for the two selected cells
-(contact-free DOS+T Hamiltonian n2 L4 nogeom; T-only sum-pool direct L4 nogeom), base cells from outputs_v4.
+(contact-free DOS+T Hamiltonian n2 L4 nogeom; T-only sum-pool direct L4 nogeom), base cells from campaign.
 
-Scores the 12 probe runs (outputs_v6cap) and the 6 baseline runs (outputs_v4 selected
+Scores the 12 probe runs (capacity_probe) and the 6 baseline runs (campaign selected
 cells) with the same evaluator as the DOE: in-distribution validation transmission at
 the run's own selected epoch, pooled held-out transmission/DOS at L=12 and L=16, and
 per-duplex transmission loss (mean over the 4 contact variants). Prints per-run values,
@@ -29,12 +29,12 @@ from persequence_v3 import load_heldout_indexed
 
 SEEDS = (1179027592, 2129768291, 3731635825)
 ARMS = {
-    'ham base':  ('ham',   'outputs_v4/ham_dos_n2_L4_nogeom_s{seed}',               'hamiltonian_pickle_model_best.pth'),
-    'ham deep':  ('ham',   'outputs_v6cap/ham_dos_n2_L4_nogeom_deep_s{seed}',       'hamiltonian_deep_pickle_model_best.pth'),
-    'ham h512':  ('ham',   'outputs_v6cap/ham_dos_n2_L4_nogeom_h512_s{seed}',       'hamiltonian_pickle_model_best.pth'),
-    'direct base': ('blind', 'outputs_v4/blind_tonly_L4_nogeom_sumpool_s{seed}',     'standard_pickle_model_best.pth'),
-    'direct deep': ('blind', 'outputs_v6cap/blind_tonly_L4_nogeom_sumpool_deep_s{seed}', 'standard_deep_pickle_model_best.pth'),
-    'direct h512': ('blind', 'outputs_v6cap/blind_tonly_L4_nogeom_sumpool_h512_s{seed}', 'standard_pickle_model_best.pth'),
+    'ham base':  ('ham',   'campaign/ham_dos_n2_L4_nogeom_s{seed}',               'hamiltonian_pickle_model_best.pth'),
+    'ham deep':  ('ham',   'capacity_probe/ham_dos_n2_L4_nogeom_deep_s{seed}',       'hamiltonian_deep_pickle_model_best.pth'),
+    'ham h512':  ('ham',   'capacity_probe/ham_dos_n2_L4_nogeom_h512_s{seed}',       'hamiltonian_pickle_model_best.pth'),
+    'direct base': ('blind', 'campaign/blind_tonly_L4_nogeom_sumpool_s{seed}',     'standard_pickle_model_best.pth'),
+    'direct deep': ('blind', 'capacity_probe/blind_tonly_L4_nogeom_sumpool_deep_s{seed}', 'standard_deep_pickle_model_best.pth'),
+    'direct h512': ('blind', 'capacity_probe/blind_tonly_L4_nogeom_sumpool_h512_s{seed}', 'standard_pickle_model_best.pth'),
 }
 OUT_DIR = os.path.join(_ANALYSIS, 'outputs')
 OUT_TXT = os.path.join(OUT_DIR, 'probe_capacity_v6.out')

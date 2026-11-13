@@ -51,8 +51,13 @@ needed:**
   `python -c "import pandas as pd; [print(f, '%.4f' % pd.read_csv(f'outputs/doe_v3_runs_{f}.csv').val_transmission.mean()) for f in ('direct', 'hamiltonian')]"`
   (run from `analysis/`; prints `direct 0.2738` and `hamiltonian 0.4550`)
 
-**Needs the companion Zenodo checkpoints record** (extract into the repo root so
-that `outputs_v3/`, `outputs_v4/`, `outputs_v5probe/`, `outputs_v6cap/` and `outputs_dnaonly/` exist; https://doi.org/10.5281/zenodo.22964130; archives `campaign_v3.tar`, `campaign_v4.tar`, `capacity_probe_v5.tar`, `capacity_probe_v6.tar`, `exploratory_v4.tar`):
+**Needs the companion Zenodo checkpoints record** (https://doi.org/10.5281/zenodo.22964130).
+The current version holds `campaign.tar`, `capacity_probe.tar` and `exploratory.tar`;
+extract them at the repository root to get `campaign/`, `capacity_probe/` and
+`exploratory/`, which the revision scripts below read. The scripts for the original
+submission, listed here, read the original campaign and capacity probe, which are in
+version 1 of the record (https://doi.org/10.5281/zenodo.22964131: `campaign_v3.tar`
+and `capacity_probe_v5.tar`, extracting to `outputs_v3/` and `outputs_v5probe/`):
 - `scripts/posthoc_v3.py`, `scripts/contact_invariance_v3.py`,
   `scripts/best_epoch_extract.py`, `scripts/paramcount_v3.py`,
   `scripts/probe_capacity_v5.py`
@@ -100,15 +105,15 @@ directory; only the numeric/statistical outputs listed here are.
 | 10 | `paramcount_v3.py` | 6 checkpoints | stdout | "Hyperparameter Settings" (Table 1, parameter counts) |
 | -- | `probe_capacity_v5.py` | capacity-probe checkpoints | `outputs/probe_capacity_v5.out`, `outputs/probe_capacity_v5_{runs,perseq,summary}.csv` | Appendix "Capacity probe" (Table 5) |
 | -- | `probe_dnaonly.py` | final-cell checkpoints with and without `--dna_only_message_passing` (3 seeds each), training and held-out pickles | `outputs/probe_dnaonly.out`, `outputs/probe_dnaonly_{runs,perseq}.csv` | contact-free variant (added during review) |
-| R1 | `select_v4_val.py` | 96 contact-free Hamiltonian checkpoints (`outputs_v4/ham_*`), training pickles | `outputs/select_v4_val/<run>.json` | revision: validation T, DOS, per-residue LDOS and onsite distance (model selection, Table 3) |
+| R1 | `select_v4_val.py` | 96 contact-free Hamiltonian checkpoints (`campaign/ham_*`), training pickles | `outputs/select_v4_val/<run>.json` | revision: validation T, DOS, per-residue LDOS and onsite distance (model selection, Table 3) |
 | R2 | `score_heldout_v4.py` | 144 checkpoints (96 Hamiltonian, 24 sum-pooled and 24 mean-pooled direct), held-out pickles | `outputs/heldout_v4/<run>.json` | revision: held-out 12/16-bp T and DOS, per duplex (report only) |
 | R3 | `score_newset_v4.py` | the same 144 checkpoints, untouched 16-bp pickles | `outputs/newset_v4/<run>.json` | revision: untouched test set (report only) |
 | R4 | `build_report_v4.py` | stages R1-R2 | `outputs/posthoc_v4_report.json`, `outputs/best_epoch_cache_v4.json` | revision: inputs to stage R5 |
 | R5 | `doe_v4.py` | stage R4 | `outputs/doe_v4.out` | revision: "ANOVA Results" and Appendix "Full Factorial ANOVA" |
 | R6 | `anova_tables_v4.py` | stages R4-R5 | `outputs/anova_tables_v4.tex`, `outputs/new_tables_v4.tex` | revision: Tables 3-4 and the held-out/untouched tables |
 | R7 | `newset_report_v4.py` | stage R3 | `outputs/newset_report_v4.out` | revision: untouched test set (per duplex, sign test, family fractions) |
-| -- | `probe_splitpool.py`, `probe_splitpool_newset.py` | the DOS+T two-layer direct cell with mean, sum and split pooling (`outputs_v4/blind_dos_L2_nogeom_splitpool_s*`), the selected models; held-out and untouched pickles | `outputs/probe_splitpool*`, `outputs/probe_splitpool_newset*` | revision: exploratory split pooling (mean pool for the DOS head, sum pool for the transmission head), Discussion and the untouched-set table |
-| -- | `probe_capacity_v6.py` | capacity-probe checkpoints (`outputs_v6cap/`) and the selected cells (`outputs_v4/`) | `outputs/probe_capacity_v6.out`, `outputs/probe_capacity_v6_{runs,perseq}.csv` | revision: Appendix "Capacity probe" (Table 5) |
+| -- | `probe_splitpool.py`, `probe_splitpool_newset.py` | the DOS+T two-layer direct cell with mean, sum and split pooling (`exploratory/blind_dos_L2_nogeom_splitpool_s*`), the selected models; held-out and untouched pickles | `outputs/probe_splitpool*`, `outputs/probe_splitpool_newset*` | revision: exploratory split pooling (mean pool for the DOS head, sum pool for the transmission head), Discussion and the untouched-set table |
+| -- | `probe_capacity_v6.py` | capacity-probe checkpoints (`capacity_probe/`) and the selected cells (`campaign/`) | `outputs/probe_capacity_v6.out`, `outputs/probe_capacity_v6_{runs,perseq}.csv` | revision: Appendix "Capacity probe" (Table 5) |
 | -- | `probe_sumpool.py`, `probe_newset.py` | the first three sum-pooled direct runs | `outputs/probe_sumpool*`, `outputs/probe_newset*` | revision: early sum-pooling probe, disclosed in the selection record; not used for selection |
 | -- | `geometry_spread.py` | `geom_cache/geometry_v2.pkl`, `geom_cache/geometry_heldout_L12_L16.pkl` | `outputs/geometry_spread.out` | "ANOVA Results", Geometry subsection (feature spreads) |
 
@@ -186,11 +191,11 @@ The revised paper uses a retrained campaign:
 
 - Hamiltonian family: all 32 configurations (supervision x orbitals x layers x
   geometry) x 3 seeds = 96 runs, retrained contact-free
-  (`--dna_only_message_passing`, now the default), in `outputs_v4/ham_*`. Same recipe as
+  (`--dna_only_message_passing`, now the default), in `campaign/ham_*`. Same recipe as
   below, with the supervision weights, `--n_orb`, `--num_layers` and the geometry
   flag set per configuration.
-- Direct family: the 24 submitted mean-pooled runs (`outputs_v3/blind_*`) plus 24
-  new runs with `--readout_pooling sum` (`outputs_v4/blind_*_sumpool_*`), so pooling is
+- Direct family: the 24 submitted mean-pooled runs (`campaign/blind_*` without a pooling
+  suffix) plus 24 new runs with `--readout_pooling sum` (`campaign/blind_*_sumpool_*`), so pooling is
   a design factor: 16 configurations x 3 seeds.
 - The contact-invariance response is zero by construction for contact-free models
   and is replaced in the ANOVA by the validation per-residue LDOS loss.
@@ -216,13 +221,14 @@ python scripts/train.py --data_source pickle --data_dir pickle_files_v2 \
   --solver_type complex --log_floor 1e-38 --floor_mode smooth --complex_eta 1e-12 \
   --use_log_outputs True --enforce_hermiticity True --n_orb 2 \
   --dna_only_message_passing \
-  --output_dir outputs_dnaonly/ham_ldosonly_n2_L4_nogeom_dnaonly_s<seed>
+  --output_dir exploratory/ham_ldosonly_n2_L4_nogeom_dnaonly_s<seed>
 ```
 
-`scripts/probe_dnaonly.py` expects `outputs_dnaonly/` next to `outputs_v3/` at the
-repository root. The three checkpoints ship in `exploratory_v4.tar` of the Zenodo checkpoints
-record (version 2), together with the three split-pooled direct runs
-(`outputs_v4/blind_dos_L2_nogeom_splitpool_s*`, read by `scripts/probe_splitpool.py`).
+The three checkpoints ship in `exploratory.tar` of the Zenodo checkpoints record
+(`exploratory/ham_ldosonly_n2_L4_nogeom_dnaonly_s*`), together with the three split-pooled
+direct runs (`exploratory/blind_dos_L2_nogeom_splitpool_s*`, read by
+`scripts/probe_splitpool.py`). `scripts/probe_dnaonly.py` and `scripts/probe_sumpool.py`
+also read the original contacts-in-graph cell from version 1 of the record (`outputs_v3/`).
 
 The COMPANION lines in `doe_v3.out` and the companion fields in
 `contact_invariance_v3.json` are context copies of each run's transmission

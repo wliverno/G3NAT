@@ -64,7 +64,7 @@ def main():
     report = {'provenance': {
         'sources': ['analysis/outputs/heldout_v4/*.json (score_heldout_v4.py)',
                     'analysis/outputs/select_v4_val/*.json (select_v4_val.py)'],
-        'weights': 'best (own-objective argmin): outputs_v4/ham_*, outputs_v4/blind_*_sumpool_*, outputs_v3/blind_*',
+        'weights': 'best (own-objective argmin): campaign/ham_*, campaign/blind_*_sumpool_*, campaign/blind_*',
         'onsite_records': 'all pickle_files_v2 records (2077)'}, 'runs': runs}
     json.dump(report, open(os.path.join(OUT, 'posthoc_v4_report.json'), 'w'), indent=1)
     json.dump(epochs, open(os.path.join(OUT, 'best_epoch_cache_v4.json'), 'w'), indent=1)

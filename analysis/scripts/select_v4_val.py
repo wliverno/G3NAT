@@ -1,6 +1,6 @@
 """Validation-only quantities for the final-configuration rule (protocol amendment 4).
 
-Per contact-free Hamiltonian run (outputs_v4/ham_*): validation transmission, DOS and
+Per contact-free Hamiltonian run (campaign/ham_*): validation transmission, DOS and
 per-residue LDOS loss at the run's own selected epoch (checkpoint metric history), and
 onsite distance from the HOMO (metrics.onsite_distance 'near', mean over every
 pickle_files_v2 record, as posthoc_v3 --onsite-all-records). No held-out data is read.
@@ -37,7 +37,7 @@ def val_at_selection(ck, key):
 
 def main():
     task, n_tasks, out_dir = int(sys.argv[1]), int(sys.argv[2]), sys.argv[3]
-    paths = sorted(glob.glob(os.path.join(REPO, 'outputs_v4', 'ham_*', 'hamiltonian_pickle_model_best.pth')))
+    paths = sorted(glob.glob(os.path.join(REPO, 'campaign', 'ham_*', 'hamiltonian_pickle_model_best.pth')))
     if len(paths) != 96:
         raise SystemExit(f'FATAL: expected 96 contact-free runs, found {len(paths)}')
     mine = paths[task::n_tasks]
