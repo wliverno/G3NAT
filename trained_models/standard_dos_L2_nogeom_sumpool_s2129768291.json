@@ -1,7 +1,7 @@
 {
   "args": {
     "data_source": "pickle",
-    "data_dir": "/mmfs1/gscratch/anantram/willll/G3NAT/pickle_files_v2",
+    "data_dir": "pickle_files_v2",
     "num_samples": 2000,
     "seq_length": 8,
     "min_length": -1,
@@ -39,8 +39,8 @@
     "batch_size": 32,
     "learning_rate": 0.001,
     "device": "auto",
-    "output_dir": "/mmfs1/gscratch/anantram/willll/G3NAT/outputs_v4/blind_dos_L2_nogeom_sumpool_s2129768291",
-    "checkpoint_dir": "/mmfs1/gscratch/anantram/willll/G3NAT/ckpt_v4/blind_dos_L2_nogeom_sumpool_s2129768291",
+    "output_dir": "outputs_v4/blind_dos_L2_nogeom_sumpool_s2129768291",
+    "checkpoint_dir": "ckpt_v4/blind_dos_L2_nogeom_sumpool_s2129768291",
     "allow_arg_change": ""
   },
   "git_sha": "aa395f4792036ca2891ced517573d711e4d85426",
