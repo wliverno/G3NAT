@@ -4,7 +4,7 @@ Tools for generating DNA structures, running DFT calculations, and computing ele
 
 ## Published dataset
 
-This section is a datasheet for the dataset released on Zenodo (https://doi.org/10.5281/zenodo.22964053), structured after
+This section is a datasheet for the dataset released on Zenodo (https://doi.org/10.5281/zenodo.22964052; concept DOI, resolves to the latest version), structured after
 the question set in Gebru et al., "Datasheets for Datasets" (see `docs/references.md`).
 It documents `transport.h5` and `matrices.h5`, the two files that make up the Zenodo
 record; the pipeline used to build them is documented in the rest of this README and in
@@ -25,6 +25,12 @@ duplexes.
 (520 duplexes, 4-8 bp, up to 4 contact/coupling variants each) and 32 held-out records
 (8 duplexes: 4 at 12 bp, 4 at 16 bp, x 4 variants each). Every
 run group carries an attr `split` set to `"train"` or `"heldout"`.
+
+Version 2 of the record adds an untouched 16-bp test set in a separate file,
+`untouched_L16.h5`: 32 run groups (8 duplexes drawn from a seeded generator, NumPy
+`default_rng` seed 20260810, GC fraction in [0.25, 0.75], x 4 variants), same record
+format, `split` = `"untouched"`. It was computed after all models were selected and never
+used for training, validation or selection.
 
 Per run group:
 - `Egrid`: 201 points, eV, the window HOMO +/- 1 eV at 0.01 eV spacing, centred on that
@@ -152,7 +158,7 @@ Per-run-group fields:
 | `coupling_eV` | attr | float64 | scalar | eV | Wide-band-limit coupling used for both leads in this run. |
 | `contact_type` | attr | string | scalar | -- | `"same"` or `"cross"`. |
 | `energy_reference_eV` | attr | float64 | scalar | eV | This record's own HOMO reference (`Egrid.mean()`); differs per record. |
-| `split` | attr | string | scalar | -- | `"train"` or `"heldout"`. |
+| `split` | attr | string | scalar | -- | `"train"` or `"heldout"` (`"untouched"` in `untouched_L16.h5`). |
 
 `atoms` subgroup (`/<sequence>/<run>/atoms`):
 
@@ -217,7 +223,7 @@ numerical broadening the Green's-function calculation itself carries).
 
 ### Distribution
 
-Distributed on Zenodo under CC-BY-4.0 (https://doi.org/10.5281/zenodo.22964053). The record contains:
+Distributed on Zenodo under CC-BY-4.0 (https://doi.org/10.5281/zenodo.22964052). The record contains:
 - `transport.h5` (about 1.41 GB)
 - `matrices.h5` (about 13.79 GB), uploaded as ten parts `matrices.h5.part0` ...
   `matrices.h5.part9` (about 1.38 GB each). Reassemble with
@@ -226,6 +232,9 @@ Distributed on Zenodo under CC-BY-4.0 (https://doi.org/10.5281/zenodo.22964053).
   `geom_cache/geometry_heldout_L12_L16.pkl`, the X3DNA-DSSR edge-geometry caches read by
   `--geom_cache` (see "Edge geometry (X3DNA / DSSR)" in the top-level `README.md`).
   Extract it at the repository root (`tar -xf geom_cache.tar`) to get `geom_cache/`.
+- `untouched_L16.h5` (about 57 MB), `matrices_untouched_L16.h5` (about 0.44 GB) and
+  `geom_cache_untouched_L16.tar`: the untouched 16-bp test set (version 2), with its Fock/overlap
+  matrices and its geometry cache (`geom_cache/geometry_newset_L16.pkl`).
 - `SHA256SUMS`, checksums for the reassembled files above and for each `matrices.h5` part
 
 ### Maintenance
@@ -261,6 +270,9 @@ python DNADataset/import_hdf5.py transport.h5 pickle_files_v2 --split train
 python DNADataset/import_hdf5.py transport.h5 <scratch_dir> --split heldout
 # then move the 12 bp records into DNADataset/validation_L12/pickles/
 # and the 16 bp records into DNADataset/validation_L16/pickles/
+
+# untouched 16-bp test set (version 2)
+python DNADataset/import_hdf5.py untouched_L16.h5 DNADataset/validation_L16/pickles_newset --split untouched
 ```
 
 ---

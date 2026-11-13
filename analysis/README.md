@@ -52,7 +52,7 @@ needed:**
   (run from `analysis/`; prints `direct 0.2738` and `hamiltonian 0.4550`)
 
 **Needs the companion Zenodo checkpoints record** (extract into the repo root so
-that `outputs_v3/` and `outputs_v5probe/` exist; https://doi.org/10.5281/zenodo.22964131):
+that `outputs_v3/`, `outputs_v4/`, `outputs_v5probe/`, `outputs_v6cap/` and `outputs_dnaonly/` exist; https://doi.org/10.5281/zenodo.22964130; archives `campaign_v3.tar`, `campaign_v4.tar`, `capacity_probe_v5.tar`, `capacity_probe_v6.tar`, `exploratory_v4.tar`):
 - `scripts/posthoc_v3.py`, `scripts/contact_invariance_v3.py`,
   `scripts/best_epoch_extract.py`, `scripts/paramcount_v3.py`,
   `scripts/probe_capacity_v5.py`
@@ -67,7 +67,7 @@ PDB structures:
   edge geometry feature over the training and held-out sets; the paper's "0.3 A"
   COM-distance figure is the backbone centroid-distance SD (0.273) rounded)
 
-**Needs the companion Zenodo dataset record** (https://doi.org/10.5281/zenodo.22964053) restored with
+**Needs the companion Zenodo dataset record** (https://doi.org/10.5281/zenodo.22964052) restored with
 `DNADataset/import_hdf5.py`:
 - training pickles: `python DNADataset/import_hdf5.py transport.h5 pickle_files_v2 --split train`
 - held-out pickles: `import_hdf5.py` writes every record from one call into a single
@@ -195,7 +195,7 @@ The revised paper uses a retrained campaign:
 - The contact-invariance response is zero by construction for contact-free models
   and is replaced in the ANOVA by the validation per-residue LDOS loss.
 - The untouched 16-bp test set (8 duplexes x 4 contact configurations, 32 records) is
-  published in the second Zenodo version. Its scoring plan was written down before
+  `untouched_L16.h5` in version 2 of the dataset record (https://doi.org/10.5281/zenodo.22964052). Its scoring plan was written down before
   any of its DFT results existed.
 
 ## The contact-free variant
@@ -220,7 +220,9 @@ python scripts/train.py --data_source pickle --data_dir pickle_files_v2 \
 ```
 
 `scripts/probe_dnaonly.py` expects `outputs_dnaonly/` next to `outputs_v3/` at the
-repository root. The three checkpoints are not yet in the Zenodo checkpoints record.
+repository root. The three checkpoints ship in `exploratory_v4.tar` of the Zenodo checkpoints
+record (version 2), together with the three split-pooled direct runs
+(`outputs_v4/blind_dos_L2_nogeom_splitpool_s*`, read by `scripts/probe_splitpool.py`).
 
 The COMPANION lines in `doe_v3.out` and the companion fields in
 `contact_invariance_v3.json` are context copies of each run's transmission

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Convert the published transport.h5 back into the pickle records the training code reads.
 
-    python DNADataset/import_hdf5.py transport.h5 out_dir [--split train|heldout]
+    python DNADataset/import_hdf5.py transport.h5 out_dir [--split train|heldout|untouched]
 
 Exact inverse of export_hdf5.py: every field, type and value of the original pickle is
 restored (atoms.chain, which is blank in every source record, is restored as blank).
@@ -67,6 +67,6 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("h5_path")
     ap.add_argument("out_dir")
-    ap.add_argument("--split", choices=("train", "heldout"))
+    ap.add_argument("--split", choices=("train", "heldout", "untouched"))
     a = ap.parse_args()
     print(f"wrote {import_archive(a.h5_path, a.out_dir, a.split)} records to {a.out_dir}")
