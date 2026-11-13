@@ -115,6 +115,47 @@ def test_readout_pooling_survives_checkpoint_roundtrip(tmp_path):
     assert m3.readout_pooling == 'mean'
 
 
+def test_split_pools_mean_for_dos_and_sum_for_transmission():
+    m = _model(readout_pooling='split')
+    b = Batch.from_data_list([_graph()])
+    with torch.no_grad():
+        e = _node_embeddings(m, b)
+        dos, t = m(b)
+    assert torch.allclose(dos, m.dos_proj(e.mean(0, keepdim=True)).clamp_min(-25.0), atol=1e-5)
+    assert torch.allclose(t, m.transmission_proj(e.sum(0, keepdim=True)).clamp_min(-25.0), atol=1e-5)
+
+
+def test_split_adds_no_parameters_and_batches_like_single():
+    m_split, m_mean = _model(readout_pooling='split'), _model()
+    assert [n for n, _ in m_split.named_parameters()] == [n for n, _ in m_mean.named_parameters()]
+    m_split.load_state_dict(m_mean.state_dict())
+    gs = [_graph(), _graph('GGTCAGG', 'CCTGACC'), _graph('AT', 'AT', 0.6)]
+    singles = [_forward(m_split, [g]) for g in gs]
+    dos, t = _forward(m_split, gs)
+    for i, (d_i, t_i) in enumerate(singles):
+        assert torch.allclose(dos[i], d_i.squeeze(0), atol=1e-5)
+        assert torch.allclose(t[i], t_i.squeeze(0), atol=1e-5)
+
+
+def test_split_survives_checkpoint_roundtrip(tmp_path):
+    from g3nat.evaluation.inference import load_trained_model
+    m = _model(readout_pooling='split')
+    base = {'model_type': 'standard', 'hidden_dim': 32, 'num_layers': 2, 'num_heads': 2,
+            'conv_type': 'gat', 'dropout': 0.0, 'readout_pooling': 'split'}
+    p = str(tmp_path / 'direct.pth')
+    torch.save({'model_state_dict': m.state_dict(), 'args': base, 'energy_grid': EGRID}, p)
+    m2, _, _ = load_trained_model(p, device='cpu', allow_untrained_selection=True)
+    assert m2.readout_pooling == 'split'
+
+
+def test_train_script_accepts_split():
+    import re
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[2] / 'scripts' / 'train.py').read_text()
+    m = re.search(r"'--readout_pooling'.*?choices=\[([^\]]*)\]", src, re.S)
+    assert m and "'split'" in m.group(1)
+
+
 def test_unknown_pooling_is_rejected():
     with pytest.raises(ValueError):
         _model(readout_pooling='max')

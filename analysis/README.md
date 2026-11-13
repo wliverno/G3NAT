@@ -107,6 +107,7 @@ directory; only the numeric/statistical outputs listed here are.
 | R5 | `doe_v4.py` | stage R4 | `outputs/doe_v4.out` | revision: "ANOVA Results" and Appendix "Full Factorial ANOVA" |
 | R6 | `anova_tables_v4.py` | stages R4-R5 | `outputs/anova_tables_v4.tex`, `outputs/new_tables_v4.tex` | revision: Tables 3-4 and the held-out/untouched tables |
 | R7 | `newset_report_v4.py` | stage R3 | `outputs/newset_report_v4.out` | revision: untouched test set (per duplex, sign test, family fractions) |
+| -- | `probe_splitpool.py`, `probe_splitpool_newset.py` | the DOS+T two-layer direct cell with mean, sum and split pooling (`outputs_v4/blind_dos_L2_nogeom_splitpool_s*`), the selected models; held-out and untouched pickles | `outputs/probe_splitpool*`, `outputs/probe_splitpool_newset*` | revision: exploratory split pooling (mean pool for the DOS head, sum pool for the transmission head), Discussion and the untouched-set table |
 | -- | `probe_capacity_v6.py` | capacity-probe checkpoints (`outputs_v6cap/`) and the selected cells (`outputs_v4/`) | `outputs/probe_capacity_v6.out`, `outputs/probe_capacity_v6_{runs,perseq}.csv` | revision: Appendix "Capacity probe" (Table 5) |
 | -- | `probe_sumpool.py`, `probe_newset.py` | the first three sum-pooled direct runs | `outputs/probe_sumpool*`, `outputs/probe_newset*` | revision: early sum-pooling probe, disclosed in the selection record; not used for selection |
 | -- | `geometry_spread.py` | `geom_cache/geometry_v2.pkl`, `geom_cache/geometry_heldout_L12_L16.pkl` | `outputs/geometry_spread.out` | "ANOVA Results", Geometry subsection (feature spreads) |
@@ -177,7 +178,7 @@ Revision: `select_v4_val/`, `heldout_v4/`, `newset_v4/` (one JSON per run),
 `anova_tables_v4.tex`, `new_tables_v4.tex`, `newset_report_v4.out`,
 `probe_capacity_v6.out`, `probe_capacity_v6_runs.csv`, `probe_capacity_v6_perseq.csv`,
 `probe_sumpool.out`, `probe_sumpool_runs.csv`, `probe_sumpool_perseq.csv`,
-`probe_newset.out`, `probe_newset_runs.csv`, `probe_newset_perseq.csv`.
+`probe_newset.out`, `probe_newset_runs.csv`, `probe_newset_perseq.csv`, `probe_splitpool.out`, `probe_splitpool_runs.csv`, `probe_splitpool_perseq.csv`, `probe_splitpool_newset.out`, `probe_splitpool_newset_runs.csv`, `probe_splitpool_newset_perseq.csv`.
 
 ## Revision (2026-11)
 

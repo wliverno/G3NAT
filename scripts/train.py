@@ -159,11 +159,12 @@ def parse_args():
                             'four contact configurations of a sequence. '
                             '--no-dna_only_message_passing keeps the contacts in the graph, '
                             'as in campaign v3.')
-    parser.add_argument('--readout_pooling', default='mean', choices=['mean', 'sum'],
+    parser.add_argument('--readout_pooling', default='mean', choices=['mean', 'sum', 'split'],
                        help='Direct (standard) model only: how node embeddings are pooled '
                             'before the DOS and T heads. mean (default, campaign v3) does '
                             'not change with the number of nodes; sum does, so the readout '
-                            'can see duplex length.')
+                            'can see duplex length; split pools by mean for the DOS head '
+                            'and by sum for the T head.')
 
     # Training parameters
     parser.add_argument('--num_epochs', type=int, default=100)

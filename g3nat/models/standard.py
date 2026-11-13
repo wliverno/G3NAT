@@ -7,6 +7,8 @@ import torch.nn.functional as F
 from torch_geometric.nn import GATConv, TransformerConv, global_add_pool, global_mean_pool
 
 READOUT_POOLING = {'mean': global_mean_pool, 'sum': global_add_pool}
+#: 'split': the DOS head reads the mean-pooled vector, the transmission head the summed one.
+READOUT_POOLING_OPTIONS = ('mean', 'sum', 'split')
 
 
 class DNATransportGNN(nn.Module):
@@ -27,8 +29,8 @@ class DNATransportGNN(nn.Module):
                  geom_norm_stats: Optional[Dict] = None,
                  readout_pooling: str = 'mean'):
         super().__init__()
-        if readout_pooling not in READOUT_POOLING:
-            raise ValueError(f"readout_pooling must be one of {sorted(READOUT_POOLING)}, "
+        if readout_pooling not in READOUT_POOLING_OPTIONS:
+            raise ValueError(f"readout_pooling must be one of {list(READOUT_POOLING_OPTIONS)}, "
                              f"got {readout_pooling!r}")
         # Use features specified in dataset.py
         node_features = 4  # 4 one-hot features (A, T, G, C)
@@ -82,8 +84,10 @@ class DNATransportGNN(nn.Module):
         # number of nodes, so the readout cannot see duplex length; 'sum' (added
         # 2026-11-09 for the review's length baseline) sums the same node embeddings
         # and does. Pure function choice: no parameters, old checkpoints load.
+        # 'split' (added 2026-11-12) gives each head its own pooling: mean for the DOS
+        # head, sum for the transmission head.
         self.readout_pooling = readout_pooling
-        self.global_pool = READOUT_POOLING[readout_pooling]
+        self.global_pool = READOUT_POOLING.get(readout_pooling)
 
         # Optional SE(3)-invariant geometry channel. Default off = byte-for-byte
         # identical model (no extra params/buffers, existing checkpoints load).
@@ -178,11 +182,13 @@ class DNATransportGNN(nn.Module):
             x = F.dropout(x, p=self.dropout, training=self.training)
 
         # Global pooling
-        x = self.global_pool(x, batch)
-
-        # Output projections
-        dos_pred = self.dos_proj(x)
-        transmission_pred = self.transmission_proj(x)
+        if self.readout_pooling == 'split':
+            dos_pred = self.dos_proj(global_mean_pool(x, batch))
+            transmission_pred = self.transmission_proj(global_add_pool(x, batch))
+        else:
+            x = self.global_pool(x, batch)
+            dos_pred = self.dos_proj(x)
+            transmission_pred = self.transmission_proj(x)
         # Same floor as every other log10 in the project (g3nat/floor.py).
         dos_pred = torch.clamp_min(dos_pred, LOG10_FLOOR)
         transmission_pred = torch.clamp_min(transmission_pred, LOG10_FLOOR)
